@@ -1,0 +1,6 @@
+{
+  "name": "Agenda-docas",
+  "description": "Plataforma de agendamento de entregas e gestão de recebimento com rastreamento de status, divergências e reagendamentos.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
