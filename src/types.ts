@@ -76,10 +76,14 @@ export interface Appointment {
   invoiceNumbers?: string[]; // Múltiplas NFs se houver mais de uma
   invoiceSeries?: string;
   invoiceDueDate?: string; // Data de Validade / Vencimento do Boleto
+  invoiceTotalValue?: number; // Valor Total das Notas Fiscais (R$)
+  nfeAccessKeys?: string[]; // Lista de Chaves de Acesso da NF-e (44 dígitos cada, até 5 ou mais)
+  nfeAccessKey?: string; // Chave de acesso individual (legado/compatibilidade)
   supplierName: string; // Nome do Fornecedor / Remetente
   supplierCnpj: string;
   carrierName: string; // Transportadora
   driverName?: string;
+  driverCpf?: string; // CPF do Motorista
   driverPhone?: string;
   vehiclePlate?: string; // Placa do Veículo
   vehicleType: 'TRUCK_34' | 'TOCO' | 'VUC' | 'CARRETA' | 'VAN';
@@ -108,6 +112,11 @@ export interface Appointment {
   
   discrepancy?: DiscrepancyReport;
   rescheduleHistory: RescheduleHistory[];
+  
+  // Double Check da Prevenção de Perdas na Liberação de Descarga
+  preventionDoubleChecked?: boolean; // Se passou pelo double check da Prevenção de Perdas
+  preventionCheckedBy?: string; // Nome ou identificação do operador de prevenção
+  preventionCheckedAt?: string; // Data/hora em que foi realizado o double check
 }
 
 export interface TimeSlotConfig {

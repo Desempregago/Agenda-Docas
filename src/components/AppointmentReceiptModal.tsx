@@ -19,10 +19,14 @@ import {
   ImageIcon,
   Download,
   Loader2,
+  KeyRound,
+  DollarSign,
+  User,
 } from 'lucide-react';
 import { toBlob, toPng } from 'html-to-image';
 import { Appointment } from '../types';
 import { StatusBadge } from './StatusBadge';
+import { formatCurrencyBRL } from '../utils/formatters';
 
 interface AppointmentReceiptModalProps {
   isOpen: boolean;
@@ -205,6 +209,10 @@ export const AppointmentReceiptModal: React.FC<AppointmentReceiptModalProps> = (
   };
 
   const handleCopyTextSummary = () => {
+    const nfeKeysText = appointment.nfeAccessKeys && appointment.nfeAccessKeys.length > 0
+      ? `\nChave(s) de Acesso NF-e (44 dígitos):\n${appointment.nfeAccessKeys.map((k, i) => `  #${i + 1}: ${k}`).join('\n')}`
+      : appointment.nfeAccessKey ? `\nChave de Acesso NF-e: ${appointment.nfeAccessKey}` : '';
+
     const summary = `==============================
 COMPROVANTE DE AGENDAMENTO DE CARGA
 ==============================
@@ -219,15 +227,15 @@ Endereço de Descarga: ${appointment.destinationBranchAddress || 'Não informado
 --- DADOS DA CARGA & PEDIDO DE COMPRA ---
 Pedido(s) de Compra (PO): ${purchaseOrderList.length > 0 ? purchaseOrderList.join(', ') : (appointment.purchaseOrder || 'Não informado')}
 Notas Fiscais: ${invoiceList.length > 0 ? invoiceList.join(', ') : (appointment.invoiceNumber || 'Não informada')}
-Fornecedor: ${appointment.supplierName}
-CNPJ: ${appointment.supplierCnpj || 'Não informado'}
+${appointment.invoiceTotalValue !== undefined && appointment.invoiceTotalValue !== null ? `Valor Total das NFs: ${formatCurrencyBRL(appointment.invoiceTotalValue)}\n` : ''}Fornecedor: ${appointment.supplierName}
+CNPJ: ${appointment.supplierCnpj || 'Não informado'}${nfeKeysText}
 Tipo de Carga: ${appointment.cargoType}
 Volumes / Paletes: ${appointment.totalVolumes}
 Peso Total: ${appointment.weightKg.toLocaleString('pt-BR')} KG
 
 --- DADOS DO TRANSPORTE ---
 Transportadora: ${appointment.carrierName || 'Própria'}
-Motorista: ${appointment.driverName || 'Não informado'}
+Motorista: ${appointment.driverName || 'Não informado'}${appointment.driverCpf ? ` (CPF: ${appointment.driverCpf})` : ''}
 Telefone: ${appointment.driverPhone || 'Não informado'}
 Placa do Veículo: ${appointment.vehiclePlate || 'Não informada'}
 Tipo de Veículo: ${appointment.vehicleType}
@@ -415,6 +423,59 @@ ${appointment.notes || 'Nenhuma observação informada.'}
                     {appointment.supplierCnpj || 'Não informado'}
                   </span>
                 </div>
+
+                {appointment.invoiceTotalValue !== undefined && appointment.invoiceTotalValue !== null && (
+                  <div className="sm:col-span-2 bg-emerald-50/70 border border-emerald-200 rounded-xl p-3 flex items-center justify-between">
+                    <span className="text-[11px] font-bold text-emerald-900 flex items-center gap-1.5">
+                      <DollarSign className="w-4 h-4 text-emerald-700" />
+                      Valor Total das Notas Fiscais:
+                    </span>
+                    <span className="font-mono font-black text-emerald-900 text-sm">
+                      {formatCurrencyBRL(appointment.invoiceTotalValue)}
+                    </span>
+                  </div>
+                )}
+
+                {/* Chaves de Acesso da NF-e */}
+                {((appointment.nfeAccessKeys && appointment.nfeAccessKeys.length > 0) || appointment.nfeAccessKey) && (
+                  <div className="sm:col-span-2 bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-bold text-slate-800 flex items-center gap-1.5">
+                        <KeyRound className="w-3.5 h-3.5 text-blue-600" />
+                        Chave(s) de Acesso da NF-e (44 dígitos):
+                      </span>
+                      <span className="text-[10px] font-semibold text-slate-500">
+                        {appointment.nfeAccessKeys ? `${appointment.nfeAccessKeys.length} chave(s)` : '1 chave'}
+                      </span>
+                    </div>
+
+                    <div className="space-y-1 max-h-32 overflow-y-auto">
+                      {(appointment.nfeAccessKeys && appointment.nfeAccessKeys.length > 0
+                        ? appointment.nfeAccessKeys
+                        : [appointment.nfeAccessKey!]
+                      ).map((key, idx) => (
+                        <div
+                          key={idx}
+                          className="flex items-center justify-between bg-white px-2.5 py-1.5 rounded-lg border border-slate-200 text-[11px] font-mono text-slate-800 shadow-2xs"
+                        >
+                          <span className="truncate pr-2 select-all">
+                            <span className="text-slate-400 mr-1.5">#{idx + 1}</span>
+                            {key}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => navigator.clipboard.writeText(key)}
+                            data-no-image="true"
+                            className="text-[10px] text-blue-600 hover:text-blue-800 font-sans font-semibold shrink-0 cursor-pointer hide-in-receipt-image"
+                            title="Copiar Chave"
+                          >
+                            Copiar
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -492,6 +553,11 @@ ${appointment.notes || 'Nenhuma observação informada.'}
                   <span className="font-semibold text-slate-800 block mt-0.5">
                     {appointment.driverName || 'Apresentar na Portaria'}
                   </span>
+                  {appointment.driverCpf && (
+                    <span className="text-[11px] font-mono text-slate-500 block mt-0.5">
+                      CPF: {appointment.driverCpf}
+                    </span>
+                  )}
                 </div>
 
                 <div>

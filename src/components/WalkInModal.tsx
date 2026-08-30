@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
-import { X, ShieldCheck, Truck, FileText, CheckCircle2, AlertTriangle, Zap, MapPin } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { X, ShieldCheck, Truck, FileText, CheckCircle2, AlertTriangle, Zap, MapPin, KeyRound, Plus, Trash2, DollarSign, User, Building2, Sparkles, Loader2 } from 'lucide-react';
 import { Appointment, Dock, DestinationBranch } from '../types';
+import { formatCpf, formatCnpj, parseCurrencyInput, cleanNfeAccessKey, extractNfeKeysFromText } from '../utils/formatters';
 
 interface WalkInModalProps {
   isOpen: boolean;
@@ -26,10 +27,12 @@ export const WalkInModal: React.FC<WalkInModalProps> = ({
     invoiceNumber: '',
     invoiceDueDate: '',
     invoiceSeries: '1',
+    invoiceTotalValue: '' as string | number,
     supplierName: '',
     supplierCnpj: '',
     carrierName: '',
     driverName: '',
+    driverCpf: '',
     driverPhone: '',
     vehiclePlate: '',
     vehicleType: 'TRUCK_34' as const,
@@ -38,6 +41,156 @@ export const WalkInModal: React.FC<WalkInModalProps> = ({
     totalVolumes: 15,
     notes: 'REGISTRO DE PORTARIA - ENCAIXE DE VEÍCULO NÃO AGENDADO',
   });
+
+  const [nfeAccessKeys, setNfeAccessKeys] = useState<string[]>(['']);
+  const nfeInputRefs = useRef<(HTMLInputElement | null)[]>([]);
+
+  // Estados para validação automática de CNPJ contra o banco de fornecedores (suppliers.json)
+  const [isSearchingSupplier, setIsSearchingSupplier] = useState<boolean>(false);
+  const [isSupplierRecognized, setIsSupplierRecognized] = useState<boolean>(false);
+  const [recognizedSupplier, setRecognizedSupplier] = useState<{ name: string; tradeName?: string; appointmentCount?: number } | null>(null);
+
+  // Consulta CNPJ no banco de fornecedores em tempo real (como no login)
+  useEffect(() => {
+    const cleanDigits = formData.supplierCnpj.replace(/\D/g, '');
+    if (cleanDigits.length >= 11) {
+      let isMounted = true;
+      setIsSearchingSupplier(true);
+
+      const timer = setTimeout(async () => {
+        try {
+          const res = await fetch(`/api/suppliers/lookup/${cleanDigits}`);
+          if (res.ok && isMounted) {
+            const data = await res.json();
+            if (data.found && data.supplier) {
+              setFormData(prev => ({
+                ...prev,
+                supplierName: data.supplier.name || data.supplier.tradeName || prev.supplierName,
+              }));
+              setIsSupplierRecognized(true);
+              setRecognizedSupplier(data.supplier);
+            } else if (isMounted) {
+              setIsSupplierRecognized(false);
+              setRecognizedSupplier(null);
+            }
+          } else if (isMounted) {
+            setIsSupplierRecognized(false);
+            setRecognizedSupplier(null);
+          }
+        } catch (_) {
+          if (isMounted) {
+            setIsSupplierRecognized(false);
+            setRecognizedSupplier(null);
+          }
+        } finally {
+          if (isMounted) setIsSearchingSupplier(false);
+        }
+      }, 250);
+
+      return () => {
+        isMounted = false;
+        clearTimeout(timer);
+      };
+    } else {
+      setIsSupplierRecognized(false);
+      setIsSearchingSupplier(false);
+      setRecognizedSupplier(null);
+    }
+  }, [formData.supplierCnpj]);
+
+  const handleAddNfeKey = () => {
+    if (nfeAccessKeys.length < 20) {
+      setNfeAccessKeys(prev => [...prev, '']);
+      setTimeout(() => {
+        nfeInputRefs.current[nfeAccessKeys.length]?.focus();
+      }, 40);
+    }
+  };
+
+  const handleRemoveNfeKey = (index: number) => {
+    setNfeAccessKeys(prev => {
+      const updated = prev.filter((_, i) => i !== index);
+      return updated.length > 0 ? updated : [''];
+    });
+  };
+
+  const handleNfeKeyChange = (index: number, val: string) => {
+    const extracted = extractNfeKeysFromText(val);
+    if (extracted.length > 1) {
+      setNfeAccessKeys(prev => {
+        const next = [...prev];
+        next.splice(index, 1, ...extracted);
+        if (next.length < 20 && !next[next.length - 1]) {
+          // já tem linha vazia
+        } else if (next.length < 20) {
+          next.push('');
+        }
+        const trimmed = next.slice(0, 20);
+        setTimeout(() => {
+          const nextFocus = Math.min(index + extracted.length, trimmed.length - 1);
+          nfeInputRefs.current[nextFocus]?.focus();
+        }, 40);
+        return trimmed;
+      });
+      return;
+    }
+
+    const cleaned = cleanNfeAccessKey(val);
+    setNfeAccessKeys(prev => {
+      const updated = [...prev];
+      updated[index] = cleaned;
+      
+      // Auto-criação e descida automática de linha:
+      // Ao atingir 44 dígitos, cria a próxima (se for a última) e desce o cursor imediatamente
+      if (cleaned.length === 44) {
+        if (index === updated.length - 1 && updated.length < 20) {
+          updated.push('');
+        }
+        setTimeout(() => {
+          nfeInputRefs.current[index + 1]?.focus();
+        }, 40);
+      }
+      return updated;
+    });
+  };
+
+  // Suporte a leitor de código de barras: ao receber Enter na chave NF-e, não submete e avança para a próxima linha
+  const handleNfeKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, index: number) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      e.stopPropagation();
+
+      const currentVal = cleanNfeAccessKey(nfeAccessKeys[index] || '');
+      if (index === nfeAccessKeys.length - 1) {
+        if (currentVal.length > 0 && nfeAccessKeys.length < 20) {
+          setNfeAccessKeys(prev => [...prev, '']);
+          setTimeout(() => {
+            nfeInputRefs.current[index + 1]?.focus();
+          }, 40);
+        }
+      } else {
+        nfeInputRefs.current[index + 1]?.focus();
+      }
+    }
+  };
+
+  const handlePasteNfeKey = async (index: number) => {
+    try {
+      const text = await navigator.clipboard.readText();
+      if (text) {
+        const extracted = extractNfeKeysFromText(text);
+        if (extracted.length > 1) {
+          setNfeAccessKeys(prev => {
+            const next = [...prev];
+            next.splice(index, 1, ...extracted);
+            return next.slice(0, 20);
+          });
+        } else {
+          handleNfeKeyChange(index, text);
+        }
+      }
+    } catch (_) {}
+  };
 
   useEffect(() => {
     if (!formData.destinationBranchId && defaultDestination) {
@@ -66,11 +219,19 @@ export const WalkInModal: React.FC<WalkInModalProps> = ({
     setLoading(true);
 
     try {
+      const validNfeKeys = nfeAccessKeys.map(k => cleanNfeAccessKey(k)).filter(Boolean);
+      const parsedVal = typeof formData.invoiceTotalValue === 'string'
+        ? parseCurrencyInput(formData.invoiceTotalValue)
+        : formData.invoiceTotalValue;
+
       const res = await fetch('/api/appointments', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...formData,
+          invoiceTotalValue: parsedVal > 0 ? parsedVal : undefined,
+          nfeAccessKeys: validNfeKeys,
+          nfeAccessKey: validNfeKeys[0] || undefined,
           scheduledDate: todayStr,
           timeSlot: 'ENCAIXE IMEDIATO (PORTARIA)',
           isWalkIn: true,
@@ -121,7 +282,16 @@ export const WalkInModal: React.FC<WalkInModalProps> = ({
         </div>
 
         {/* Content */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+        <form
+          onSubmit={handleSubmit}
+          onKeyDown={(e) => {
+            // Impede o envio acidental por RETURN/Enter (leitores de código de barras ou teclado)
+            if (e.key === 'Enter' && (e.target as HTMLElement)?.tagName !== 'TEXTAREA') {
+              e.preventDefault();
+            }
+          }}
+          className="p-6 space-y-4"
+        >
           {error && (
             <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700 flex items-center gap-2">
               <AlertTriangle className="w-4 h-4 shrink-0 text-rose-500" />
@@ -202,16 +372,17 @@ export const WalkInModal: React.FC<WalkInModalProps> = ({
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                Placa do Veículo <span className="text-rose-500">*</span>
+              <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1">
+                <DollarSign className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Valor Total das NFs (R$)</span>
+                <span className="text-slate-400 font-normal text-[11px]">(Opcional)</span>
               </label>
               <input
                 type="text"
-                required
-                placeholder="ABC-1E23"
-                value={formData.vehiclePlate}
-                onChange={e => setFormData({ ...formData, vehiclePlate: e.target.value.toUpperCase() })}
-                className="w-full px-3 py-2 text-sm border border-slate-300 rounded-xl focus:ring-2 focus:ring-amber-500 uppercase font-mono"
+                placeholder="Ex: 12500,00"
+                value={formData.invoiceTotalValue}
+                onChange={e => setFormData({ ...formData, invoiceTotalValue: e.target.value })}
+                className="w-full px-3 py-2 text-sm border border-slate-300 rounded-xl focus:ring-2 focus:ring-amber-500 font-mono text-emerald-800 font-semibold"
               />
             </div>
 
@@ -226,21 +397,164 @@ export const WalkInModal: React.FC<WalkInModalProps> = ({
                 className="w-full px-3 py-2 text-sm border border-slate-300 rounded-xl focus:ring-2 focus:ring-amber-500 font-mono text-slate-800"
               />
             </div>
-          </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {/* Chaves de Acesso da NF-e (44 dígitos) */}
+            <div className="sm:col-span-2 bg-amber-50/50 border border-amber-200 rounded-xl p-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="block text-xs font-bold text-amber-950 flex items-center gap-1.5">
+                  <KeyRound className="w-3.5 h-3.5 text-amber-700" />
+                  <span>Chaves de Acesso da NF-e (44 dígitos)</span>
+                </label>
+                <span className="text-[11px] font-semibold text-amber-900 bg-amber-200/60 px-2 py-0.5 rounded-md">
+                  {nfeAccessKeys.filter(k => cleanNfeAccessKey(k).length === 44).length} de {nfeAccessKeys.length} preenchida(s)
+                </span>
+              </div>
+
+              <p className="text-[10px] text-amber-900/80">
+                Cole ou leia com leitor de código de barras (44 dígitos). <strong className="text-amber-950">Novas linhas são criadas e focadas automaticamente</strong>.
+              </p>
+
+              <div className="space-y-1.5">
+                {nfeAccessKeys.map((keyVal, idx) => {
+                  const cleanKey = cleanNfeAccessKey(keyVal);
+                  const isComplete = cleanKey.length === 44;
+                  return (
+                    <div key={idx} className="flex items-center gap-1.5">
+                      <div className="relative flex-1">
+                        <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400">
+                          #{idx + 1}
+                        </span>
+                        <input
+                          ref={el => { nfeInputRefs.current[idx] = el; }}
+                          type="text"
+                          maxLength={54}
+                          placeholder="35260800000000000000550010000000001000000000"
+                          value={keyVal}
+                          onChange={e => handleNfeKeyChange(idx, e.target.value)}
+                          onKeyDown={e => handleNfeKeyDown(e, idx)}
+                          className={`w-full pl-8 pr-16 py-1.5 text-xs font-mono border rounded-lg focus:ring-2 focus:ring-amber-500 focus:outline-none ${
+                            isComplete
+                              ? 'border-emerald-400 bg-emerald-50/40 text-emerald-950'
+                              : cleanKey.length > 0
+                              ? 'border-amber-300 bg-amber-50/30 text-slate-800'
+                              : 'border-slate-300 bg-white text-slate-800'
+                          }`}
+                        />
+                        <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 text-[10px]">
+                          <span className={isComplete ? 'text-emerald-700 font-bold' : cleanKey.length > 0 ? 'text-amber-700 font-semibold' : 'text-slate-400'}>
+                            {cleanKey.length}/44
+                          </span>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => handlePasteNfeKey(idx)}
+                        className="p-1.5 text-slate-600 hover:text-amber-700 hover:bg-white bg-slate-200/60 rounded-md border border-slate-300 text-[11px] font-medium transition-colors cursor-pointer shrink-0"
+                        title="Colar Chave da Área de Transferência"
+                      >
+                        Colar
+                      </button>
+
+                      {nfeAccessKeys.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveNfeKey(idx)}
+                          className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-colors cursor-pointer shrink-0"
+                          title="Remover esta chave"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1">
-                Razão Social / Fornecedor <span className="text-rose-500">*</span>
+                Placa do Veículo <span className="text-rose-500">*</span>
               </label>
               <input
                 type="text"
                 required
-                placeholder="Ex: Fornecedor Avulso Ltda"
-                value={formData.supplierName}
-                onChange={e => setFormData({ ...formData, supplierName: e.target.value })}
-                className="w-full px-3 py-2 text-sm border border-slate-300 rounded-xl focus:ring-2 focus:ring-amber-500"
+                placeholder="ABC-1E23"
+                value={formData.vehiclePlate}
+                onChange={e => setFormData({ ...formData, vehiclePlate: e.target.value.toUpperCase() })}
+                className="w-full px-3 py-2 text-sm border border-slate-300 rounded-xl focus:ring-2 focus:ring-amber-500 uppercase font-mono"
               />
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs font-bold text-slate-700 flex items-center gap-1">
+                  <Building2 className="w-3.5 h-3.5 text-amber-700" />
+                  <span>CNPJ do Fornecedor</span>
+                </label>
+                {isSearchingSupplier && (
+                  <span className="text-[10px] text-amber-700 flex items-center gap-1 animate-pulse font-medium">
+                    <Loader2 className="w-3 h-3 animate-spin" /> Verificando base...
+                  </span>
+                )}
+                {!isSearchingSupplier && isSupplierRecognized && (
+                  <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 border border-emerald-300 px-1.5 py-0.5 rounded-md flex items-center gap-1">
+                    <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Cadastrado
+                  </span>
+                )}
+              </div>
+              <div className="relative">
+                <input
+                  type="text"
+                  placeholder="00.000.000/0001-00"
+                  maxLength={18}
+                  value={formData.supplierCnpj}
+                  onChange={e => setFormData({ ...formData, supplierCnpj: formatCnpj(e.target.value) })}
+                  className={`w-full px-3 py-2 text-sm border rounded-xl focus:ring-2 focus:ring-amber-500 font-mono transition-colors ${
+                    isSupplierRecognized
+                      ? 'border-emerald-400 bg-emerald-50/30 text-slate-900 font-semibold'
+                      : 'border-slate-300 bg-white text-slate-900'
+                  }`}
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs font-bold text-slate-700 flex items-center gap-1">
+                  <span>Razão Social / Fornecedor</span>
+                  <span className="text-rose-500">*</span>
+                </label>
+                {isSupplierRecognized && (
+                  <span className="text-[10px] text-emerald-700 flex items-center gap-0.5 font-medium">
+                    <Sparkles className="w-3 h-3 text-emerald-600" /> Auto-preenchido
+                  </span>
+                )}
+              </div>
+              <div className="relative">
+                <input
+                  type="text"
+                  required
+                  placeholder="Ex: Fornecedor Avulso Ltda"
+                  value={formData.supplierName}
+                  onChange={e => setFormData({ ...formData, supplierName: e.target.value })}
+                  className={`w-full px-3 py-2 text-sm border rounded-xl focus:ring-2 focus:ring-amber-500 transition-colors ${
+                    isSupplierRecognized
+                      ? 'border-emerald-400 bg-emerald-50/30 text-emerald-950 font-semibold pl-3 pr-8'
+                      : 'border-slate-300 bg-white text-slate-900'
+                  }`}
+                />
+                {isSupplierRecognized && (
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                )}
+              </div>
+              {isSupplierRecognized && recognizedSupplier?.appointmentCount !== undefined && (
+                <p className="text-[10px] text-emerald-700 mt-1">
+                  ✨ Fornecedor recorrente ({recognizedSupplier.appointmentCount} agendamento(s) no histórico)
+                </p>
+              )}
             </div>
 
             <div>
@@ -286,15 +600,30 @@ export const WalkInModal: React.FC<WalkInModalProps> = ({
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">Motorista</label>
+              <label className="block text-xs font-bold text-slate-700 mb-1">Nome do Motorista</label>
               <input
                 type="text"
-                placeholder="Nome do motorista"
+                placeholder="Ex: Carlos Silva"
                 value={formData.driverName}
                 onChange={e => setFormData({ ...formData, driverName: e.target.value })}
                 className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-amber-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1">
+                <User className="w-3.5 h-3.5 text-amber-700" />
+                <span>CPF do Motorista</span>
+              </label>
+              <input
+                type="text"
+                placeholder="000.000.000-00"
+                maxLength={14}
+                value={formData.driverCpf}
+                onChange={e => setFormData({ ...formData, driverCpf: formatCpf(e.target.value) })}
+                className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-amber-500 font-mono"
               />
             </div>
 

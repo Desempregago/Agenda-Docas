@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { Calendar, Search, Filter, Plus, RefreshCw, Eye, Copy, AlertTriangle, FileText, CheckCircle, CheckCircle2, XCircle, Clock, Building2, Truck, Lock, UserCheck, LogOut, ShieldCheck, LogIn, ShieldAlert, FileSpreadsheet, MapPin } from 'lucide-react';
+import { Calendar, Search, Filter, Plus, RefreshCw, Eye, Copy, AlertTriangle, FileText, CheckCircle, CheckCircle2, XCircle, Clock, Building2, Truck, Lock, UserCheck, LogOut, ShieldCheck, LogIn, ShieldAlert, FileSpreadsheet, MapPin, KeyRound, DollarSign } from 'lucide-react';
 import { Appointment, AppointmentStatus, SystemUser } from '../types';
 import { StatusBadge } from './StatusBadge';
 import { SupplierSession } from './SupplierLoginModal';
 import { UserRole } from './Header';
+import { formatCurrencyBRL } from '../utils/formatters';
 
 interface ClientAppointmentsListProps {
   appointments: Appointment[];
@@ -387,15 +388,32 @@ export const ClientAppointmentsList: React.FC<ClientAppointmentsListProps> = ({
                           ) : null}
                         </div>
                       )}
-                      <div className="text-slate-500 font-medium text-xs mt-0.5">
-                        NF {appt.invoiceNumber}
+                      <div className="text-slate-500 font-medium text-xs mt-0.5 flex items-center gap-1.5 flex-wrap">
+                        <span>NF {appt.invoiceNumber}</span>
+                        {appt.nfeAccessKeys && appt.nfeAccessKeys.length > 0 && (
+                          <span className="text-[9px] bg-indigo-50 text-indigo-800 border border-indigo-200 font-medium px-1.5 py-0.2 rounded-md flex items-center gap-0.5">
+                            <KeyRound className="w-2.5 h-2.5 text-indigo-600" />
+                            {appt.nfeAccessKeys.length} chaves
+                          </span>
+                        )}
                       </div>
+                      {appt.invoiceTotalValue !== undefined && appt.invoiceTotalValue !== null && (
+                        <div className="text-[11px] font-bold text-emerald-800 mt-0.5">
+                          Total: <span className="font-mono">{formatCurrencyBRL(appt.invoiceTotalValue)}</span>
+                        </div>
+                      )}
                     </td>
 
-                    {/* Fornecedor */}
+                    {/* Fornecedor & Motorista */}
                     <td className="py-3.5 px-4">
                       <div className="font-semibold text-slate-900 truncate max-w-[220px] xl:max-w-[340px]">{appt.supplierName}</div>
                       <div className="text-xs text-slate-500 truncate max-w-[220px] xl:max-w-[340px]">{appt.carrierName || 'Transportadora Própria'}</div>
+                      {appt.driverName && (
+                        <div className="text-[11px] text-slate-600 truncate max-w-[220px] xl:max-w-[340px] mt-0.5">
+                          Motorista: <span className="font-medium">{appt.driverName}</span>
+                          {appt.driverCpf && <span className="font-mono text-[10px] text-slate-400 block">CPF: {appt.driverCpf}</span>}
+                        </div>
+                      )}
                       {appt.supplierCnpj && (
                         <div className="text-[10px] text-slate-400 font-mono mt-0.5">CNPJ: {appt.supplierCnpj}</div>
                       )}

@@ -427,13 +427,21 @@ export default function App() {
     apptId: string,
     status: AppointmentStatus,
     dockId?: string,
-    discrepancy?: DiscrepancyReport
+    discrepancy?: DiscrepancyReport,
+    additionalData?: Partial<Appointment>
   ) => {
     try {
+      const payload: Record<string, any> = {
+        status,
+        dockId,
+        discrepancy,
+        ...(additionalData || {})
+      };
+
       const res = await fetch(`/api/appointments/${apptId}/status`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status, dockId, discrepancy }),
+        body: JSON.stringify(payload),
       });
 
       let updatedAppt: Appointment | undefined;
@@ -453,6 +461,7 @@ export default function App() {
                 status,
                 dockId: dockId !== undefined ? dockId : a.dockId,
                 discrepancy: discrepancy || a.discrepancy,
+                ...(additionalData || {}),
                 updatedAt: new Date().toISOString(),
               };
               return updatedAppt;
@@ -471,7 +480,7 @@ export default function App() {
           title = 'Chegada na Portaria';
           notifType = 'GATE_ENTRY';
         } else if (status === 'AGUARDANDO_DESCARGA') {
-          title = 'Veículo Liberado para a Doca';
+          title = updatedAppt.preventionDoubleChecked ? 'Double Check Concluído & Liberado' : 'Veículo Liberado para a Doca';
         } else if (status === 'ENTREGUE_COM_DIVERGENCIA') {
           title = 'Divergência Registrada';
           notifType = 'DISCREPANCY';
@@ -498,6 +507,7 @@ export default function App() {
                 status,
                 dockId: dockId !== undefined ? dockId : a.dockId,
                 discrepancy: discrepancy || a.discrepancy,
+                ...(additionalData || {}),
                 updatedAt: new Date().toISOString(),
               }
             : a

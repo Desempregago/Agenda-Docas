@@ -4,6 +4,7 @@ import { Appointment, AppointmentStatus, SystemUser } from '../types';
 import { StatusBadge } from './StatusBadge';
 import { SupplierSession } from './SupplierLoginModal';
 import { UserRole } from './Header';
+import { formatCurrencyBRL, formatNfeAccessKey } from '../utils/formatters';
 
 interface TrackingViewProps {
   appointments: Appointment[];
@@ -506,6 +507,74 @@ export const TrackingView: React.FC<TrackingViewProps> = ({
                   </p>
                 </div>
               </div>
+
+              {/* Fiscal Documents & Prevenção Double Check Card */}
+              {(Boolean(selectedAppt.nfeAccessKeys && selectedAppt.nfeAccessKeys.length > 0) ||
+                Boolean(selectedAppt.invoiceTotalValue) ||
+                Boolean(selectedAppt.invoiceDueDate) ||
+                selectedAppt.preventionDoubleChecked) && (
+                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200/80 pb-2.5">
+                    <div className="flex items-center gap-2 text-xs font-bold text-slate-800">
+                      <FileText className="w-4 h-4 text-purple-600" />
+                      <span>Documentos Fiscais & Conferência de Prevenção</span>
+                    </div>
+
+                    {selectedAppt.preventionDoubleChecked ? (
+                      <span className="inline-flex items-center gap-1 text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 px-2.5 py-0.5 rounded-full shadow-2xs">
+                        <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                        Double Check Concluído ({selectedAppt.preventionCheckedBy || 'Prevenção'})
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 text-[11px] font-medium bg-amber-50 text-amber-800 border border-amber-200 px-2.5 py-0.5 rounded-full">
+                        <ShieldCheck className="w-3.5 h-3.5 text-amber-600" />
+                        Aguardando Double Check na Descarga
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                    <div className="bg-white p-2.5 rounded-xl border border-slate-200">
+                      <span className="text-[11px] text-slate-500 font-medium block">Valor Total das Notas:</span>
+                      <strong className="text-slate-900 text-sm">
+                        {selectedAppt.invoiceTotalValue ? formatCurrencyBRL(selectedAppt.invoiceTotalValue) : 'Não informado'}
+                      </strong>
+                    </div>
+
+                    <div className="bg-white p-2.5 rounded-xl border border-slate-200">
+                      <span className="text-[11px] text-slate-500 font-medium block">Validade do Boleto:</span>
+                      <strong className="text-slate-900 text-sm">
+                        {selectedAppt.invoiceDueDate
+                          ? new Date(selectedAppt.invoiceDueDate + 'T00:00:00').toLocaleDateString('pt-BR')
+                          : 'Não aplicável / Não inf.'}
+                      </strong>
+                    </div>
+
+                    <div className="bg-white p-2.5 rounded-xl border border-slate-200">
+                      <span className="text-[11px] text-slate-500 font-medium block">Total de Chaves NF-e:</span>
+                      <strong className="text-slate-900 text-sm">
+                        {selectedAppt.nfeAccessKeys ? selectedAppt.nfeAccessKeys.length : 0} chave(s)
+                      </strong>
+                    </div>
+                  </div>
+
+                  {selectedAppt.nfeAccessKeys && selectedAppt.nfeAccessKeys.length > 0 && (
+                    <div className="space-y-1.5 pt-1">
+                      <span className="text-[11px] font-bold text-slate-700 block">
+                        Chaves de Acesso de NF-e ({selectedAppt.nfeAccessKeys.length}):
+                      </span>
+                      <div className="max-h-28 overflow-y-auto space-y-1 bg-white p-2 rounded-xl border border-slate-200">
+                        {selectedAppt.nfeAccessKeys.map((key, idx) => (
+                          <div key={idx} className="flex items-center justify-between text-[11px] font-mono bg-slate-50 px-2 py-1 rounded border border-slate-100">
+                            <span className="text-slate-700 truncate select-all">{formatNfeAccessKey(key)}</span>
+                            <span className="text-[10px] text-slate-400 font-sans ml-2 shrink-0">NF #{idx + 1}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Progress Timeline */}
               <div className="bg-slate-50/60 border border-slate-200 rounded-2xl p-5 space-y-4">

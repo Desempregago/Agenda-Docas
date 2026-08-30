@@ -213,6 +213,16 @@ async function startServer() {
       ? (parsedInvoiceNumbers.length > 1 ? parsedInvoiceNumbers.join(', ') : parsedInvoiceNumbers[0])
       : 'A emitir';
 
+    // Parse NF-e Access Keys (44 digits)
+    let parsedNfeKeys: string[] = [];
+    if (Array.isArray(body.nfeAccessKeys)) {
+      parsedNfeKeys = body.nfeAccessKeys
+        .map((k: any) => String(k || '').trim())
+        .filter((k: string) => k.length > 0);
+    } else if (body.nfeAccessKey && typeof body.nfeAccessKey === 'string' && body.nfeAccessKey.trim()) {
+      parsedNfeKeys = [body.nfeAccessKey.trim()];
+    }
+
     const rawPOStr = String(body.purchaseOrder || '').trim();
     // Parse multiple purchase order numbers separated by commas, semicolons, newlines, or slashes
     const parsedPurchaseOrders = rawPOStr
@@ -238,10 +248,16 @@ async function startServer() {
       invoiceNumbers: parsedInvoiceNumbers.length > 0 ? parsedInvoiceNumbers : [mainInvoiceNumber],
       invoiceSeries: body.invoiceSeries || '1',
       invoiceDueDate: body.invoiceDueDate || undefined,
+      invoiceTotalValue: body.invoiceTotalValue !== undefined && body.invoiceTotalValue !== null && body.invoiceTotalValue !== '' 
+        ? Number(body.invoiceTotalValue) 
+        : undefined,
+      nfeAccessKeys: parsedNfeKeys,
+      nfeAccessKey: parsedNfeKeys[0] || undefined,
       supplierName: String(body.supplierName).trim(),
       supplierCnpj: body.supplierCnpj || '00.000.000/0001-00',
       carrierName: body.carrierName || 'Transportadora Própria / Terceirizada',
       driverName: body.driverName || '',
+      driverCpf: body.driverCpf || '',
       driverPhone: body.driverPhone || '',
       vehiclePlate: body.vehiclePlate ? body.vehiclePlate.toUpperCase() : '',
       vehicleType: body.vehicleType || 'TRUCK_34',
@@ -269,6 +285,26 @@ async function startServer() {
 
     appointments.unshift(newAppointment);
     StorageService.saveAppointment(newAppointment);
+
+    // Auto-register/sync supplier in suppliers.json if CNPJ and Name are provided
+    if (newAppointment.supplierCnpj && newAppointment.supplierName) {
+      const cleanDigits = newAppointment.supplierCnpj.replace(/\D/g, '');
+      if (cleanDigits.length >= 11) {
+        const existingIndex = suppliers.findIndex(s => s.cnpj.replace(/\D/g, '') === cleanDigits);
+        if (existingIndex === -1) {
+          suppliers.push({
+            cnpj: newAppointment.supplierCnpj,
+            name: newAppointment.supplierName,
+            createdAt: nowIso,
+            lastLoginAt: nowIso,
+          });
+          StorageService.saveSuppliers(suppliers);
+        } else if (!suppliers[existingIndex].name && newAppointment.supplierName) {
+          suppliers[existingIndex].name = newAppointment.supplierName;
+          StorageService.saveSuppliers(suppliers);
+        }
+      }
+    }
 
     res.status(201).json(newAppointment);
   });
@@ -381,14 +417,37 @@ async function startServer() {
     res.json(updated);
   });
 
-  // Update Status & Discrepancy (Persistent)
+  // Update Status & Discrepancy & Double Check (Persistent)
   app.patch('/api/appointments/:id/status', (req, res) => {
     const { id } = req.params;
-    const { status, dockId, discrepancy, notes } = req.body as {
-      status: AppointmentStatus;
+    const { 
+      status, 
+      dockId, 
+      discrepancy, 
+      notes,
+      nfeAccessKeys,
+      nfeAccessKey,
+      invoiceNumbers,
+      invoiceNumber,
+      invoiceDueDate,
+      invoiceTotalValue,
+      preventionDoubleChecked,
+      preventionCheckedBy,
+      preventionCheckedAt
+    } = req.body as {
+      status?: AppointmentStatus;
       dockId?: string;
       discrepancy?: DiscrepancyReport;
       notes?: string;
+      nfeAccessKeys?: string[];
+      nfeAccessKey?: string;
+      invoiceNumbers?: string[];
+      invoiceNumber?: string;
+      invoiceDueDate?: string;
+      invoiceTotalValue?: number | string | null;
+      preventionDoubleChecked?: boolean;
+      preventionCheckedBy?: string;
+      preventionCheckedAt?: string;
     };
 
     const index = appointments.findIndex(a => a.id === id || a.protocol === id);
@@ -404,11 +463,31 @@ async function startServer() {
       ...(status ? { [status]: nowIso } : {})
     };
 
+    // Formatação de chaves e notas se fornecidas
+    let parsedNfeKeys = current.nfeAccessKeys || [];
+    if (Array.isArray(nfeAccessKeys)) {
+      parsedNfeKeys = nfeAccessKeys.map(k => String(k).replace(/\D/g, '')).filter(k => k.length > 0);
+    } else if (nfeAccessKey) {
+      const clean = String(nfeAccessKey).replace(/\D/g, '');
+      if (clean) parsedNfeKeys = [clean];
+    }
+
     const updated: Appointment = {
       ...current,
       status: status || current.status,
       dockId: dockId !== undefined ? dockId : current.dockId,
       notes: notes !== undefined ? notes : current.notes,
+      nfeAccessKeys: parsedNfeKeys.length > 0 ? parsedNfeKeys : current.nfeAccessKeys,
+      nfeAccessKey: parsedNfeKeys[0] || current.nfeAccessKey,
+      invoiceNumbers: invoiceNumbers !== undefined ? invoiceNumbers : current.invoiceNumbers,
+      invoiceNumber: invoiceNumber !== undefined ? invoiceNumber : (invoiceNumbers && invoiceNumbers.join(', ')) || current.invoiceNumber,
+      invoiceDueDate: invoiceDueDate !== undefined ? invoiceDueDate : current.invoiceDueDate,
+      invoiceTotalValue: invoiceTotalValue !== undefined 
+        ? (invoiceTotalValue !== null && invoiceTotalValue !== '' ? Number(invoiceTotalValue) : undefined)
+        : current.invoiceTotalValue,
+      preventionDoubleChecked: preventionDoubleChecked !== undefined ? Boolean(preventionDoubleChecked) : current.preventionDoubleChecked,
+      preventionCheckedBy: preventionCheckedBy !== undefined ? preventionCheckedBy : current.preventionCheckedBy,
+      preventionCheckedAt: preventionCheckedAt !== undefined ? preventionCheckedAt : current.preventionCheckedAt,
       updatedAt: nowIso,
       statusTimestamps: updatedTimestamps,
       ...(discrepancy ? { discrepancy } : {})
