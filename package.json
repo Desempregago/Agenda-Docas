@@ -12,7 +12,8 @@
     "pm2:stop": "pm2 stop agendamento-docas",
     "pm2:logs": "pm2 logs agendamento-docas",
     "clean": "rm -rf dist server.cjs",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "test": "tsx --test tests/*.test.ts"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.1.14",
