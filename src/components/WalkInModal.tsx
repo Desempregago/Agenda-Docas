@@ -318,8 +318,8 @@ export const WalkInModal: React.FC<WalkInModalProps> = ({
                   onChange={e => setFormData({ ...formData, destinationBranchId: e.target.value })}
                   className="w-full px-3 py-2 text-xs sm:text-sm font-semibold bg-white border border-amber-300 rounded-lg text-slate-900 focus:ring-2 focus:ring-amber-500 focus:outline-none"
                 >
-                  {activeDestinations.map(branch => (
-                    <option key={branch.id} value={branch.id}>
+                  {activeDestinations.map((branch, bIdx) => (
+                    <option key={`walkin-dest-${branch.id || ''}-${bIdx}`} value={branch.id}>
                       {branch.name} {branch.code ? `(${branch.code})` : ''} {branch.city ? `- ${branch.city}/${branch.state || ''}` : ''}
                     </option>
                   ))}

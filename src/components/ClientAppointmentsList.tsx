@@ -372,8 +372,8 @@ export const ClientAppointmentsList: React.FC<ClientAppointmentsListProps> = ({
             </thead>
             <tbody className="divide-y divide-slate-200">
               {filteredAppointments.length > 0 ? (
-                filteredAppointments.map(appt => (
-                  <tr key={appt.id} className="hover:bg-slate-50/80 transition-colors">
+                filteredAppointments.map((appt, aIdx) => (
+                  <tr key={`client-appt-${appt.id}-${aIdx}`} className="hover:bg-slate-50/80 transition-colors">
                     
                     {/* Protocol & NF & PO */}
                     <td className="py-3.5 px-4">

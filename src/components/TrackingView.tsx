@@ -247,11 +247,11 @@ export const TrackingView: React.FC<TrackingViewProps> = ({
 
           <div className="space-y-2 max-h-[600px] overflow-y-auto pr-1">
             {visibleAppointments.length > 0 ? (
-              visibleAppointments.map(appt => {
+              visibleAppointments.map((appt, aIdx) => {
                 const isSelected = selectedAppt?.id === appt.id;
                 return (
                   <div
-                    key={appt.id}
+                    key={`track-appt-${appt.id}-${aIdx}`}
                     onClick={() => setSelectedApptId(appt.id)}
                     className={`p-3.5 rounded-xl border transition-all cursor-pointer ${
                       isSelected

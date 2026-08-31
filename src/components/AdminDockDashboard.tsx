@@ -313,7 +313,7 @@ export const AdminDockDashboard: React.FC<AdminDockDashboardProps> = ({
             >
               Todas as Unidades ({appointments.filter(a => a.scheduledDate === selectedDate).length})
             </button>
-            {activeDestinations.map(branch => {
+            {activeDestinations.map((branch, bIdx) => {
               const count = appointments.filter(a => {
                 if (a.scheduledDate !== selectedDate) return false;
                 if (a.destinationBranchId) return a.destinationBranchId === branch.id;
@@ -322,7 +322,7 @@ export const AdminDockDashboard: React.FC<AdminDockDashboardProps> = ({
               }).length;
               return (
                 <button
-                  key={branch.id}
+                  key={`dest-filter-${branch.id || ''}-${bIdx}`}
                   onClick={() => setSelectedBranchFilter(branch.id)}
                   className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all flex items-center gap-1 ${
                     selectedBranchFilter === branch.id
@@ -410,9 +410,9 @@ export const AdminDockDashboard: React.FC<AdminDockDashboardProps> = ({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2">
             {dayAppointments
               .filter(a => a.status === 'NO_PATIO')
-              .map(appt => (
+              .map((appt, aIdx) => (
                 <div
-                  key={appt.id}
+                  key={`gate-patio-${appt.id}-${aIdx}`}
                   className="bg-slate-800/90 border border-purple-500/40 rounded-xl p-3 sm:p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-inner"
                 >
                   <div className="space-y-1 min-w-0 flex-1">
@@ -475,7 +475,7 @@ export const AdminDockDashboard: React.FC<AdminDockDashboardProps> = ({
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3.5 sm:gap-4">
-          {activeDocksToDisplay.map(dock => {
+          {activeDocksToDisplay.map((dock, dIdx) => {
             const dockAppts = dayAppointments.filter(a => isAppointmentAssignedToDock(a, dock));
             const activeAtDock = dockAppts.find(a => a.status === 'AGUARDANDO_DESCARGA' || a.status === 'NO_PATIO');
 
@@ -492,7 +492,7 @@ export const AdminDockDashboard: React.FC<AdminDockDashboardProps> = ({
 
             return (
               <div
-                key={dock.id}
+                key={`dock-card-${dock.id || ''}-${dIdx}`}
                 className={`bg-white rounded-2xl border p-4 shadow-2xs space-y-3 transition-all ${
                   activeAtDock ? 'border-emerald-300 ring-2 ring-emerald-500/20 bg-emerald-50/20' : 'border-slate-200'
                 }`}
@@ -548,11 +548,11 @@ export const AdminDockDashboard: React.FC<AdminDockDashboardProps> = ({
                 {/* Dock Queue / Schedule List */}
                 <div className="space-y-2.5 min-h-[100px]">
                   {dockAppts.length > 0 ? (
-                    dockAppts.map(appt => {
+                    dockAppts.map((appt, aIdx) => {
                       const apptVol = getApptVolume(appt);
                       return (
                         <div
-                          key={appt.id}
+                          key={`dock-appt-${appt.id}-${aIdx}`}
                           className="bg-slate-50 border border-slate-200 hover:border-blue-300 rounded-xl p-3 space-y-2 text-xs transition-colors shadow-2xs"
                         >
                           {/* Protocol and Slot Header */}
@@ -634,8 +634,8 @@ export const AdminDockDashboard: React.FC<AdminDockDashboardProps> = ({
             </thead>
             <tbody className="divide-y divide-slate-200">
               {dayAppointments.length > 0 ? (
-                dayAppointments.map(appt => (
-                  <tr key={appt.id} className="hover:bg-slate-50/80 transition-colors">
+                dayAppointments.map((appt, aIdx) => (
+                  <tr key={`appt-row-${appt.id}-${aIdx}`} className="hover:bg-slate-50/80 transition-colors">
                     
                     {/* Protocol, PO & NF */}
                     <td className="py-3.5 px-4">
@@ -686,8 +686,8 @@ export const AdminDockDashboard: React.FC<AdminDockDashboardProps> = ({
                         className="mt-1 text-xs border border-slate-300 rounded-lg px-2 py-1 bg-white focus:ring-1 focus:ring-blue-500 font-medium cursor-pointer"
                       >
                         <option value="">-- Atribuir Doca --</option>
-                        {(activeDocksToDisplay.length > 0 ? activeDocksToDisplay : docks).map(d => (
-                          <option key={d.id} value={d.id}>
+                        {(activeDocksToDisplay.length > 0 ? activeDocksToDisplay : docks).map((d, dIdx) => (
+                          <option key={`assign-dock-${d.id || ''}-${dIdx}`} value={d.id}>
                             {d.name}
                           </option>
                         ))}

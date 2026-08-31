@@ -201,11 +201,23 @@ export const StorageService = {
       slotSupplierLimits: b.slotSupplierLimits ?? {},
       dailyPalletLimit: b.dailyPalletLimit ?? 200,
       dailyVolumeLimit: b.dailyVolumeLimit ?? 500,
+      allowedDaysOfWeek: (b.allowedDaysOfWeek && Array.isArray(b.allowedDaysOfWeek) && b.allowedDaysOfWeek.length > 0)
+        ? b.allowedDaysOfWeek
+        : [1, 2, 3, 4, 5],
+      blockedDates: b.blockedDates ?? [],
     }));
   },
 
   saveDestinations: (destinations: DestinationBranch[]): boolean => {
     return writeJsonFile<DestinationBranch[]>('destinations.json', destinations);
+  },
+
+  loadOperatingDays: (): number[] => {
+    return readJsonFile<number[]>('operating_days.json', [1, 2, 3, 4, 5]);
+  },
+
+  saveOperatingDays: (days: number[]): boolean => {
+    return writeJsonFile<number[]>('operating_days.json', days);
   },
 
   loadDocks: (): Dock[] => {

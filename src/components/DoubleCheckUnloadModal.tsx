@@ -626,8 +626,8 @@ export const DoubleCheckUnloadModal: React.FC<DoubleCheckUnloadModalProps> = ({
                 onChange={e => setSelectedDockId(e.target.value)}
                 className="w-full px-3 py-2 text-xs font-medium border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-purple-500 focus:outline-none"
               >
-                {docks.map(dock => (
-                  <option key={dock.id} value={dock.id} disabled={!dock.isOperational}>
+                {docks.map((dock, dIdx) => (
+                  <option key={`double-check-dock-${dock.id || ''}-${dIdx}`} value={dock.id} disabled={!dock.isOperational}>
                     {dock.name} ({dock.type}) {!dock.isOperational ? '- Inoperante' : ''}
                   </option>
                 ))}

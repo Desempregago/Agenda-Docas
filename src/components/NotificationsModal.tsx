@@ -174,11 +174,11 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
               </p>
             </div>
           ) : (
-            filteredNotifications.map(item => {
+            filteredNotifications.map((item, nIdx) => {
               const isAppt = isAppointmentNotification(item);
               return (
                 <div
-                  key={item.id}
+                  key={`notif-${item.id}-${nIdx}`}
                   className={`p-4 transition-colors flex items-start gap-3 ${
                     !item.read ? 'bg-amber-50/50 hover:bg-amber-50' : 'hover:bg-slate-50'
                   }`}

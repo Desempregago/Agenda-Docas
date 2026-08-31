@@ -1,8 +1,15 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Calendar, Clock, Truck, FileText, CheckCircle2, Copy, AlertCircle, Lock, MapPin, Building2, Info, Sparkles, KeyRound, Plus, Trash2, DollarSign, User, ShieldCheck } from 'lucide-react';
+import { X, Calendar, Clock, Truck, FileText, CheckCircle2, Copy, AlertCircle, Lock, MapPin, Building2, Info, Sparkles, KeyRound, Plus, Trash2, DollarSign, User, ShieldCheck, AlertTriangle } from 'lucide-react';
 import { Appointment, Dock, DestinationBranch } from '../types';
 import { SupplierSession } from './SupplierLoginModal';
 import { formatCpf, formatCurrencyBRL, parseCurrencyInput, formatNfeAccessKey, cleanNfeAccessKey, extractNfeKeysFromText } from '../utils/formatters';
+import {
+  getDayOfWeekFromDate,
+  getDayName,
+  isDateAllowed,
+  formatAllowedDaysSummary,
+  getNextAllowedDate,
+} from '../utils/dateUtils';
 
 interface ClientNewAppointmentModalProps {
   isOpen: boolean;
@@ -166,6 +173,26 @@ export const ClientNewAppointmentModal: React.FC<ClientNewAppointmentModalProps>
 
   const selectedBranch = activeDestinations.find(d => d.id === formData.destinationBranchId) || defaultDestination || activeDestinations[0];
 
+  // Dias da semana permitidos para a filial selecionada
+  const branchAllowedDays = React.useMemo(() => {
+    return (selectedBranch?.allowedDaysOfWeek && selectedBranch.allowedDaysOfWeek.length > 0)
+      ? selectedBranch.allowedDaysOfWeek
+      : [1, 2, 3, 4, 5];
+  }, [selectedBranch]);
+
+  // Se a data atual não for permitida na filial, ajusta para a próxima data permitida
+  useEffect(() => {
+    if (isOpen && branchAllowedDays.length > 0) {
+      if (!isDateAllowed(formData.scheduledDate, branchAllowedDays, selectedBranch?.blockedDates)) {
+        const nextValid = getNextAllowedDate(minDateStr, branchAllowedDays);
+        setFormData(prev => ({ ...prev, scheduledDate: nextValid }));
+      }
+    }
+  }, [isOpen, selectedBranch?.id, branchAllowedDays]);
+
+  const isSelectedDateAllowed = isDateAllowed(formData.scheduledDate, branchAllowedDays, selectedBranch?.blockedDates);
+  const selectedDayOfWeek = getDayOfWeekFromDate(formData.scheduledDate);
+
   // Janelas disponíveis para a filial selecionada
   const branchAvailableSlots = React.useMemo(() => {
     if (selectedBranch?.timeSlots && selectedBranch.timeSlots.length > 0) {
@@ -262,6 +289,15 @@ export const ClientNewAppointmentModal: React.FC<ClientNewAppointmentModalProps>
     const todayStr = new Date().toISOString().split('T')[0];
     if (formData.scheduledDate <= todayStr) {
       setError('Não é permitido solicitar agendamentos para o mesmo dia (D+0). A data mínima permitida é a partir de amanhã.');
+      return;
+    }
+
+    // Validação de Dias Autorizados para Recebimento (ex: bloquear Fins de Semana ou Dias Não-Úteis)
+    if (!isSelectedDateAllowed) {
+      const dayName = getDayName(selectedDayOfWeek);
+      const daysSummary = formatAllowedDaysSummary(branchAllowedDays);
+      const branchName = selectedBranch?.name ? ` na unidade "${selectedBranch.name}"` : '';
+      setError(`A data selecionada cai em um(a) ${dayName}, que não está disponível para agendamento${branchName}. Os dias autorizados para recebimento são: ${daysSummary}.`);
       return;
     }
 
@@ -547,8 +583,8 @@ export const ClientNewAppointmentModal: React.FC<ClientNewAppointmentModalProps>
                         onChange={e => setFormData({ ...formData, destinationBranchId: e.target.value })}
                         className="w-full px-3 py-2.5 text-xs sm:text-sm font-semibold bg-white border border-indigo-300 rounded-xl text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none shadow-2xs"
                       >
-                        {activeDestinations.map(branch => (
-                          <option key={branch.id} value={branch.id}>
+                        {activeDestinations.map((branch, bIdx) => (
+                          <option key={`client-new-dest-${branch.id || ''}-${bIdx}`} value={branch.id}>
                             {branch.name} {branch.code ? `(${branch.code})` : ''} {branch.city ? `- ${branch.city}/${branch.state || ''}` : ''}
                           </option>
                         ))}
@@ -897,24 +933,58 @@ export const ClientNewAppointmentModal: React.FC<ClientNewAppointmentModalProps>
                     <Clock className="w-4 h-4 text-blue-600" />
                     3. Agendamento & Horário
                   </h3>
+                  <span className="text-[11px] font-semibold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-full flex items-center gap-1">
+                    <Calendar className="w-3 h-3 text-indigo-600" />
+                    Recebimento: {formatAllowedDaysSummary(branchAllowedDays)}
+                  </span>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">
-                      Data Pretendida <span className="text-[11px] text-blue-600 font-normal">(A partir de amanhã)</span>
-                    </label>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-xs font-semibold text-slate-700">
+                        Data Pretendida <span className="text-[11px] text-blue-600 font-normal">(A partir de amanhã)</span>
+                      </label>
+                      <span className="text-[10px] font-mono font-bold text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded">
+                        {getDayName(selectedDayOfWeek)}
+                      </span>
+                    </div>
                     <input
                       type="date"
                       required
                       min={minDateStr}
                       value={formData.scheduledDate}
                       onChange={e => setFormData({ ...formData, scheduledDate: e.target.value })}
-                      className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 ${
+                        !isSelectedDateAllowed
+                          ? 'border-rose-400 bg-rose-50/40 text-rose-900 focus:border-rose-500 focus:ring-rose-200'
+                          : 'border-slate-300'
+                      }`}
                     />
-                    <p className="text-[10px] text-slate-500 mt-1">
-                      📅 Agendamentos devem ser solicitados com no mínimo 1 dia de antecedência (D+1).
-                    </p>
+                    {!isSelectedDateAllowed ? (
+                      <div className="mt-2 p-2 bg-rose-50 border border-rose-200 rounded-lg text-rose-800 text-[11px] flex items-start gap-1.5">
+                        <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                        <div>
+                          <strong className="font-bold">Dia Indisponível:</strong> A unidade{' '}
+                          <strong>{selectedBranch?.name}</strong> não recebe entregas aos{' '}
+                          <strong>{getDayName(selectedDayOfWeek)}s</strong>.
+                          <div className="mt-1 flex items-center gap-1">
+                            <span>Próximo dia disponível:</span>
+                            <button
+                              type="button"
+                              onClick={() => setFormData(prev => ({ ...prev, scheduledDate: getNextAllowedDate(minDateStr, branchAllowedDays) }))}
+                              className="font-bold text-blue-700 underline hover:text-blue-900 cursor-pointer"
+                            >
+                              Ajustar para {getNextAllowedDate(minDateStr, branchAllowedDays)}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-[10px] text-slate-500 mt-1">
+                        📅 Agendamentos devem ser solicitados com no mínimo 1 dia de antecedência (D+1).
+                      </p>
+                    )}
                   </div>
 
                   <div>
@@ -926,12 +996,12 @@ export const ClientNewAppointmentModal: React.FC<ClientNewAppointmentModalProps>
                       onChange={e => setFormData({ ...formData, timeSlot: e.target.value })}
                       className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white font-medium"
                     >
-                      {branchAvailableSlots.map(slot => {
+                      {branchAvailableSlots.map((slot, sIdx) => {
                         const count = slotOccupancy[slot] || 0;
                         const max = getSlotMaxSuppliers(slot);
                         const isFull = count >= max;
                         return (
-                          <option key={slot} value={slot} disabled={isFull}>
+                          <option key={`client-new-slot-${slot}-${sIdx}`} value={slot} disabled={isFull}>
                             {slot} — {count}/{max} vagas ocupadas {isFull ? '(LOTADO)' : ''}
                           </option>
                         );

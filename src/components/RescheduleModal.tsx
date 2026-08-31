@@ -2,6 +2,13 @@ import React, { useState, useMemo } from 'react';
 import { X, Calendar, Clock, RefreshCw, AlertCircle, CheckCircle2, History, FilePlus, Package, Weight, Lock, LogIn, Building2, ShieldAlert, AlertTriangle, MapPin } from 'lucide-react';
 import { Appointment, Dock, DestinationBranch } from '../types';
 import { SupplierSession } from './SupplierLoginModal';
+import {
+  getDayOfWeekFromDate,
+  getDayName,
+  isDateAllowed,
+  formatAllowedDaysSummary,
+  getNextAllowedDate,
+} from '../utils/dateUtils';
 
 interface RescheduleModalProps {
   appointment: Appointment | null;
@@ -43,13 +50,23 @@ export const RescheduleModal: React.FC<RescheduleModalProps> = ({
     ? apptDest.timeSlots
     : defaultSlots;
 
+  const branchAllowedDays = useMemo(() => {
+    return (apptDest?.allowedDaysOfWeek && apptDest.allowedDaysOfWeek.length > 0)
+      ? apptDest.allowedDaysOfWeek
+      : [1, 2, 3, 4, 5];
+  }, [apptDest]);
+
   const tomorrow = new Date();
   tomorrow.setDate(tomorrow.getDate() + 1);
   const defaultNextDate = tomorrow.toISOString().split('T')[0];
+  const initialValidDate = getNextAllowedDate(defaultNextDate, branchAllowedDays);
 
-  const [newDate, setNewDate] = useState(defaultNextDate);
+  const [newDate, setNewDate] = useState(initialValidDate);
   const [newSlot, setNewSlot] = useState(branchAvailableSlots[0] || '08:00 - 09:30');
   const [reason, setReason] = useState('');
+
+  const isSelectedDateAllowed = isDateAllowed(newDate, branchAllowedDays, apptDest?.blockedDates);
+  const selectedDayOfWeek = getDayOfWeekFromDate(newDate);
   
   // Extra Invoices & Volumes options for supplier returning with additional NFs
   const [addExtraInvoices, setAddExtraInvoices] = useState(false);
@@ -155,6 +172,14 @@ export const RescheduleModal: React.FC<RescheduleModalProps> = ({
 
     if (!reason.trim()) {
       setError('Por favor, descreva o motivo da solicitação de reagendamento.');
+      return;
+    }
+
+    if (!isSelectedDateAllowed) {
+      const dayName = getDayName(selectedDayOfWeek);
+      const daysSummary = formatAllowedDaysSummary(branchAllowedDays);
+      const branchName = apptDest?.name ? ` na unidade "${apptDest.name}"` : '';
+      setError(`A data selecionada cai em um(a) ${dayName}, que não está disponível para recebimento${branchName}. Dias autorizados: ${daysSummary}.`);
       return;
     }
 
@@ -341,17 +366,50 @@ export const RescheduleModal: React.FC<RescheduleModalProps> = ({
               {/* New Date & Slot inputs */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Nova Data Desejada <span className="text-[11px] text-blue-600 font-normal">(A partir de amanhã)</span>
-                  </label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-semibold text-slate-700">
+                      Nova Data Desejada <span className="text-[11px] text-blue-600 font-normal">(A partir de amanhã)</span>
+                    </label>
+                    <span className="text-[10px] font-mono font-bold text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded">
+                      {getDayName(selectedDayOfWeek)}
+                    </span>
+                  </div>
                   <input
                     type="date"
                     required
                     min={defaultNextDate}
                     value={newDate}
                     onChange={e => setNewDate(e.target.value)}
-                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-amber-500"
+                    className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-amber-500 ${
+                      !isSelectedDateAllowed
+                        ? 'border-rose-400 bg-rose-50/40 text-rose-900 focus:border-rose-500 focus:ring-rose-200'
+                        : 'border-slate-300'
+                    }`}
                   />
+                  {!isSelectedDateAllowed ? (
+                    <div className="mt-2 p-2 bg-rose-50 border border-rose-200 rounded-lg text-rose-800 text-[11px] flex items-start gap-1.5">
+                      <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                      <div>
+                        <strong className="font-bold">Dia Indisponível:</strong> A unidade{' '}
+                        <strong>{apptDest?.name}</strong> não recebe entregas aos{' '}
+                        <strong>{getDayName(selectedDayOfWeek)}s</strong>.
+                        <div className="mt-1 flex items-center gap-1">
+                          <span>Próximo dia autorizado:</span>
+                          <button
+                            type="button"
+                            onClick={() => setNewDate(getNextAllowedDate(defaultNextDate, branchAllowedDays))}
+                            className="font-bold text-blue-700 underline hover:text-blue-900 cursor-pointer"
+                          >
+                            Ajustar para {getNextAllowedDate(defaultNextDate, branchAllowedDays)}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-[10px] text-slate-500 mt-1">
+                      Atendimento autorizado: {formatAllowedDaysSummary(branchAllowedDays)}
+                    </p>
+                  )}
                 </div>
 
                 <div>
@@ -361,12 +419,12 @@ export const RescheduleModal: React.FC<RescheduleModalProps> = ({
                     onChange={e => setNewSlot(e.target.value)}
                     className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-amber-500 bg-white"
                   >
-                    {branchAvailableSlots.map(slot => {
+                    {branchAvailableSlots.map((slot, sIdx) => {
                       const limit = getSlotLimit(slot);
                       const count = slotOccupancy[slot] || 0;
                       const isFull = count >= limit;
                       return (
-                        <option key={slot} value={slot} disabled={isFull}>
+                        <option key={`resched-slot-${slot}-${sIdx}`} value={slot} disabled={isFull}>
                           {slot} {isFull ? '(Lotado)' : `(${count}/${limit} vagas na unidade)`}
                         </option>
                       );

@@ -172,11 +172,11 @@ export const DiscrepancyModal: React.FC<DiscrepancyModalProps> = ({
               Selecione o(s) Tipo(s) de Divergência Constatados:
             </label>
             <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
-              {availableTypes.map(item => {
+              {availableTypes.map((item, tIdx) => {
                 const checked = selectedTypes.includes(item.id);
                 return (
                   <div
-                    key={item.id}
+                    key={`disc-type-${item.id}-${tIdx}`}
                     onClick={() => toggleType(item.id)}
                     className={`p-2.5 rounded-xl border flex items-center justify-between cursor-pointer transition-all ${
                       checked

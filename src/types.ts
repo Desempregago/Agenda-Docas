@@ -58,13 +58,15 @@ export interface DestinationBranch {
   active: boolean;
   isDefault?: boolean;
   
-  // Customização de Limites, Docas e Janelas por Filial
+  // Customização de Limites, Docas, Janelas e Dias de Atendimento por Filial
   customScheduleEnabled?: boolean; // Se habilitado, a filial usa suas próprias docas, limites e janelas
   timeSlots?: string[]; // Janelas de horários exclusivas desta filial
   slotSupplierLimits?: Record<string, number>; // Limite de fornecedores por janela nesta filial
   docks?: Dock[]; // Docas ativas configuradas para esta filial
   dailyPalletLimit?: number; // Limite global diário de paletes da filial
   dailyVolumeLimit?: number; // Limite global diário de volumes da filial
+  allowedDaysOfWeek?: number[]; // Dias da semana permitidos para agendamento: 0=Dom, 1=Seg, 2=Ter, 3=Qua, 4=Qui, 5=Sex, 6=Sáb (Padrão: [1, 2, 3, 4, 5])
+  blockedDates?: string[]; // Datas específicas bloqueadas para agendamento (feriados/manutenção em formato YYYY-MM-DD)
 }
 
 export interface Appointment {

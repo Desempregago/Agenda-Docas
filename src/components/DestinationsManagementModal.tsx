@@ -570,9 +570,9 @@ export const DestinationsManagementModal: React.FC<DestinationsManagementModalPr
                 <p className="text-xs text-slate-500">Clique em "Adicionar Nova Filial" para cadastrar uma nova unidade de destino.</p>
               </div>
             ) : (
-              filteredList.map(branch => (
+              filteredList.map((branch, bIdx) => (
                 <div
-                  key={branch.id}
+                  key={`dest-card-${branch.id || ''}-${bIdx}`}
                   className={`bg-white border rounded-2xl p-4 transition-all shadow-xs hover:shadow-md flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 ${
                     branch.isDefault
                       ? 'border-indigo-300 bg-indigo-50/20 ring-1 ring-indigo-200'

@@ -6,7 +6,7 @@ import { StorageService, BrandSettings } from './src/server/storage';
 
 async function startServer() {
   const app = express();
-  const PORT = Number(process.env.PORT) || 3000;
+  const PORT = 3000;
 
   app.use(express.json({ limit: '10mb' }));
 
@@ -16,6 +16,7 @@ async function startServer() {
   let docks: Dock[] = StorageService.loadDocks();
   let timeSlots: string[] = StorageService.loadTimeSlots();
   let slotSupplierLimits: Record<string, number> = StorageService.loadSlotSupplierLimits();
+  let operatingDays: number[] = StorageService.loadOperatingDays();
   let users: SystemUser[] = StorageService.loadUsers();
   let suppliers: RegisteredSupplier[] = StorageService.loadSuppliers();
   let brandSettings: BrandSettings = StorageService.loadBranding();
@@ -119,6 +120,31 @@ async function startServer() {
       || destinations.find(d => d.isDefault) 
       || destinations[0];
     const targetDestId = targetDest?.id;
+
+    // Validação de Dias de Funcionamento e Atendimento (Bloqueio de Fins de Semana ou Dias Não Autorizados)
+    if (!isWalkIn) {
+      const allowedDays = (targetDest?.allowedDaysOfWeek && Array.isArray(targetDest.allowedDaysOfWeek) && targetDest.allowedDaysOfWeek.length > 0)
+        ? targetDest.allowedDaysOfWeek
+        : operatingDays;
+
+      const [sYear, sMonth, sDay] = scheduledDate.split('-').map(Number);
+      const scheduledDayOfWeek = new Date(sYear, (sMonth || 1) - 1, sDay || 1).getDay();
+      const dayNames = ['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'];
+
+      if (!allowedDays.includes(scheduledDayOfWeek)) {
+        const branchLabel = targetDest?.name ? ` na unidade "${targetDest.name}"` : '';
+        const allowedFormatted = allowedDays.map(d => dayNames[d]).join(', ');
+        return res.status(400).json({
+          error: `A unidade "${targetDest?.name || 'selecionada'}" não recebe agendamentos aos ${dayNames[scheduledDayOfWeek]}s. Dias autorizados para recebimento: ${allowedFormatted}. Por favor, selecione outro dia.`
+        });
+      }
+
+      if (targetDest?.blockedDates && Array.isArray(targetDest.blockedDates) && targetDest.blockedDates.includes(scheduledDate)) {
+        return res.status(400).json({
+          error: `A data ${scheduledDate} está bloqueada para recebimentos na unidade ${targetDest?.name || ''} (feriado/manutenção programada). Por favor, selecione outra data.`
+        });
+      }
+    }
 
     // Validação de limite de fornecedores por janela de horário ESPECÍFICO DA FILIAL
     const maxSuppliersForSlot = (targetDest?.slotSupplierLimits?.[body.timeSlot] !== undefined)
@@ -343,6 +369,29 @@ async function startServer() {
       || destinations[0];
     const targetDestId = targetDest?.id;
 
+    // Validação de Dias de Funcionamento no Reagendamento
+    const allowedDays = (targetDest?.allowedDaysOfWeek && Array.isArray(targetDest.allowedDaysOfWeek) && targetDest.allowedDaysOfWeek.length > 0)
+      ? targetDest.allowedDaysOfWeek
+      : operatingDays;
+
+    const [rYear, rMonth, rDay] = newDate.split('-').map(Number);
+    const rescheduleDayOfWeek = new Date(rYear, (rMonth || 1) - 1, rDay || 1).getDay();
+    const dayNames = ['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'];
+
+    if (!allowedDays.includes(rescheduleDayOfWeek)) {
+      const branchLabel = targetDest?.name ? ` na unidade "${targetDest.name}"` : '';
+      const allowedFormatted = allowedDays.map(d => dayNames[d]).join(', ');
+      return res.status(400).json({
+        error: `Não é possível reagendar para ${dayNames[rescheduleDayOfWeek]}${branchLabel}. Dias autorizados para recebimento: ${allowedFormatted}.`
+      });
+    }
+
+    if (targetDest?.blockedDates && Array.isArray(targetDest.blockedDates) && targetDest.blockedDates.includes(newDate)) {
+      return res.status(400).json({
+        error: `A data ${newDate} está bloqueada para recebimentos na unidade ${targetDest?.name || ''}. Por favor, selecione outra data.`
+      });
+    }
+
     // Validação de limite de fornecedores por janela de horário no reagendamento
     const maxSuppliersForSlot = (targetDest?.slotSupplierLimits?.[newSlot] !== undefined)
       ? targetDest.slotSupplierLimits[newSlot]
@@ -556,6 +605,21 @@ async function startServer() {
       StorageService.saveTimeSlots(timeSlots);
     }
     res.json(timeSlots);
+  });
+
+  // Get Operating Days / Allowed Days of Week (Persistent)
+  app.get('/api/operating-days', (_req, res) => {
+    res.json(operatingDays);
+  });
+
+  // Save / Update Operating Days (Persistent)
+  app.put('/api/operating-days', (req, res) => {
+    const updated = req.body;
+    if (Array.isArray(updated)) {
+      operatingDays = updated;
+      StorageService.saveOperatingDays(operatingDays);
+    }
+    res.json(operatingDays);
   });
 
   // Clear all appointments (start clean)

@@ -338,8 +338,8 @@ export const UsersManagementModal: React.FC<UsersManagementModalProps> = ({
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {users.map(u => (
-                        <tr key={u.id} className="hover:bg-slate-50/80 transition-colors">
+                      {users.map((u, uIdx) => (
+                        <tr key={`user-row-${u.id}-${uIdx}`} className="hover:bg-slate-50/80 transition-colors">
                           <td className="py-3 px-4">
                             <div className="font-bold text-slate-900 flex items-center gap-1.5">
                               <User className="w-3.5 h-3.5 text-slate-400" />
