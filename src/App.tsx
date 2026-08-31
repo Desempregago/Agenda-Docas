@@ -360,6 +360,10 @@ export default function App() {
               setCurrentSystemUser(validUser);
               setUserRole('ADMIN');
             }
+          } else if (usersRes.status === 401) {
+            localStorage.removeItem('agendadocas_system_user');
+            setCurrentSystemUser(null);
+            setUserRole('CLIENT');
           }
         } catch (_) {}
       }
@@ -963,6 +967,7 @@ export default function App() {
           } catch (_) {}
           setUserRole('ADMIN');
           setCurrentView('ADMIN');
+          void loadData();
           addNotification(
             `Sessão de ${authenticatedUser.name} Iniciada`,
             `Acesso concedido como ${authenticatedUser.role === 'ADMIN' ? 'Administrador Geral' : 'Operador'} (${authenticatedUser.department}).`,
