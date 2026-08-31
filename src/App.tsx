@@ -193,6 +193,7 @@ export default function App() {
           setCurrentSupplierSession(updatedSession);
           localStorage.setItem('agendadocas_supplier_session', JSON.stringify(updatedSession));
         }
+        await loadData();
       }
     } catch (e) {
       console.error('Erro ao salvar sessão de fornecedor:', e);
@@ -201,6 +202,7 @@ export default function App() {
   };
 
   const handleSupplierLogout = () => {
+    void fetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
     setCurrentSupplierSession(null);
     try {
       localStorage.removeItem('agendadocas_supplier_session');
@@ -210,6 +212,7 @@ export default function App() {
   };
 
   const handleAdminLogout = () => {
+    void fetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
     setCurrentSystemUser(null);
     setUserRole('CLIENT');
     setCurrentView('CLIENT');
@@ -452,23 +455,9 @@ export default function App() {
           prev.map(a => (a.id === updatedAppt!.id ? updatedAppt! : a))
         );
       } else {
-        // Fallback local state update
-        setAppointments(prev =>
-          prev.map(a => {
-            if (a.id === apptId) {
-              updatedAppt = {
-                ...a,
-                status,
-                dockId: dockId !== undefined ? dockId : a.dockId,
-                discrepancy: discrepancy || a.discrepancy,
-                ...(additionalData || {}),
-                updatedAt: new Date().toISOString(),
-              };
-              return updatedAppt;
-            }
-            return a;
-          })
-        );
+        const errorData = await res.json().catch(() => ({}));
+        showToast('Falha ao atualizar', errorData.error || 'A alteração não foi salva no servidor.', 'warning');
+        return;
       }
 
       // Generate status notification
@@ -498,21 +487,7 @@ export default function App() {
         );
       }
     } catch (e) {
-      // Local fallback
-      setAppointments(prev =>
-        prev.map(a =>
-          a.id === apptId
-            ? {
-                ...a,
-                status,
-                dockId: dockId !== undefined ? dockId : a.dockId,
-                discrepancy: discrepancy || a.discrepancy,
-                ...(additionalData || {}),
-                updatedAt: new Date().toISOString(),
-              }
-            : a
-        )
-      );
+      showToast('Falha de conexão', 'Não foi possível salvar a alteração no servidor.', 'warning');
     }
   };
 
