@@ -1,13 +1,23 @@
 import express from 'express';
 import path from 'path';
+import { randomUUID } from 'crypto';
 import { createServer as createViteServer } from 'vite';
 import { Appointment, AppointmentStatus, DiscrepancyReport, Dock, RescheduleHistory, SystemUser, SystemUserRole, RegisteredSupplier, DestinationBranch } from './src/types';
 import { StorageService, BrandSettings } from './src/server/storage';
+import { businessToday, dayOfWeekForDate, isAppointmentStatus, isValidDateOnly, normalizeNfeKeys } from './src/server/validation';
+import { clearSessionCookie, getSession, hashSecret, needsSecretMigration, requireAuth, requireSystemRole, setSessionCookie, verifySecret } from './src/server/security';
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  const PORT = Number(process.env.PORT || 3000);
 
+  app.disable('x-powered-by');
+  app.use((_, res, next) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'DENY');
+    res.setHeader('Referrer-Policy', 'no-referrer');
+    next();
+  });
   app.use(express.json({ limit: '10mb' }));
 
   // Load state directly from persistent files in container / server filesystem
@@ -43,14 +53,20 @@ async function startServer() {
   });
 
   // Storage Diagnostics & Stats
-  app.get('/api/storage/status', (_req, res) => {
+  app.get('/api/storage/status', requireSystemRole('ADMIN', 'OPERATOR'), (_req, res) => {
     res.json(StorageService.getStats());
   });
 
   // List & Search Appointments
-  app.get('/api/appointments', (req, res) => {
+  app.get('/api/appointments', requireAuth(), (req, res) => {
     const { search, status, date } = req.query;
+    const session = getSession(req);
     let filtered = [...appointments];
+
+    if (session?.type === 'supplier') {
+      const supplierDigits = session.supplierCnpj.replace(/\D/g, '');
+      filtered = filtered.filter(a => a.supplierCnpj.replace(/\D/g, '') === supplierDigits);
+    }
 
     if (search && typeof search === 'string') {
       const q = search.toLowerCase().trim();
@@ -87,12 +103,27 @@ async function startServer() {
     if (!appt) {
       return res.status(404).json({ error: 'Agendamento não encontrado' });
     }
+    const session = getSession(req);
+    if (session?.type === 'supplier' && session.supplierCnpj.replace(/\D/g, '') !== appt.supplierCnpj.replace(/\D/g, '')) {
+      return res.status(403).json({ error: 'Você não possui acesso a este agendamento.' });
+    }
+    if (!session) {
+      return res.json({
+        id: appt.id, protocol: appt.protocol, destinationBranchName: appt.destinationBranchName,
+        scheduledDate: appt.scheduledDate, timeSlot: appt.timeSlot, status: appt.status, updatedAt: appt.updatedAt
+      });
+    }
     res.json(appt);
   });
 
   // Create new appointment (Persistent)
   app.post('/api/appointments', (req, res) => {
-    const body = req.body;
+    const body = req.body || {};
+    const session = getSession(req);
+    if (session?.type === 'supplier') {
+      body.supplierCnpj = session.supplierCnpj;
+      body.supplierName = session.supplierName;
+    }
 
     if (!body.purchaseOrder || !String(body.purchaseOrder).trim()) {
       return res.status(400).json({ error: 'O número do Pedido de Compra (PO) é obrigatório para solicitar o agendamento.' });
@@ -102,13 +133,16 @@ async function startServer() {
     }
 
     const scheduledDate = String(body.scheduledDate);
+    if (!isValidDateOnly(scheduledDate)) {
+      return res.status(400).json({ error: 'Data de agendamento inválida. Use o formato YYYY-MM-DD.' });
+    }
     const cargoType = body.cargoType || 'PALETIZADA';
     const requestedVolumes = Number(body.totalVolumes) || 10;
     const isWalkIn = Boolean(body.isWalkIn);
     const isPreApprovedContract = Boolean(body.isPreApprovedContract || body.isPreApproved);
 
     // Validação D+0: Proibir que agendamentos normais sejam solicitados para o mesmo dia ou datas passadas
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = businessToday();
     if (!isWalkIn && scheduledDate <= todayStr) {
       return res.status(400).json({
         error: 'Não é permitido solicitar agendamentos para o mesmo dia (D+0) ou datas retroativas. A data mínima permitida é a partir de amanhã.'
@@ -127,8 +161,7 @@ async function startServer() {
         ? targetDest.allowedDaysOfWeek
         : operatingDays;
 
-      const [sYear, sMonth, sDay] = scheduledDate.split('-').map(Number);
-      const scheduledDayOfWeek = new Date(sYear, (sMonth || 1) - 1, sDay || 1).getDay();
+        const scheduledDayOfWeek = dayOfWeekForDate(scheduledDate);
       const dayNames = ['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'];
 
       if (!allowedDays.includes(scheduledDayOfWeek)) {
@@ -216,14 +249,11 @@ async function startServer() {
       }
     }
 
-    const randomNum = Math.floor(1000 + Math.random() * 9000);
     const year = new Date().getFullYear();
-    const protocol = `AGD-${year}-${randomNum}`;
+    const protocol = `AGD-${year}-${randomUUID().replace(/-/g, '').slice(0, 10).toUpperCase()}`;
 
     // Initial status determination: WalkIn -> NO_PATIO; PreApproved -> CONFIRMADO; Default -> PENDENTE
-    const initialStatus: AppointmentStatus = body.status
-      ? body.status
-      : isWalkIn
+    const initialStatus: AppointmentStatus = isWalkIn
       ? 'NO_PATIO'
       : isPreApprovedContract
       ? 'CONFIRMADO'
@@ -242,11 +272,12 @@ async function startServer() {
     // Parse NF-e Access Keys (44 digits)
     let parsedNfeKeys: string[] = [];
     if (Array.isArray(body.nfeAccessKeys)) {
-      parsedNfeKeys = body.nfeAccessKeys
-        .map((k: any) => String(k || '').trim())
-        .filter((k: string) => k.length > 0);
+      parsedNfeKeys = normalizeNfeKeys(body.nfeAccessKeys);
     } else if (body.nfeAccessKey && typeof body.nfeAccessKey === 'string' && body.nfeAccessKey.trim()) {
-      parsedNfeKeys = [body.nfeAccessKey.trim()];
+      parsedNfeKeys = normalizeNfeKeys([body.nfeAccessKey]);
+    }
+    if ((Array.isArray(body.nfeAccessKeys) || body.nfeAccessKey) && parsedNfeKeys.length === 0) {
+      return res.status(400).json({ error: 'Cada chave de acesso NF-e deve conter exatamente 44 dígitos.' });
     }
 
     const rawPOStr = String(body.purchaseOrder || '').trim();
@@ -266,7 +297,7 @@ async function startServer() {
     };
 
     const newAppointment: Appointment = {
-      id: `appt-${Date.now()}`,
+      id: `appt-${randomUUID()}`,
       protocol,
       purchaseOrder: mainPurchaseOrder,
       purchaseOrders: parsedPurchaseOrders.length > 0 ? parsedPurchaseOrders : [mainPurchaseOrder],
@@ -309,8 +340,10 @@ async function startServer() {
       rescheduleHistory: []
     };
 
+    if (!StorageService.saveAppointment(newAppointment)) {
+      return res.status(503).json({ error: 'Não foi possível persistir o agendamento. Tente novamente.' });
+    }
     appointments.unshift(newAppointment);
-    StorageService.saveAppointment(newAppointment);
 
     // Auto-register/sync supplier in suppliers.json if CNPJ and Name are provided
     if (newAppointment.supplierCnpj && newAppointment.supplierName) {
@@ -336,7 +369,7 @@ async function startServer() {
   });
 
   // Admin Reset Data (Zeroing appointments for production go-live)
-  app.post('/api/admin/reset-data', (_req, res) => {
+  app.post('/api/admin/reset-data', requireSystemRole('ADMIN'), (_req, res) => {
     appointments = [];
     StorageService.saveAppointments(appointments);
     StorageService.cleanCnpjFolders();
@@ -346,7 +379,10 @@ async function startServer() {
   // Request Reschedule (Persistent)
   app.put('/api/appointments/:id/reschedule', (req, res) => {
     const { id } = req.params;
-    const { newDate, newSlot, reason, requestedBy, additionalInvoices, updatedVolumes, updatedWeightKg } = req.body;
+    const { newDate, newSlot, reason, requestedBy, additionalInvoices, updatedVolumes, updatedWeightKg } = req.body || {};
+    if (!isValidDateOnly(newDate)) {
+      return res.status(400).json({ error: 'Nova data inválida. Use o formato YYYY-MM-DD.' });
+    }
 
     const index = appointments.findIndex(a => a.id === id || a.protocol === id);
     if (index === -1) {
@@ -354,9 +390,14 @@ async function startServer() {
     }
 
     const current = appointments[index];
+    const session = getSession(req);
+    if (!session) return res.status(401).json({ error: 'Autenticação necessária.' });
+    if (session.type === 'supplier' && session.supplierCnpj.replace(/\D/g, '') !== current.supplierCnpj.replace(/\D/g, '')) {
+      return res.status(403).json({ error: 'Você não possui acesso a este agendamento.' });
+    }
 
     // Validação D+0 para reagendamento
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = businessToday();
     if (newDate <= todayStr) {
       return res.status(400).json({
         error: 'Não é permitido reagendar para o mesmo dia (D+0) ou datas anteriores. A data mínima permitida é a partir de amanhã.'
@@ -374,8 +415,7 @@ async function startServer() {
       ? targetDest.allowedDaysOfWeek
       : operatingDays;
 
-    const [rYear, rMonth, rDay] = newDate.split('-').map(Number);
-    const rescheduleDayOfWeek = new Date(rYear, (rMonth || 1) - 1, rDay || 1).getDay();
+    const rescheduleDayOfWeek = dayOfWeekForDate(newDate);
     const dayNames = ['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'];
 
     if (!allowedDays.includes(rescheduleDayOfWeek)) {
@@ -460,14 +500,16 @@ async function startServer() {
       rescheduleHistory: [historyEntry, ...(current.rescheduleHistory || [])]
     };
 
+    if (!StorageService.saveAppointment(updated)) {
+      return res.status(503).json({ error: 'Não foi possível persistir a alteração. Tente novamente.' });
+    }
     appointments[index] = updated;
-    StorageService.saveAppointment(updated);
 
     res.json(updated);
   });
 
   // Update Status & Discrepancy & Double Check (Persistent)
-  app.patch('/api/appointments/:id/status', (req, res) => {
+  app.patch('/api/appointments/:id/status', requireSystemRole('ADMIN', 'OPERATOR'), (req, res) => {
     const { id } = req.params;
     const { 
       status, 
@@ -505,6 +547,12 @@ async function startServer() {
     }
 
     const current = appointments[index];
+    if (status !== undefined && !isAppointmentStatus(status)) {
+      return res.status(400).json({ error: 'Status de agendamento inválido.' });
+    }
+    if (status && status !== current.status && (current.status === 'ENTREGUE_SEM_DIVERGENCIA' || current.status === 'ENTREGUE_COM_DIVERGENCIA')) {
+      return res.status(409).json({ error: 'Agendamentos concluídos não podem voltar para um status anterior.' });
+    }
     const nowIso = new Date().toISOString();
 
     const updatedTimestamps = {
@@ -515,7 +563,7 @@ async function startServer() {
     // Formatação de chaves e notas se fornecidas
     let parsedNfeKeys = current.nfeAccessKeys || [];
     if (Array.isArray(nfeAccessKeys)) {
-      parsedNfeKeys = nfeAccessKeys.map(k => String(k).replace(/\D/g, '')).filter(k => k.length > 0);
+      parsedNfeKeys = normalizeNfeKeys(nfeAccessKeys);
     } else if (nfeAccessKey) {
       const clean = String(nfeAccessKey).replace(/\D/g, '');
       if (clean) parsedNfeKeys = [clean];
@@ -542,8 +590,10 @@ async function startServer() {
       ...(discrepancy ? { discrepancy } : {})
     };
 
+    if (!StorageService.saveAppointment(updated)) {
+      return res.status(503).json({ error: 'Não foi possível persistir a alteração. Tente novamente.' });
+    }
     appointments[index] = updated;
-    StorageService.saveAppointment(updated);
 
     res.json(updated);
   });
@@ -554,7 +604,7 @@ async function startServer() {
   });
 
   // Save Slot Supplier Limits
-  app.put('/api/slot-limits', (req, res) => {
+  app.put('/api/slot-limits', requireSystemRole('ADMIN'), (req, res) => {
     if (req.body && typeof req.body === 'object') {
       slotSupplierLimits = req.body;
       StorageService.saveSlotSupplierLimits(slotSupplierLimits);
@@ -568,7 +618,7 @@ async function startServer() {
   });
 
   // Save / Update Destinations List (Persistent)
-  app.put('/api/destinations', (req, res) => {
+  app.put('/api/destinations', requireSystemRole('ADMIN'), (req, res) => {
     const updated = req.body;
     if (Array.isArray(updated)) {
       destinations = updated;
@@ -583,7 +633,7 @@ async function startServer() {
   });
 
   // Save / Update Docks List (Persistent)
-  app.put('/api/docks', (req, res) => {
+  app.put('/api/docks', requireSystemRole('ADMIN'), (req, res) => {
     const updated = req.body;
     if (Array.isArray(updated)) {
       docks = updated;
@@ -598,7 +648,7 @@ async function startServer() {
   });
 
   // Save / Update Time Slots List (Persistent)
-  app.put('/api/timeslots', (req, res) => {
+  app.put('/api/timeslots', requireSystemRole('ADMIN'), (req, res) => {
     const updated = req.body;
     if (Array.isArray(updated)) {
       timeSlots = updated;
@@ -613,7 +663,7 @@ async function startServer() {
   });
 
   // Save / Update Operating Days (Persistent)
-  app.put('/api/operating-days', (req, res) => {
+  app.put('/api/operating-days', requireSystemRole('ADMIN'), (req, res) => {
     const updated = req.body;
     if (Array.isArray(updated)) {
       operatingDays = updated;
@@ -623,7 +673,7 @@ async function startServer() {
   });
 
   // Clear all appointments (start clean)
-  app.delete('/api/appointments', (_req, res) => {
+  app.delete('/api/appointments', requireSystemRole('ADMIN'), (_req, res) => {
     appointments = [];
     StorageService.saveAppointments(appointments);
     StorageService.cleanCnpjFolders();
@@ -631,7 +681,7 @@ async function startServer() {
   });
 
   // Reset appointments to clean state
-  app.post('/api/appointments/reset', (_req, res) => {
+  app.post('/api/appointments/reset', requireSystemRole('ADMIN'), (_req, res) => {
     appointments = [];
     StorageService.saveAppointments(appointments);
     StorageService.cleanCnpjFolders();
@@ -639,7 +689,7 @@ async function startServer() {
   });
 
   // Factory reset (Appointments + Suppliers + Reset Docks to defaults)
-  app.post('/api/storage/factory-reset', (_req, res) => {
+  app.post('/api/storage/factory-reset', requireSystemRole('ADMIN'), (_req, res) => {
     appointments = [];
     suppliers = [];
     docks = StorageService.loadDocks();
@@ -657,7 +707,7 @@ async function startServer() {
     res.json(brandSettings);
   });
 
-  app.put('/api/settings/branding', (req, res) => {
+  app.put('/api/settings/branding', requireSystemRole('ADMIN'), (req, res) => {
     const newSettings = req.body as BrandSettings;
     if (newSettings && typeof newSettings === 'object') {
       brandSettings = {
@@ -684,7 +734,7 @@ async function startServer() {
   });
 
   // Reset all system users (Clean slate for setup)
-  app.post('/api/auth/reset-users', (_req, res) => {
+  app.post('/api/auth/reset-users', requireSystemRole('ADMIN'), (_req, res) => {
     users = [];
     StorageService.saveUsers(users);
     res.json({ message: 'Todos os usuários foram removidos com sucesso. O sistema retornou ao estado de configuração inicial.' });
@@ -703,14 +753,14 @@ async function startServer() {
     }
 
     const newAdmin: SystemUser = {
-      id: `USR-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      id: `USR-${randomUUID()}`,
       name: String(name).trim(),
       username: String(username).trim().toLowerCase(),
       email: email ? String(email).trim().toLowerCase() : undefined,
       department: department ? String(department).trim() : 'Coordenação de Logística',
       role: 'ADMIN',
-      password: password ? String(password).trim() : undefined,
-      pin: pin ? String(pin).trim() : undefined,
+      password: password ? hashSecret(String(password).trim()) : undefined,
+      pin: pin ? hashSecret(String(pin).trim()) : undefined,
       active: true,
       createdAt: new Date().toISOString(),
       lastLogin: new Date().toISOString()
@@ -765,15 +815,18 @@ async function startServer() {
     }
 
     // Verify secret
-    const matchesPassword = user.password && user.password === inputSecret;
-    const matchesPin = user.pin && user.pin === inputSecret;
+    const matchesPassword = verifySecret(user.password, inputSecret);
+    const matchesPin = verifySecret(user.pin, inputSecret);
 
     if (!matchesPassword && !matchesPin) {
       return res.status(401).json({ error: 'Senha de acesso ou PIN incorreto.' });
     }
 
+    if (matchesPassword && needsSecretMigration(user.password)) user.password = hashSecret(inputSecret);
+    if (matchesPin && needsSecretMigration(user.pin)) user.pin = hashSecret(inputSecret);
     user.lastLogin = new Date().toISOString();
     StorageService.saveUsers(users);
+    setSessionCookie(res, { type: 'system', userId: user.id, username: user.username, role: user.role });
 
     const { password: _, pin: __, ...sanitized } = user;
     res.json({
@@ -782,14 +835,19 @@ async function startServer() {
     });
   });
 
+  app.post('/api/auth/logout', (_req, res) => {
+    clearSessionCookie(res);
+    res.json({ success: true });
+  });
+
   // List all users (for Admin dashboard)
-  app.get('/api/users', (_req, res) => {
+  app.get('/api/users', requireSystemRole('ADMIN'), (_req, res) => {
     const sanitized = users.map(({ password: _, pin: __, ...u }) => u);
     res.json(sanitized);
   });
 
   // Create new user / operator (Persistent)
-  app.post('/api/users', (req, res) => {
+  app.post('/api/users', requireSystemRole('ADMIN'), (req, res) => {
     const { name, username, email, password, pin, role, department } = req.body || {};
 
     if (!name || !username || (!password && !pin)) {
@@ -803,14 +861,14 @@ async function startServer() {
     }
 
     const newUser: SystemUser = {
-      id: `USR-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      id: `USR-${randomUUID()}`,
       name: String(name).trim(),
       username: cleanUsername,
       email: email ? String(email).trim().toLowerCase() : undefined,
       department: department ? String(department).trim() : 'Operação de Pátio / Recebimento',
       role: (role as SystemUserRole) || 'OPERATOR',
-      password: password ? String(password).trim() : undefined,
-      pin: pin ? String(pin).trim() : undefined,
+      password: password ? hashSecret(String(password).trim()) : undefined,
+      pin: pin ? hashSecret(String(pin).trim()) : undefined,
       active: true,
       createdAt: new Date().toISOString()
     };
@@ -823,7 +881,7 @@ async function startServer() {
   });
 
   // Update user (Persistent)
-  app.put('/api/users/:id', (req, res) => {
+  app.put('/api/users/:id', requireSystemRole('ADMIN'), (req, res) => {
     const userIndex = users.findIndex(u => u.id === req.params.id);
     if (userIndex === -1) {
       return res.status(404).json({ error: 'Usuário não encontrado.' });
@@ -852,7 +910,7 @@ async function startServer() {
   });
 
   // Delete user (Persistent)
-  app.delete('/api/users/:id', (req, res) => {
+  app.delete('/api/users/:id', requireSystemRole('ADMIN'), (req, res) => {
     const userIndex = users.findIndex(u => u.id === req.params.id);
     if (userIndex === -1) {
       return res.status(404).json({ error: 'Usuário não encontrado.' });
@@ -944,6 +1002,7 @@ async function startServer() {
     }
 
     StorageService.saveSuppliers(suppliers);
+    setSessionCookie(res, { type: 'supplier', supplierCnpj: supplierRecord.cnpj, supplierName: supplierRecord.name });
 
     const apptCount = appointments.filter(a => a.supplierCnpj.replace(/\D/g, '') === cleanDigits).length;
 
@@ -958,7 +1017,7 @@ async function startServer() {
   });
 
   // List all registered suppliers (for Admin or selection)
-  app.get('/api/suppliers', (_req, res) => {
+  app.get('/api/suppliers', requireSystemRole('ADMIN'), (_req, res) => {
     const enriched = suppliers.map(s => {
       const cleanDigits = s.cnpj.replace(/\D/g, '');
       const count = appointments.filter(a => a.supplierCnpj.replace(/\D/g, '') === cleanDigits).length;
@@ -971,14 +1030,14 @@ async function startServer() {
   });
 
   // Delete all suppliers (wipe suppliers list)
-  app.delete('/api/suppliers', (_req, res) => {
+  app.delete('/api/suppliers', requireSystemRole('ADMIN'), (_req, res) => {
     suppliers = [];
     StorageService.saveSuppliers(suppliers);
     res.json({ message: 'Todos os fornecedores foram removidos do servidor.', suppliersCount: 0 });
   });
 
   // Delete a specific supplier by CNPJ
-  app.delete('/api/suppliers/:cnpj', (req, res) => {
+  app.delete('/api/suppliers/:cnpj', requireSystemRole('ADMIN'), (req, res) => {
     const cleanDigits = (req.params.cnpj || '').replace(/\D/g, '');
     const beforeCount = suppliers.length;
     suppliers = suppliers.filter(s => s.cnpj.replace(/\D/g, '') !== cleanDigits);
