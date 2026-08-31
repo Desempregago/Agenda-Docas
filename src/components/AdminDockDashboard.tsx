@@ -24,6 +24,10 @@ import {
   Sliders,
   Package,
   MapPin,
+  GripVertical,
+  Move,
+  Sparkles,
+  X,
 } from 'lucide-react';
 import { Appointment, AppointmentStatus, Dock, DiscrepancyReport, DestinationBranch, SystemUser } from '../types';
 import { StatusBadge } from './StatusBadge';
@@ -100,6 +104,23 @@ export const AdminDockDashboard: React.FC<AdminDockDashboardProps> = ({
   const [selectedApptForDoubleCheck, setSelectedApptForDoubleCheck] = useState<Appointment | null>(null);
   const [isWalkInModalOpen, setIsWalkInModalOpen] = useState(false);
 
+  // Drag & Drop State
+  const [draggedApptId, setDraggedApptId] = useState<string | null>(null);
+  const [dragOverTargetId, setDragOverTargetId] = useState<string | null>(null);
+  const [feedbackToast, setFeedbackToast] = useState<{ text: string; type: 'success' | 'info' | 'warning' } | null>(null);
+  const toastTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Mobile / Touch Quick-Move Modal State
+  const [quickMoveAppt, setQuickMoveAppt] = useState<Appointment | null>(null);
+
+  const showToast = (text: string, type: 'success' | 'info' | 'warning' = 'success') => {
+    if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+    setFeedbackToast({ text, type });
+    toastTimeoutRef.current = setTimeout(() => {
+      setFeedbackToast(null);
+    }, 4000);
+  };
+
   // Helper to format Portuguese date
   const formatFullDate = (dateStr: string) => {
     try {
@@ -170,18 +191,168 @@ export const AdminDockDashboard: React.FC<AdminDockDashboardProps> = ({
       return false;
     }
 
+    const cleanAppt = appt.dockId.trim().toLowerCase();
+    const cleanDockId = (dock.id || '').trim().toLowerCase();
+    const cleanDockName = (dock.name || '').trim().toLowerCase();
+
     // 1. Direct ID match
-    if (appt.dockId === dock.id) return true;
+    if (cleanAppt === cleanDockId) return true;
 
     // 2. Direct Name match
-    if (dock.name && appt.dockId.toLowerCase() === dock.name.toLowerCase()) return true;
+    if (cleanDockName && cleanAppt === cleanDockName) return true;
 
-    // 3. Numeric ID / code match (e.g. DOCA-01 vs DOCA-1 vs Doca 1 vs 1)
-    const dockNum = dock.id.replace(/\D/g, '');
-    const apptDockNum = appt.dockId.replace(/\D/g, '');
-    if (dockNum && apptDockNum && dockNum === apptDockNum) return true;
+    // 3. Alphanumeric match (e.g. "DOCA-01" vs "DOCA 01" vs "DOCA01")
+    // Mantém letras E números intactos para não misturar docas paralelas como D1 vs D1A ou D01 vs D01A
+    const norm = (str: string) => str.replace(/[^a-z0-9]/gi, '').toLowerCase();
+    const normAppt = norm(appt.dockId);
+    const normDockId = norm(dock.id || '');
+    const normDockName = norm(dock.name || '');
+
+    if (normAppt) {
+      if (normDockId && normAppt === normDockId) return true;
+      if (normDockName && normAppt === normDockName) return true;
+    }
 
     return false;
+  };
+
+  // Drag and Drop event handlers
+  const handleDragStart = (e: React.DragEvent, apptId: string) => {
+    try {
+      e.dataTransfer.setData('text/plain', apptId);
+      e.dataTransfer.setData('text', apptId);
+    } catch {
+      // fallback
+    }
+    e.dataTransfer.effectAllowed = 'move';
+    setDraggedApptId(apptId);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedApptId(null);
+    setDragOverTargetId(null);
+  };
+
+  const handleDragOver = (e: React.DragEvent, targetId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'move';
+    if (dragOverTargetId !== targetId) {
+      setDragOverTargetId(targetId);
+    }
+  };
+
+  const handleDragLeave = (e: React.DragEvent, targetId: string) => {
+    e.preventDefault();
+    // Prevent clearing when moving over child elements inside the drop zone
+    if (e.currentTarget && e.relatedTarget && e.currentTarget.contains(e.relatedTarget as Node)) {
+      return;
+    }
+    if (dragOverTargetId === targetId) {
+      setDragOverTargetId(null);
+    }
+  };
+
+  const handleDropOnDock = async (e: React.DragEvent, targetDock: Dock) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOverTargetId(null);
+    let apptId = '';
+    try {
+      apptId = e.dataTransfer.getData('text/plain') || e.dataTransfer.getData('text');
+    } catch {
+      // ignore
+    }
+    if (!apptId) {
+      apptId = draggedApptId || '';
+    }
+    setDraggedApptId(null);
+
+    if (!apptId) return;
+
+    if (!targetDock.isOperational) {
+      showToast(`A ${targetDock.name} está em manutenção ou inoperante.`, 'warning');
+      return;
+    }
+
+    const appt = appointments.find(a => a.id === apptId || a.protocol === apptId);
+    if (!appt) return;
+
+    // If it's already in this dock, do nothing
+    if (appt.dockId === targetDock.id) {
+      showToast(`O agendamento ${appt.protocol} já está posicionado na ${targetDock.name}.`, 'info');
+      return;
+    }
+
+    // Se o agendamento ainda NÃO passou pela conferência de Prevenção / Double Check
+    // (ou está com status NO_PATIO, PENDENTE, CONFIRMADO, ou !preventionDoubleChecked),
+    // abre o modal de Double Check com a doca de destino já pré-selecionada!
+    const needsDoubleCheck = !appt.preventionDoubleChecked || 
+      appt.status === 'NO_PATIO' || 
+      appt.status === 'PENDENTE' || 
+      appt.status === 'CONFIRMADO';
+
+    if (needsDoubleCheck) {
+      setSelectedApptForDoubleCheck({
+        ...appt,
+        dockId: targetDock.id
+      });
+      return;
+    }
+
+    // Se já passou pelo double check (ex: já estava em AGUARDANDO_DESCARGA ou EM_DESCARGA), apenas move a doca
+    await onUpdateStatus(appt.id, appt.status, targetDock.id);
+    showToast(`Caminhão (${appt.protocol} • ${appt.supplierName}) realocado na ${targetDock.name}!`, 'success');
+  };
+
+  const handleDropOnPatio = async (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOverTargetId(null);
+    let apptId = '';
+    try {
+      apptId = e.dataTransfer.getData('text/plain') || e.dataTransfer.getData('text');
+    } catch {
+      // ignore
+    }
+    if (!apptId) {
+      apptId = draggedApptId || '';
+    }
+    setDraggedApptId(null);
+
+    if (!apptId) return;
+    const appt = appointments.find(a => a.id === apptId || a.protocol === apptId);
+    if (!appt) return;
+
+    if (appt.status === 'NO_PATIO') {
+      showToast(`O agendamento ${appt.protocol} já está na fila do pátio.`, 'info');
+      return;
+    }
+
+    await onUpdateStatus(appt.id, 'NO_PATIO', appt.dockId);
+    showToast(`Veículo ${appt.protocol} retornado para a fila do Pátio / Portaria.`, 'info');
+  };
+
+  const handleQuickMoveConfirm = async (targetDockId: string | null) => {
+    if (!quickMoveAppt) return;
+    const targetDock = activeDocksToDisplay.find(d => d.id === targetDockId);
+    
+    if (targetDockId === 'PATIO') {
+      await onUpdateStatus(quickMoveAppt.id, 'NO_PATIO', quickMoveAppt.dockId);
+      showToast(`Veículo ${quickMoveAppt.protocol} movido para a Fila do Pátio.`, 'info');
+    } else if (targetDock) {
+      if (!targetDock.isOperational) {
+        showToast(`A ${targetDock.name} está inoperante.`, 'warning');
+        return;
+      }
+      const newStatus = quickMoveAppt.status === 'NO_PATIO' ? 'AGUARDANDO_DESCARGA' : quickMoveAppt.status;
+      await onUpdateStatus(quickMoveAppt.id, newStatus, targetDock.id);
+      showToast(`Caminhão (${quickMoveAppt.protocol}) alocado na ${targetDock.name}!`, 'success');
+    } else if (targetDockId === '') {
+      await onUpdateStatus(quickMoveAppt.id, quickMoveAppt.status, '');
+      showToast(`Caminhão ${quickMoveAppt.protocol} desvinculado da doca.`, 'info');
+    }
+    setQuickMoveAppt(null);
   };
 
   // Quick stats
@@ -375,19 +546,65 @@ export const AdminDockDashboard: React.FC<AdminDockDashboardProps> = ({
         </div>
       </div>
 
-      {/* Special Security Gate & Loss Prevention Quick Action Bar */}
-      <div className="bg-gradient-to-r from-purple-900 via-indigo-900 to-slate-900 text-white rounded-2xl p-3.5 sm:p-5 shadow-md border border-purple-800 space-y-3">
+      {/* Toast Notification for Drag and Drop / Quick Move Feedback */}
+      {feedbackToast && (
+        <div className="fixed bottom-5 right-5 z-50 animate-bounce">
+          <div
+            className={`flex items-center gap-2.5 px-4 py-3 rounded-2xl shadow-xl border text-xs font-bold ${
+              feedbackToast.type === 'success'
+                ? 'bg-emerald-900/95 text-emerald-100 border-emerald-500 shadow-emerald-950/40'
+                : feedbackToast.type === 'warning'
+                ? 'bg-amber-900/95 text-amber-100 border-amber-500 shadow-amber-950/40'
+                : 'bg-slate-900/95 text-slate-100 border-slate-700 shadow-slate-950/40'
+            }`}
+          >
+            {feedbackToast.type === 'success' ? (
+              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+            ) : feedbackToast.type === 'warning' ? (
+              <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+            ) : (
+              <Sparkles className="w-4 h-4 text-blue-400 shrink-0" />
+            )}
+            <span>{feedbackToast.text}</span>
+            <button
+              onClick={() => setFeedbackToast(null)}
+              className="p-1 hover:opacity-75 transition-opacity text-slate-300 ml-1"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Special Security Gate & Loss Prevention Quick Action Bar / Patio Dropzone */}
+      <div
+        onDragOver={e => handleDragOver(e, 'PATIO')}
+        onDragLeave={e => handleDragLeave(e, 'PATIO')}
+        onDrop={handleDropOnPatio}
+        className={`bg-gradient-to-r from-purple-900 via-indigo-900 to-slate-900 text-white rounded-2xl p-3.5 sm:p-5 shadow-md border transition-all space-y-3 ${
+          dragOverTargetId === 'PATIO'
+            ? 'border-purple-300 ring-4 ring-purple-500/40 bg-purple-950 scale-[1.005]'
+            : 'border-purple-800'
+        }`}
+      >
         <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-3">
           <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
             <div className="p-2 sm:p-2.5 bg-purple-500/20 border border-purple-400/30 rounded-xl text-purple-300 shrink-0">
               <ShieldCheck className="w-5 h-5 sm:w-6 sm:h-6" />
             </div>
             <div className="min-w-0">
-              <h3 className="font-bold text-sm sm:text-base text-white">
-                Prevenção de Perdas & Controle de Portaria
-              </h3>
+              <div className="flex items-center gap-2">
+                <h3 className="font-bold text-sm sm:text-base text-white">
+                  Prevenção de Perdas & Controle de Portaria
+                </h3>
+                {dragOverTargetId === 'PATIO' && (
+                  <span className="text-[10px] bg-purple-400 text-purple-950 font-extrabold px-2 py-0.5 rounded-full animate-pulse">
+                    Solte para Retornar ao Pátio
+                  </span>
+                )}
+              </div>
               <p className="text-xs text-purple-200 line-clamp-1">
-                Liberação direta de acesso dos veículos na portaria para as docas
+                Liberação direta de acesso dos veículos na portaria para as docas (Arraste os cards para as docas abaixo)
               </p>
             </div>
           </div>
@@ -413,39 +630,63 @@ export const AdminDockDashboard: React.FC<AdminDockDashboardProps> = ({
               .map((appt, aIdx) => (
                 <div
                   key={`gate-patio-${appt.id}-${aIdx}`}
-                  className="bg-slate-800/90 border border-purple-500/40 rounded-xl p-3 sm:p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-inner"
+                  draggable
+                  onDragStart={e => handleDragStart(e, appt.id)}
+                  onDragEnd={handleDragEnd}
+                  className={`bg-slate-800/90 border border-purple-500/40 rounded-xl p-3 sm:p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-inner transition-all ${
+                    draggedApptId === appt.id
+                      ? 'opacity-40 scale-[0.98] ring-2 ring-purple-400'
+                      : 'hover:border-purple-400 hover:bg-slate-800 cursor-grab active:cursor-grabbing'
+                  }`}
+                  title="Clique e arraste para qualquer doca, ou use os botões abaixo"
                 >
-                  <div className="space-y-1 min-w-0 flex-1">
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className="font-mono font-bold text-amber-300 text-xs sm:text-sm">{appt.protocol}</span>
-                      {appt.purchaseOrder && (
-                        <span className="text-[10px] sm:text-[11px] font-semibold bg-indigo-950 text-indigo-300 border border-indigo-700 px-2 py-0.5 rounded-full">
-                          PO: {appt.purchaseOrder}
-                        </span>
-                      )}
-                      <span className="text-[10px] sm:text-[11px] font-semibold bg-purple-950 text-purple-300 border border-purple-700 px-2 py-0.5 rounded-full">
-                        NF: {appt.invoiceNumber}
-                      </span>
-                      {appt.invoiceDueDate && (
-                        <span className="text-[9px] sm:text-[10px] font-bold bg-amber-900/90 text-amber-200 border border-amber-600 px-2 py-0.5 rounded-full">
-                          📅 Boleto: {new Date(appt.invoiceDueDate + 'T00:00:00').toLocaleDateString('pt-BR')}
-                        </span>
-                      )}
+                  <div className="flex items-start gap-2 min-w-0 flex-1">
+                    <div className="mt-1 text-purple-400/80 hidden sm:block shrink-0" title="Arrastar">
+                      <GripVertical className="w-4 h-4" />
                     </div>
-                    <p className="text-xs font-bold text-white truncate">{appt.supplierName}</p>
-                    <p className="text-[11px] text-slate-300 font-mono truncate">
-                      Placa: <strong className="text-white">{appt.vehiclePlate || 'N/I'}</strong> ({appt.vehicleType})
-                    </p>
+                    <div className="space-y-1 min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="font-mono font-bold text-amber-300 text-xs sm:text-sm">{appt.protocol}</span>
+                        {appt.purchaseOrder && (
+                          <span className="text-[10px] sm:text-[11px] font-semibold bg-indigo-950 text-indigo-300 border border-indigo-700 px-2 py-0.5 rounded-full">
+                            PO: {appt.purchaseOrder}
+                          </span>
+                        )}
+                        <span className="text-[10px] sm:text-[11px] font-semibold bg-purple-950 text-purple-300 border border-purple-700 px-2 py-0.5 rounded-full">
+                          NF: {appt.invoiceNumber}
+                        </span>
+                        {appt.invoiceDueDate && (
+                          <span className="text-[9px] sm:text-[10px] font-bold bg-amber-900/90 text-amber-200 border border-amber-600 px-2 py-0.5 rounded-full">
+                            📅 Boleto: {new Date(appt.invoiceDueDate + 'T00:00:00').toLocaleDateString('pt-BR')}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs font-bold text-white truncate">{appt.supplierName}</p>
+                      <p className="text-[11px] text-slate-300 font-mono truncate">
+                        Placa: <strong className="text-white">{appt.vehiclePlate || 'N/I'}</strong> ({appt.vehicleType})
+                      </p>
+                    </div>
                   </div>
 
-                  <button
-                    onClick={() => setSelectedApptForDoubleCheck(appt)}
-                    className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs px-3.5 py-2 rounded-xl shadow-md transition-all active:scale-95 shrink-0 cursor-pointer"
-                    title="Prevenção de Perdas: Realizar Double Check de chaves de acesso, valor e boleto antes de liberar"
-                  >
-                    <ArrowRightCircle className="w-4 h-4 shrink-0" />
-                    <span>Liberar para Descarga</span>
-                  </button>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      onClick={() => setQuickMoveAppt(appt)}
+                      className="inline-flex items-center justify-center gap-1 bg-slate-700/80 hover:bg-slate-700 text-purple-200 border border-purple-500/40 text-xs font-semibold px-2.5 py-2 rounded-xl transition-all cursor-pointer shadow-2xs"
+                      title="Mover para doca rapidamente"
+                    >
+                      <Move className="w-3.5 h-3.5" />
+                      <span>Mover</span>
+                    </button>
+
+                    <button
+                      onClick={() => setSelectedApptForDoubleCheck(appt)}
+                      className="inline-flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs px-3.5 py-2 rounded-xl shadow-md transition-all active:scale-95 shrink-0 cursor-pointer"
+                      title="Prevenção de Perdas: Realizar Double Check de chaves de acesso, valor e boleto antes de liberar"
+                    >
+                      <ArrowRightCircle className="w-4 h-4 shrink-0" />
+                      <span>Liberar</span>
+                    </button>
+                  </div>
                 </div>
               ))}
           </div>
@@ -456,12 +697,21 @@ export const AdminDockDashboard: React.FC<AdminDockDashboardProps> = ({
         )}
       </div>
 
-      {/* Docks Map Grid */}
+      {/* Docks Map Grid & Agility Helper */}
       <div className="space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-          <h2 className="text-sm font-bold text-slate-800 flex items-center gap-2">
-            <Building2 className="w-4 h-4 text-blue-600" /> Visão Geral de Docas & Ocupação Diária
-          </h2>
+          <div className="space-y-0.5">
+            <h2 className="text-sm font-bold text-slate-800 flex items-center gap-2">
+              <Building2 className="w-4 h-4 text-blue-600" /> Visão Geral de Docas & Ocupação Diária
+            </h2>
+            <p className="text-[11px] text-slate-500 flex items-center gap-1">
+              <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+              <span>
+                <strong>Drag & Drop Ativo:</strong> Arraste e solte os cards entre docas ou a partir da fila do pátio para remanejar cargas instantaneamente.
+              </span>
+            </p>
+          </div>
+
           {onOpenTimeSlotConfig && (
             <button
               type="button"
@@ -489,14 +739,31 @@ export const AdminDockDashboard: React.FC<AdminDockDashboardProps> = ({
 
             const occupancyPercent = Math.min(100, Math.round((occupiedTotal / dailyLimit) * 100));
             const isFull = occupiedTotal >= dailyLimit;
+            const isDropTarget = dragOverTargetId === dock.id;
 
             return (
               <div
                 key={`dock-card-${dock.id || ''}-${dIdx}`}
-                className={`bg-white rounded-2xl border p-4 shadow-2xs space-y-3 transition-all ${
-                  activeAtDock ? 'border-emerald-300 ring-2 ring-emerald-500/20 bg-emerald-50/20' : 'border-slate-200'
+                onDragOver={e => handleDragOver(e, dock.id)}
+                onDragLeave={e => handleDragLeave(e, dock.id)}
+                onDrop={e => handleDropOnDock(e, dock)}
+                className={`bg-white rounded-2xl border p-4 shadow-2xs space-y-3 transition-all relative ${
+                  isDropTarget
+                    ? 'border-blue-500 ring-4 ring-blue-500/30 bg-blue-50/40 scale-[1.015]'
+                    : activeAtDock
+                    ? 'border-emerald-300 ring-2 ring-emerald-500/20 bg-emerald-50/20'
+                    : 'border-slate-200'
                 }`}
               >
+                {/* Drop Highlight Overlay Badge */}
+                {isDropTarget && (
+                  <div className="absolute inset-0 bg-blue-600/10 rounded-2xl border-2 border-dashed border-blue-500 pointer-events-none flex items-center justify-center z-10">
+                    <span className="bg-blue-600 text-white text-xs font-bold px-3 py-1.5 rounded-xl shadow-lg flex items-center gap-1.5 animate-pulse">
+                      <Move className="w-3.5 h-3.5" /> Soltar na {dock.name}
+                    </span>
+                  </div>
+                )}
+
                 {/* Dock Header */}
                 <div className="flex items-center justify-between border-b border-slate-200 pb-2.5 notranslate" translate="no">
                   <div className="min-w-0 pr-2">
@@ -550,17 +817,42 @@ export const AdminDockDashboard: React.FC<AdminDockDashboardProps> = ({
                   {dockAppts.length > 0 ? (
                     dockAppts.map((appt, aIdx) => {
                       const apptVol = getApptVolume(appt);
+                      const isBeingDragged = draggedApptId === appt.id;
+
                       return (
                         <div
                           key={`dock-appt-${appt.id}-${aIdx}`}
-                          className="bg-slate-50 border border-slate-200 hover:border-blue-300 rounded-xl p-3 space-y-2 text-xs transition-colors shadow-2xs"
+                          draggable
+                          onDragStart={e => handleDragStart(e, appt.id)}
+                          onDragEnd={handleDragEnd}
+                          className={`bg-slate-50 border rounded-xl p-3 space-y-2 text-xs transition-all shadow-2xs ${
+                            isBeingDragged
+                              ? 'opacity-40 scale-[0.98] ring-2 ring-blue-400 border-blue-400'
+                              : 'border-slate-200 hover:border-blue-400 hover:bg-blue-50/20 cursor-grab active:cursor-grabbing'
+                          }`}
+                          title="Arraste para mover para outra doca ou toque em Mover"
                         >
                           {/* Protocol and Slot Header */}
                           <div className="flex items-center justify-between gap-1.5">
-                            <span className="font-mono font-bold text-blue-700 text-xs truncate">{appt.protocol}</span>
-                            <span className="text-[10px] font-semibold text-slate-600 bg-white px-2 py-0.5 rounded-md border border-slate-200 shrink-0">
-                              {appt.timeSlot}
-                            </span>
+                            <div className="flex items-center gap-1 min-w-0">
+                              <GripVertical className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                              <span className="font-mono font-bold text-blue-700 text-xs truncate">{appt.protocol}</span>
+                            </div>
+                            <div className="flex items-center gap-1 shrink-0">
+                              <button
+                                onClick={e => {
+                                  e.stopPropagation();
+                                  setQuickMoveAppt(appt);
+                                }}
+                                className="text-[10px] text-slate-500 hover:text-blue-700 bg-white hover:bg-blue-50 border border-slate-200 px-1.5 py-0.5 rounded cursor-pointer transition-colors"
+                                title="Mover para outra doca"
+                              >
+                                ↔ Doca
+                              </button>
+                              <span className="text-[10px] font-semibold text-slate-600 bg-white px-2 py-0.5 rounded-md border border-slate-200">
+                                {appt.timeSlot}
+                              </span>
+                            </div>
                           </div>
 
                           {/* Supplier & Invoice */}
@@ -582,7 +874,7 @@ export const AdminDockDashboard: React.FC<AdminDockDashboardProps> = ({
                           </div>
 
                           {/* Status Badge */}
-                          <div className="pt-0.5">
+                          <div className="pt-0.5 flex items-center justify-between">
                             <StatusBadge
                               status={appt.status}
                               size="sm"
@@ -595,7 +887,7 @@ export const AdminDockDashboard: React.FC<AdminDockDashboardProps> = ({
                     })
                   ) : (
                     <div className="h-24 border border-dashed border-slate-200 rounded-xl flex items-center justify-center text-xs text-slate-400 italic text-center p-3">
-                      Sem veículos alocados nesta doca para a data
+                      Arraste um caminhão para esta doca
                     </div>
                   )}
                 </div>
@@ -634,48 +926,63 @@ export const AdminDockDashboard: React.FC<AdminDockDashboardProps> = ({
             </thead>
             <tbody className="divide-y divide-slate-200">
               {dayAppointments.length > 0 ? (
-                dayAppointments.map((appt, aIdx) => (
-                  <tr key={`appt-row-${appt.id}-${aIdx}`} className="hover:bg-slate-50/80 transition-colors">
-                    
-                    {/* Protocol, PO & NF */}
-                    <td className="py-3.5 px-4">
-                      <div className="font-mono font-bold text-blue-700 text-sm">{appt.protocol}</div>
-                      {appt.purchaseOrder && (
-                        <div className="text-slate-800 font-bold text-xs flex items-center gap-1.5 flex-wrap mt-0.5">
-                          <span>PO: {appt.purchaseOrder}</span>
-                          {((appt.purchaseOrders && appt.purchaseOrders.length > 1) || (appt.purchaseOrder && appt.purchaseOrder.split(/[,;\n\/]+/).filter(Boolean).length > 1)) && (
-                            <span className="text-[10px] bg-indigo-100 text-indigo-900 border border-indigo-300 font-bold px-1.5 py-0.5 rounded-md">
-                              {appt.purchaseOrders?.length || appt.purchaseOrder.split(/[,;\n\/]+/).filter(Boolean).length} pedidos
+                dayAppointments.map((appt, aIdx) => {
+                  const isBeingDragged = draggedApptId === appt.id;
+                  return (
+                    <tr
+                      key={`appt-row-${appt.id}-${aIdx}`}
+                      draggable
+                      onDragStart={e => handleDragStart(e, appt.id)}
+                      onDragEnd={handleDragEnd}
+                      className={`transition-colors cursor-grab active:cursor-grabbing ${
+                        isBeingDragged
+                          ? 'opacity-40 bg-blue-50/60 ring-2 ring-blue-400'
+                          : 'hover:bg-slate-50/80'
+                      }`}
+                      title="Arraste esta linha e solte sobre qualquer doca no painel acima"
+                    >
+                      {/* Protocol, PO & NF */}
+                      <td className="py-3.5 px-4">
+                        <div className="flex items-center gap-1.5">
+                          <GripVertical className="w-3.5 h-3.5 text-slate-400 shrink-0 hover:text-blue-600" />
+                          <div className="font-mono font-bold text-blue-700 text-sm">{appt.protocol}</div>
+                        </div>
+                        {appt.purchaseOrder && (
+                          <div className="text-slate-800 font-bold text-xs flex items-center gap-1.5 flex-wrap mt-0.5 ml-5">
+                            <span>PO: {appt.purchaseOrder}</span>
+                            {((appt.purchaseOrders && appt.purchaseOrders.length > 1) || (appt.purchaseOrder && appt.purchaseOrder.split(/[,;\n\/]+/).filter(Boolean).length > 1)) && (
+                              <span className="text-[10px] bg-indigo-100 text-indigo-900 border border-indigo-300 font-bold px-1.5 py-0.5 rounded-md">
+                                {appt.purchaseOrders?.length || appt.purchaseOrder.split(/[,;\n\/]+/).filter(Boolean).length} pedidos
+                              </span>
+                            )}
+                          </div>
+                        )}
+                        <div className="text-slate-600 font-medium text-xs flex items-center gap-1.5 flex-wrap mt-0.5 ml-5">
+                          <span>NFs: {appt.invoiceNumber}</span>
+                          {appt.invoiceNumbers && appt.invoiceNumbers.length > 1 && (
+                            <span className="text-[10px] bg-blue-100 text-blue-900 border border-blue-300 font-bold px-1.5 py-0.5 rounded-md">
+                              {appt.invoiceNumbers.length} notas
+                            </span>
+                          )}
+                          {appt.nfeAccessKeys && appt.nfeAccessKeys.length > 0 && (
+                            <span className="text-[10px] bg-indigo-50 text-indigo-800 border border-indigo-200 font-medium px-1.5 py-0.5 rounded-md flex items-center gap-1">
+                              <KeyRound className="w-2.5 h-2.5 text-indigo-600" />
+                              {appt.nfeAccessKeys.length} chaves NF-e
                             </span>
                           )}
                         </div>
-                      )}
-                      <div className="text-slate-600 font-medium text-xs flex items-center gap-1.5 flex-wrap mt-0.5">
-                        <span>NFs: {appt.invoiceNumber}</span>
-                        {appt.invoiceNumbers && appt.invoiceNumbers.length > 1 && (
-                          <span className="text-[10px] bg-blue-100 text-blue-900 border border-blue-300 font-bold px-1.5 py-0.5 rounded-md">
-                            {appt.invoiceNumbers.length} notas
-                          </span>
+                        {appt.invoiceTotalValue !== undefined && appt.invoiceTotalValue !== null && (
+                          <div className="text-[11px] font-bold text-emerald-800 mt-0.5 ml-5">
+                            Valor Total: <span className="font-mono">{formatCurrencyBRL(appt.invoiceTotalValue)}</span>
+                          </div>
                         )}
-                        {appt.nfeAccessKeys && appt.nfeAccessKeys.length > 0 && (
-                          <span className="text-[10px] bg-indigo-50 text-indigo-800 border border-indigo-200 font-medium px-1.5 py-0.5 rounded-md flex items-center gap-1">
-                            <KeyRound className="w-2.5 h-2.5 text-indigo-600" />
-                            {appt.nfeAccessKeys.length} chaves NF-e
-                          </span>
+                        {appt.invoiceDueDate && (
+                          <div className="text-[11px] font-semibold text-amber-700 mt-0.5 flex items-center gap-1 ml-5">
+                            📅 Boleto: {new Date(appt.invoiceDueDate + 'T00:00:00').toLocaleDateString('pt-BR')}
+                          </div>
                         )}
-                      </div>
-                      {appt.invoiceTotalValue !== undefined && appt.invoiceTotalValue !== null && (
-                        <div className="text-[11px] font-bold text-emerald-800 mt-0.5">
-                          Valor Total: <span className="font-mono">{formatCurrencyBRL(appt.invoiceTotalValue)}</span>
-                        </div>
-                      )}
-                      {appt.invoiceDueDate && (
-                        <div className="text-[11px] font-semibold text-amber-700 mt-0.5 flex items-center gap-1">
-                          📅 Boleto: {new Date(appt.invoiceDueDate + 'T00:00:00').toLocaleDateString('pt-BR')}
-                        </div>
-                      )}
-                      <div className="text-[11px] text-slate-500">{appt.cargoType} • {appt.totalVolumes} vol</div>
-                    </td>
+                        <div className="text-[11px] text-slate-500 ml-5">{appt.cargoType} • {appt.totalVolumes} vol</div>
+                      </td>
 
                     {/* Slot & Dock */}
                     <td className="py-3.5 px-4">
@@ -819,7 +1126,8 @@ export const AdminDockDashboard: React.FC<AdminDockDashboardProps> = ({
                     </td>
 
                   </tr>
-                ))
+                  );
+                })
               ) : (
                 <tr>
                   <td colSpan={5} className="py-8 text-center text-slate-500 text-sm">
@@ -849,7 +1157,7 @@ export const AdminDockDashboard: React.FC<AdminDockDashboardProps> = ({
         <DoubleCheckUnloadModal
           isOpen={!!selectedApptForDoubleCheck}
           appointment={selectedApptForDoubleCheck}
-          docks={docks}
+          docks={activeDocksToDisplay}
           currentSystemUser={currentSystemUser}
           onClose={() => setSelectedApptForDoubleCheck(null)}
           onConfirmRelease={async (apptId, data) => {
@@ -890,6 +1198,143 @@ export const AdminDockDashboard: React.FC<AdminDockDashboardProps> = ({
             setSelectedApptForDiscrepancy(null);
           }}
         />
+      )}
+
+      {/* Quick Move Modal for Touch / Mobile or 1-Click Relocation */}
+      {quickMoveAppt && (
+        <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-xs z-50 flex items-end sm:items-center justify-center p-2 sm:p-4 animate-in fade-in duration-150">
+          <div className="bg-white w-full max-w-lg rounded-2xl sm:rounded-3xl shadow-2xl border border-slate-200 overflow-hidden max-h-[90vh] flex flex-col">
+            
+            {/* Modal Header */}
+            <div className="p-4 sm:p-5 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-blue-100 text-blue-700 rounded-xl">
+                  <Move className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">Mover / Alocar Caminhão</h3>
+                  <p className="text-xs text-slate-500 font-mono">
+                    {quickMoveAppt.protocol} • Placa: {quickMoveAppt.vehiclePlate || 'N/I'}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setQuickMoveAppt(null)}
+                className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-200 rounded-xl transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Vehicle Summary Banner */}
+            <div className="p-4 bg-slate-900 text-white space-y-1 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-sm text-amber-300">{quickMoveAppt.supplierName}</span>
+                <span className="bg-slate-800 text-slate-300 px-2 py-0.5 rounded text-[11px] font-mono">
+                  Janela: {quickMoveAppt.timeSlot}
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-slate-300 text-[11px]">
+                <span>NF: {quickMoveAppt.invoiceNumber} • {quickMoveAppt.cargoType}</span>
+                <span>{getApptVolume(quickMoveAppt)} volumes/paletes</span>
+              </div>
+            </div>
+
+            {/* Action Targets Grid */}
+            <div className="p-4 sm:p-5 space-y-4 overflow-y-auto flex-1">
+              <div>
+                <label className="text-xs font-bold text-slate-700 uppercase tracking-wider block mb-2">
+                  Selecione a Doca de Destino:
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {activeDocksToDisplay.map((dock, dIdx) => {
+                    const isCurrent = quickMoveAppt.dockId === dock.id;
+                    const dockAppts = dayAppointments.filter(a => isAppointmentAssignedToDock(a, dock));
+                    const occupied = dockAppts
+                      .filter(a => a.status !== 'CANCELADO' && a.status !== 'NO_SHOW')
+                      .reduce((sum, a) => sum + getApptVolume(a), 0);
+                    const limit = dock.dailyLimit || (dock.type === 'REFRIGERADA' ? 40 : dock.type === 'BATIDA' ? 200 : dock.type === 'FRACIONADA' ? 50 : 140);
+                    const unit = dock.limitUnit || (dock.type === 'BATIDA' || dock.type === 'FRACIONADA' ? 'vol' : 'pal');
+
+                    return (
+                      <button
+                        key={`quick-move-dock-${dock.id || ''}-${dIdx}`}
+                        disabled={!dock.isOperational}
+                        onClick={() => handleQuickMoveConfirm(dock.id)}
+                        className={`p-3 rounded-xl border text-left transition-all flex flex-col justify-between gap-2 cursor-pointer ${
+                          isCurrent
+                            ? 'border-blue-600 bg-blue-50/70 ring-2 ring-blue-500/20'
+                            : !dock.isOperational
+                            ? 'border-slate-200 bg-slate-100 opacity-60 cursor-not-allowed'
+                            : 'border-slate-200 bg-white hover:border-blue-400 hover:bg-blue-50/30'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-xs text-slate-900">{dock.name}</span>
+                          <span className="text-[10px] text-slate-500 font-medium uppercase">{dock.type}</span>
+                        </div>
+                        <div className="flex items-center justify-between text-[11px]">
+                          <span className="font-mono text-slate-600 font-medium">
+                            {occupied} / {limit} {unit}
+                          </span>
+                          {isCurrent ? (
+                            <span className="text-[10px] font-bold text-blue-700 bg-blue-100 px-1.5 py-0.5 rounded">
+                              Doca Atual
+                            </span>
+                          ) : !dock.isOperational ? (
+                            <span className="text-[10px] text-rose-700 font-bold">Manutenção</span>
+                          ) : (
+                            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                              Posicionar ➔
+                            </span>
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Other Areas */}
+              <div className="pt-2 border-t border-slate-100 space-y-2">
+                <label className="text-xs font-bold text-slate-700 uppercase tracking-wider block">
+                  Outras Zonas Operacionais:
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <button
+                    onClick={() => handleQuickMoveConfirm('PATIO')}
+                    className="p-3 rounded-xl border border-purple-300 bg-purple-50 hover:bg-purple-100 text-purple-950 font-bold text-xs flex items-center justify-between transition-colors cursor-pointer"
+                  >
+                    <div className="flex items-center gap-2">
+                      <ShieldCheck className="w-4 h-4 text-purple-700" />
+                      <span>Fila da Portaria / Pátio</span>
+                    </div>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
+
+                  <button
+                    onClick={() => handleQuickMoveConfirm('')}
+                    className="p-3 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 font-semibold text-xs flex items-center justify-between transition-colors cursor-pointer"
+                  >
+                    <span>Desvincular Doca</span>
+                    <X className="w-3.5 h-3.5 text-slate-400" />
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-3.5 bg-slate-50 border-t border-slate-200 flex items-center justify-end">
+              <button
+                onClick={() => setQuickMoveAppt(null)}
+                className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 text-xs font-bold rounded-xl transition-colors cursor-pointer"
+              >
+                Cancelar
+              </button>
+            </div>
+
+          </div>
+        </div>
       )}
 
     </div>

@@ -306,7 +306,7 @@ export const ClientNewAppointmentModal: React.FC<ClientNewAppointmentModalProps>
     const currentCount = slotOccupancy[formData.timeSlot] || 0;
     if (currentCount >= maxSuppliers) {
       const branchName = selectedBranch?.name ? ` na unidade "${selectedBranch.name}"` : '';
-      setError(`A janela de horário ${formData.timeSlot}${branchName} para a data selecionada atingiu o limite máximo de fornecedores (${currentCount}/${maxSuppliers}). Por favor, selecione outro horário ou data.`);
+      setError(`A janela de horário ${formData.timeSlot}${branchName} para a data selecionada já está indisponível. Por favor, selecione outro horário ou data.`);
       return;
     }
 
@@ -1002,13 +1002,13 @@ export const ClientNewAppointmentModal: React.FC<ClientNewAppointmentModalProps>
                         const isFull = count >= max;
                         return (
                           <option key={`client-new-slot-${slot}-${sIdx}`} value={slot} disabled={isFull}>
-                            {slot} — {count}/{max} vagas ocupadas {isFull ? '(LOTADO)' : ''}
+                            {slot} {isFull ? '(Indisponível)' : ''}
                           </option>
                         );
                       })}
                     </select>
                     <p className="text-[10px] text-slate-500 mt-1">
-                      Vagas calculadas em tempo real exclusivamente para a unidade selecionada.
+                      Horários de atendimento para a unidade selecionada.
                     </p>
                   </div>
                 </div>

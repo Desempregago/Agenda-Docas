@@ -56,7 +56,17 @@ export const DoubleCheckUnloadModal: React.FC<DoubleCheckUnloadModalProps> = ({
     .filter(k => k.length === 44);
   const hadInitialKeys = originalKeys.length > 0;
 
-  const [selectedDockId, setSelectedDockId] = useState<string>(appointment.dockId || (docks[0]?.id ?? 'DOCA-01'));
+  // Doca pré-selecionada: se o agendamento já tiver doca, usa; senão busca a primeira doca operacional compatível com o tipo de carga
+  const getInitialDockId = () => {
+    if (appointment.dockId) return appointment.dockId;
+    const matchingOperationalDock = docks.find(d => d.isOperational && d.type === appointment.cargoType);
+    if (matchingOperationalDock) return matchingOperationalDock.id;
+    const firstOperational = docks.find(d => d.isOperational);
+    if (firstOperational) return firstOperational.id;
+    return docks[0]?.id ?? 'DOCA-01';
+  };
+
+  const [selectedDockId, setSelectedDockId] = useState<string>(getInitialDockId);
   
   // As chaves para leitura física começam vazias para conferência cega/double check
   const [nfeAccessKeys, setNfeAccessKeys] = useState<string[]>(['']);
@@ -84,7 +94,7 @@ export const DoubleCheckUnloadModal: React.FC<DoubleCheckUnloadModalProps> = ({
   useEffect(() => {
     if (appointment) {
       setNfeAccessKeys(['']);
-      setSelectedDockId(appointment.dockId || (docks[0]?.id ?? 'DOCA-01'));
+      setSelectedDockId(getInitialDockId());
       setInvoiceNumbersInput(
         appointment.invoiceNumbers && appointment.invoiceNumbers.length > 0 
           ? appointment.invoiceNumbers.join(', ') 

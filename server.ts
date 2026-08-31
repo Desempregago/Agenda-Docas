@@ -164,7 +164,7 @@ async function startServer() {
     if (!isWalkIn && currentSuppliersInSlot >= maxSuppliersForSlot) {
       const branchLabel = targetDest?.name ? ` na unidade "${targetDest.name}"` : '';
       return res.status(400).json({
-        error: `O limite máximo de fornecedores (${maxSuppliersForSlot}) para a janela de horário ${body.timeSlot}${branchLabel} na data selecionada já foi atingido. Por favor, escolha outro horário ou data.`
+        error: `A janela de horário ${body.timeSlot}${branchLabel} na data selecionada já está com a capacidade esgotada. Por favor, escolha outro horário ou data.`
       });
     }
 
@@ -298,7 +298,7 @@ async function startServer() {
       
       scheduledDate,
       timeSlot: body.timeSlot,
-      dockId: body.dockId || targetDock?.id,
+      dockId: body.dockId || undefined,
       status: initialStatus,
       notes: body.notes || '',
       isWalkIn,
@@ -409,7 +409,7 @@ async function startServer() {
     if (currentSuppliersInSlot >= maxSuppliersForSlot) {
       const branchLabel = targetDest?.name ? ` na unidade "${targetDest.name}"` : '';
       return res.status(400).json({
-        error: `O limite máximo de fornecedores (${maxSuppliersForSlot}) para a janela de horário ${newSlot}${branchLabel} na data selecionada já foi atingido. Por favor, selecione outro horário ou data.`
+        error: `A janela de horário ${newSlot}${branchLabel} na data selecionada já está com a capacidade esgotada. Por favor, selecione outro horário ou data.`
       });
     }
 

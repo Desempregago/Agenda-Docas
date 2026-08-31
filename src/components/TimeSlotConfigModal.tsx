@@ -315,26 +315,27 @@ export const TimeSlotConfigModal: React.FC<TimeSlotConfigModalProps> = ({
     }
   };
 
-  // Remove dock from current branch
-  const handleRemoveDock = (dockId: string) => {
+  // Remove dock from current branch by index
+  const handleRemoveDock = (dockIndex: number) => {
     if (!currentBranch) return;
-    const dockName = activeDockList.find(d => d.id === dockId)?.name || dockId;
     if (activeDockList.length <= 1) {
       alert('É necessário manter pelo menos uma doca cadastrada nesta filial.');
       return;
     }
 
-    if (window.confirm(`Deseja realmente excluir a "${dockName}" (${dockId}) da filial "${currentBranch.name}"?`)) {
-      setDestinationsList(prev =>
-        prev.map(b => {
-          if (b.id === currentBranch.id) {
-            const nextDocks = (b.docks || []).filter(d => d.id !== dockId);
-            return { ...b, docks: nextDocks };
-          }
-          return b;
-        })
-      );
-    }
+    const targetDock = activeDockList[dockIndex];
+    const dockName = targetDock?.name || targetDock?.id || `Doca #${dockIndex + 1}`;
+
+    setDestinationsList(prev =>
+      prev.map(b => {
+        if (b.id === currentBranch.id) {
+          const currentDocks = b.docks || [];
+          const nextDocks = currentDocks.filter((_, idx) => idx !== dockIndex);
+          return { ...b, docks: nextDocks };
+        }
+        return b;
+      })
+    );
   };
 
   // Update dock field in current branch by index
@@ -731,7 +732,7 @@ export const TimeSlotConfigModal: React.FC<TimeSlotConfigModalProps> = ({
                           </button>
                           <button
                             type="button"
-                            onClick={() => handleRemoveDock(dock.id)}
+                            onClick={() => handleRemoveDock(index)}
                             className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
                             title={`Excluir doca ${dock.name}`}
                           >

@@ -425,7 +425,7 @@ export const RescheduleModal: React.FC<RescheduleModalProps> = ({
                       const isFull = count >= limit;
                       return (
                         <option key={`resched-slot-${slot}-${sIdx}`} value={slot} disabled={isFull}>
-                          {slot} {isFull ? '(Lotado)' : `(${count}/${limit} vagas na unidade)`}
+                          {slot} {isFull ? '(Indisponível)' : ''}
                         </option>
                       );
                     })}
