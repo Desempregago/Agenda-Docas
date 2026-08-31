@@ -768,6 +768,7 @@ async function startServer() {
 
     users.push(newAdmin);
     StorageService.saveUsers(users);
+    setSessionCookie(res, { type: 'system', userId: newAdmin.id, username: newAdmin.username, role: newAdmin.role });
 
     const { password: _, pin: __, ...sanitized } = newAdmin;
     res.status(201).json({
