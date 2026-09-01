@@ -664,6 +664,23 @@ async function startServer() {
     res.json(brandSettings);
   });
 
+  // Direct server route for favicon
+  app.get(['/favicon.ico', '/favicon.png', '/favicon.svg'], (_req, res, next) => {
+    if (brandSettings.logoUrl && brandSettings.logoUrl.startsWith('data:image/')) {
+      try {
+        const matches = brandSettings.logoUrl.match(/^data:image\/([a-zA-Z0-9+.-]+);base64,(.+)$/);
+        if (matches && matches[2]) {
+          const mimeType = matches[1] === 'svg+xml' ? 'image/svg+xml' : `image/${matches[1]}`;
+          const buffer = Buffer.from(matches[2], 'base64');
+          res.setHeader('Content-Type', mimeType);
+          res.setHeader('Cache-Control', 'public, max-age=3600');
+          return res.send(buffer);
+        }
+      } catch (_) {}
+    }
+    next();
+  });
+
   app.put('/api/settings/branding', requireSystemRole('ADMIN'), (req, res) => {
     const newSettings = req.body as BrandSettings;
     if (newSettings && typeof newSettings === 'object') {

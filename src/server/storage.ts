@@ -277,7 +277,45 @@ export const StorageService = {
   },
 
   saveBranding: (settings: BrandSettings): boolean => {
-    return writeJsonFile<BrandSettings>('branding.json', settings);
+    const success = writeJsonFile<BrandSettings>('branding.json', settings);
+    
+    // Se foi enviado um logo em base64 (Data URL), salvar fisicamente no servidor nos diretórios estáticos
+    if (settings.logoUrl && settings.logoUrl.startsWith('data:image/')) {
+      try {
+        const matches = settings.logoUrl.match(/^data:image\/([a-zA-Z0-9+.-]+);base64,(.+)$/);
+        if (matches && matches[2]) {
+          const extension = matches[1].replace('svg+xml', 'svg').replace('jpeg', 'jpg');
+          const buffer = Buffer.from(matches[2], 'base64');
+          
+          // Salvar na pasta data do servidor
+          const customLogoPath = path.join(DATA_DIR, `custom_logo.${extension}`);
+          const customFaviconPath = path.join(DATA_DIR, 'custom_favicon.ico');
+          fs.writeFileSync(customLogoPath, buffer);
+          fs.writeFileSync(customFaviconPath, buffer);
+
+          // Salvar também nas pastas públicas do projeto para acesso direto
+          const publicDir = path.join(process.cwd(), 'public');
+          if (fs.existsSync(publicDir)) {
+            try {
+              fs.writeFileSync(path.join(publicDir, `favicon.${extension}`), buffer);
+              fs.writeFileSync(path.join(publicDir, 'favicon.ico'), buffer);
+            } catch (_) {}
+          }
+
+          const distDir = path.join(process.cwd(), 'dist');
+          if (fs.existsSync(distDir)) {
+            try {
+              fs.writeFileSync(path.join(distDir, `favicon.${extension}`), buffer);
+              fs.writeFileSync(path.join(distDir, 'favicon.ico'), buffer);
+            } catch (_) {}
+          }
+        }
+      } catch (e) {
+        console.error('[Storage] Erro ao gravar favicon/logo fisicamente no servidor:', e);
+      }
+    }
+    
+    return success;
   },
 
   loadSuppliers: (): RegisteredSupplier[] => {

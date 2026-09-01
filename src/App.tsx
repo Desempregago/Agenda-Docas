@@ -214,6 +214,28 @@ export default function App() {
   const [rescheduleAppointment, setRescheduleAppointment] = useState<Appointment | null>(null);
   const [selectedApptForReceipt, setSelectedApptForReceipt] = useState<Appointment | null>(null);
 
+  // Sincronização dinâmica de título da página e favicon da aba com base na logo/marca
+  useEffect(() => {
+    if (brandSettings.appName) {
+      document.title = `${brandSettings.appName} - Gestão de Recebimento e Agendamento`;
+    }
+
+    try {
+      let faviconLink = document.querySelector("link[rel~='icon']") as HTMLLinkElement | null;
+      if (!faviconLink) {
+        faviconLink = document.createElement('link');
+        faviconLink.rel = 'icon';
+        document.head.appendChild(faviconLink);
+      }
+
+      if (brandSettings.logoUrl) {
+        faviconLink.href = brandSettings.logoUrl;
+      } else {
+        faviconLink.href = '/favicon.svg';
+      }
+    } catch (_) {}
+  }, [brandSettings.appName, brandSettings.logoUrl]);
+
   // Limpeza automática de dados cadastrais legados do localStorage (manter apenas sessão e notificações)
   useEffect(() => {
     try {
