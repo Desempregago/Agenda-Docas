@@ -708,6 +708,7 @@ export const ClientNewAppointmentModal: React.FC<ClientNewAppointmentModalProps>
                       <label className="block text-xs font-bold text-slate-800 flex items-center gap-1.5">
                         <KeyRound className="w-3.5 h-3.5 text-blue-600" />
                         <span>Chaves de Acesso da NF-e (44 dígitos)</span>
+                        <span className="text-slate-400 font-normal text-[11px]">(Opcional)</span>
                       </label>
                       <span className="text-[11px] font-semibold text-slate-500 bg-slate-200/70 px-2 py-0.5 rounded-md">
                         {nfeAccessKeys.filter(k => cleanNfeAccessKey(k).length === 44).length} de {nfeAccessKeys.length} preenchida(s)

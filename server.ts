@@ -238,15 +238,20 @@ async function startServer() {
       ? (parsedInvoiceNumbers.length > 1 ? parsedInvoiceNumbers.join(', ') : parsedInvoiceNumbers[0])
       : 'A emitir';
 
-    // Parse NF-e Access Keys (44 digits)
+    // Parse NF-e Access Keys (44 digits) - Optional field
     let parsedNfeKeys: string[] = [];
     if (Array.isArray(body.nfeAccessKeys)) {
       parsedNfeKeys = normalizeNfeKeys(body.nfeAccessKeys);
     } else if (body.nfeAccessKey && typeof body.nfeAccessKey === 'string' && body.nfeAccessKey.trim()) {
       parsedNfeKeys = normalizeNfeKeys([body.nfeAccessKey]);
     }
-    if ((Array.isArray(body.nfeAccessKeys) || body.nfeAccessKey) && parsedNfeKeys.length === 0) {
-      return res.status(400).json({ error: 'Cada chave de acesso NF-e deve conter exatamente 44 dígitos.' });
+    // Only throw error if the user typed something into nfeAccessKey that was not 44 digits, but ignore if empty
+    const rawKeysGiven = Array.isArray(body.nfeAccessKeys) 
+      ? body.nfeAccessKeys.map((k: any) => String(k || '').replace(/\D/g, '')).filter(Boolean)
+      : (body.nfeAccessKey ? [String(body.nfeAccessKey).replace(/\D/g, '')].filter(Boolean) : []);
+    
+    if (rawKeysGiven.length > 0 && parsedNfeKeys.length === 0) {
+      return res.status(400).json({ error: 'A chave de acesso NF-e informada é inválida (deve conter 44 dígitos numéricos).' });
     }
 
     const rawPOStr = String(body.purchaseOrder || '').trim();
