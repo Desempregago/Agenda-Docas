@@ -157,32 +157,20 @@ async function startServer() {
 
     // Validação de Dias de Funcionamento e Atendimento (Bloqueio de Fins de Semana ou Dias Não Autorizados)
     if (!isWalkIn) {
-      const allowedDays = (targetDest?.allowedDaysOfWeek && Array.isArray(targetDest.allowedDaysOfWeek) && targetDest.allowedDaysOfWeek.length > 0)
-        ? targetDest.allowedDaysOfWeek
-        : operatingDays;
-
-        const scheduledDayOfWeek = dayOfWeekForDate(scheduledDate);
+      const allowedDays = operatingDays;
+      const scheduledDayOfWeek = dayOfWeekForDate(scheduledDate);
       const dayNames = ['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'];
 
       if (!allowedDays.includes(scheduledDayOfWeek)) {
-        const branchLabel = targetDest?.name ? ` na unidade "${targetDest.name}"` : '';
         const allowedFormatted = allowedDays.map(d => dayNames[d]).join(', ');
         return res.status(400).json({
-          error: `A unidade "${targetDest?.name || 'selecionada'}" não recebe agendamentos aos ${dayNames[scheduledDayOfWeek]}s. Dias autorizados para recebimento: ${allowedFormatted}. Por favor, selecione outro dia.`
-        });
-      }
-
-      if (targetDest?.blockedDates && Array.isArray(targetDest.blockedDates) && targetDest.blockedDates.includes(scheduledDate)) {
-        return res.status(400).json({
-          error: `A data ${scheduledDate} está bloqueada para recebimentos na unidade ${targetDest?.name || ''} (feriado/manutenção programada). Por favor, selecione outra data.`
+          error: `Não recebemos agendamentos aos ${dayNames[scheduledDayOfWeek]}s. Dias autorizados para recebimento: ${allowedFormatted}. Por favor, selecione outro dia.`
         });
       }
     }
 
-    // Validação de limite de fornecedores por janela de horário ESPECÍFICO DA FILIAL
-    const maxSuppliersForSlot = (targetDest?.slotSupplierLimits?.[body.timeSlot] !== undefined)
-      ? targetDest.slotSupplierLimits[body.timeSlot]
-      : (slotSupplierLimits[body.timeSlot] ?? 3);
+    // Validação de limite de fornecedores por janela de horário
+    const maxSuppliersForSlot = slotSupplierLimits[body.timeSlot] ?? 3;
 
     // Contagem de agendamentos concorrentes EXCLUSIVAMENTE NA FILIAL SELECIONADA
     const currentSuppliersInSlot = appointments.filter(
@@ -201,10 +189,8 @@ async function startServer() {
       });
     }
 
-    // Lista de Docas da Filial
-    const branchDocks = (targetDest?.docks && targetDest.docks.length > 0)
-      ? targetDest.docks
-      : docks;
+    // Lista de Docas Físicas (Centralizada em docks.json)
+    const branchDocks = docks;
 
     // Find target dock based on dockId or cargoType
     let targetDock = branchDocks.find(d => d.id === body.dockId);
@@ -212,7 +198,7 @@ async function startServer() {
       targetDock = branchDocks.find(d => d.type === cargoType) || branchDocks[0];
     }
 
-    // Check daily limit for target dock if configured for this branch
+    // Check daily limit for target dock if configured
     if (targetDock && targetDock.dailyLimit) {
       const existingApptsOnDate = appointments.filter(
         a => {
@@ -228,23 +214,6 @@ async function startServer() {
       if (currentTotal + requestedVolumes > targetDock.dailyLimit) {
         return res.status(400).json({
           error: `Capacidade diária da ${targetDock.name} excedida na unidade ${targetDest?.name || ''} para a data selecionada (${currentTotal}/${targetDock.dailyLimit} ${targetDock.limitUnit || 'volumes'}). Por favor, selecione outra data para a entrega.`
-        });
-      }
-    }
-
-    // Check overall branch daily pallet limit if configured
-    if (targetDest?.dailyPalletLimit && cargoType === 'PALETIZADA') {
-      const currentBranchPallets = appointments
-        .filter(a => {
-          if (a.scheduledDate !== scheduledDate || a.status === 'CANCELADO' || a.status === 'NO_SHOW') return false;
-          if (a.cargoType !== 'PALETIZADA') return false;
-          return a.destinationBranchId ? a.destinationBranchId === targetDestId : targetDest?.isDefault;
-        })
-        .reduce((sum, a) => sum + (Number(a.totalVolumes) || 0), 0);
-
-      if (currentBranchPallets + requestedVolumes > targetDest.dailyPalletLimit) {
-        return res.status(400).json({
-          error: `Limite diário de paletes para a unidade ${targetDest.name} (${currentBranchPallets}/${targetDest.dailyPalletLimit} paletes) excedido para esta data. Por favor, escolha outra data.`
         });
       }
     }
@@ -411,31 +380,19 @@ async function startServer() {
     const targetDestId = targetDest?.id;
 
     // Validação de Dias de Funcionamento no Reagendamento
-    const allowedDays = (targetDest?.allowedDaysOfWeek && Array.isArray(targetDest.allowedDaysOfWeek) && targetDest.allowedDaysOfWeek.length > 0)
-      ? targetDest.allowedDaysOfWeek
-      : operatingDays;
-
+    const allowedDays = operatingDays;
     const rescheduleDayOfWeek = dayOfWeekForDate(newDate);
     const dayNames = ['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'];
 
     if (!allowedDays.includes(rescheduleDayOfWeek)) {
-      const branchLabel = targetDest?.name ? ` na unidade "${targetDest.name}"` : '';
       const allowedFormatted = allowedDays.map(d => dayNames[d]).join(', ');
       return res.status(400).json({
-        error: `Não é possível reagendar para ${dayNames[rescheduleDayOfWeek]}${branchLabel}. Dias autorizados para recebimento: ${allowedFormatted}.`
-      });
-    }
-
-    if (targetDest?.blockedDates && Array.isArray(targetDest.blockedDates) && targetDest.blockedDates.includes(newDate)) {
-      return res.status(400).json({
-        error: `A data ${newDate} está bloqueada para recebimentos na unidade ${targetDest?.name || ''}. Por favor, selecione outra data.`
+        error: `Não é possível reagendar para ${dayNames[rescheduleDayOfWeek]}. Dias autorizados para recebimento: ${allowedFormatted}.`
       });
     }
 
     // Validação de limite de fornecedores por janela de horário no reagendamento
-    const maxSuppliersForSlot = (targetDest?.slotSupplierLimits?.[newSlot] !== undefined)
-      ? targetDest.slotSupplierLimits[newSlot]
-      : (slotSupplierLimits[newSlot] ?? 3);
+    const maxSuppliersForSlot = slotSupplierLimits[newSlot] ?? 3;
 
     const currentSuppliersInSlot = appointments.filter(
       a => {

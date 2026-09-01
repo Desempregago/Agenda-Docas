@@ -133,30 +133,6 @@ export const DestinationsManagementModal: React.FC<DestinationsManagementModalPr
         receptionInstructions: formData.receptionInstructions?.trim() || '',
         active: formData.active ?? true,
         isDefault: Boolean(formData.isDefault),
-        docks: [
-          { id: 'DOCA-01', name: 'Doca 01 (Paletizada)', type: 'PALETIZADA', capacityPerSlot: 2, isOperational: true, dailyLimit: 140, limitUnit: 'pallets' },
-          { id: 'DOCA-02', name: 'Doca 02 (Refrigerada)', type: 'REFRIGERADA', capacityPerSlot: 1, isOperational: true, dailyLimit: 40, limitUnit: 'pallets' },
-          { id: 'DOCA-03', name: 'Doca 03 (Batidos/Fracionados)', type: 'BATIDA', capacityPerSlot: 2, isOperational: true, dailyLimit: 200, limitUnit: 'volumes' },
-          { id: 'DOCA-04', name: 'Doca 04 (Express/VUCs)', type: 'FRACIONADA', capacityPerSlot: 3, isOperational: true, dailyLimit: 50, limitUnit: 'volumes' },
-        ],
-        timeSlots: [
-          '07:00 - 08:30',
-          '08:30 - 10:00',
-          '10:00 - 11:30',
-          '13:00 - 14:30',
-          '14:30 - 16:00',
-          '16:00 - 17:30',
-        ],
-        slotSupplierLimits: {
-          '07:00 - 08:30': 3,
-          '08:30 - 10:00': 3,
-          '10:00 - 11:30': 3,
-          '13:00 - 14:30': 3,
-          '14:30 - 16:00': 3,
-          '16:00 - 17:30': 3,
-        },
-        dailyPalletLimit: 200,
-        dailyVolumeLimit: 500,
       };
 
       if (newBranch.isDefault) {

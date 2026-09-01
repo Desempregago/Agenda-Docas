@@ -193,23 +193,43 @@ export const StorageService = {
   },
 
   loadDestinations: (): DestinationBranch[] => {
-    const list = readJsonFile<DestinationBranch[]>('destinations.json', DEFAULT_DESTINATIONS);
+    const list = readJsonFile<any[]>('destinations.json', DEFAULT_DESTINATIONS);
     return list.map(b => ({
-      ...b,
-      docks: b.docks ?? [],
-      timeSlots: b.timeSlots ?? [],
-      slotSupplierLimits: b.slotSupplierLimits ?? {},
-      dailyPalletLimit: b.dailyPalletLimit ?? 200,
-      dailyVolumeLimit: b.dailyVolumeLimit ?? 500,
-      allowedDaysOfWeek: (b.allowedDaysOfWeek && Array.isArray(b.allowedDaysOfWeek) && b.allowedDaysOfWeek.length > 0)
-        ? b.allowedDaysOfWeek
-        : [1, 2, 3, 4, 5],
-      blockedDates: b.blockedDates ?? [],
+      id: String(b.id || `DEST-${Date.now()}`),
+      name: String(b.name || ''),
+      code: b.code || '',
+      cnpj: b.cnpj || '',
+      address: b.address || '',
+      neighborhood: b.neighborhood || '',
+      city: b.city || '',
+      state: b.state || 'SP',
+      zipCode: b.zipCode || '',
+      contactPhone: b.contactPhone || '',
+      contactEmail: b.contactEmail || '',
+      receptionInstructions: b.receptionInstructions || '',
+      active: b.active ?? true,
+      isDefault: Boolean(b.isDefault),
     }));
   },
 
   saveDestinations: (destinations: DestinationBranch[]): boolean => {
-    return writeJsonFile<DestinationBranch[]>('destinations.json', destinations);
+    const cleanList = destinations.map(b => ({
+      id: b.id,
+      name: b.name,
+      code: b.code || '',
+      cnpj: b.cnpj || '',
+      address: b.address || '',
+      neighborhood: b.neighborhood || '',
+      city: b.city || '',
+      state: b.state || 'SP',
+      zipCode: b.zipCode || '',
+      contactPhone: b.contactPhone || '',
+      contactEmail: b.contactEmail || '',
+      receptionInstructions: b.receptionInstructions || '',
+      active: b.active ?? true,
+      isDefault: Boolean(b.isDefault),
+    }));
+    return writeJsonFile<DestinationBranch[]>('destinations.json', cleanList);
   },
 
   loadOperatingDays: (): number[] => {
