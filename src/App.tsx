@@ -39,38 +39,10 @@ export default function App() {
     }
   });
   const [appointments, setAppointments] = useState<Appointment[]>([]);
-  const [destinations, setDestinations] = useState<DestinationBranch[]>(() => {
-    try {
-      const saved = localStorage.getItem('agendadocas_destinations');
-      return saved ? JSON.parse(saved) : [];
-    } catch {
-      return [];
-    }
-  });
-  const [docks, setDocks] = useState<Dock[]>(() => {
-    try {
-      const saved = localStorage.getItem('agendadocas_docks');
-      return saved ? JSON.parse(saved) : [];
-    } catch {
-      return [];
-    }
-  });
-  const [timeSlots, setTimeSlots] = useState<string[]>(() => {
-    try {
-      const saved = localStorage.getItem('agendadocas_timeslots');
-      return saved ? JSON.parse(saved) : [];
-    } catch {
-      return [];
-    }
-  });
-  const [slotSupplierLimits, setSlotSupplierLimits] = useState<Record<string, number>>(() => {
-    try {
-      const saved = localStorage.getItem('agendadocas_slot_limits');
-      return saved ? JSON.parse(saved) : {};
-    } catch {
-      return {};
-    }
-  });
+  const [destinations, setDestinations] = useState<DestinationBranch[]>([]);
+  const [docks, setDocks] = useState<Dock[]>([]);
+  const [timeSlots, setTimeSlots] = useState<string[]>([]);
+  const [slotSupplierLimits, setSlotSupplierLimits] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState<boolean>(false);
   const [isAdminAuthOpen, setIsAdminAuthOpen] = useState<boolean>(false);
   const [isUsersModalOpen, setIsUsersModalOpen] = useState<boolean>(false);
@@ -231,14 +203,7 @@ export default function App() {
   };
 
   // Branding & Settings State
-  const [brandSettings, setBrandSettings] = useState<BrandSettings>(() => {
-    try {
-      const saved = localStorage.getItem('agendadocas_brand_settings') || localStorage.getItem('agendacais_brand_settings');
-      return saved ? JSON.parse(saved) : DEFAULT_BRAND_SETTINGS;
-    } catch {
-      return DEFAULT_BRAND_SETTINGS;
-    }
-  });
+  const [brandSettings, setBrandSettings] = useState<BrandSettings>(DEFAULT_BRAND_SETTINGS);
 
   // Modals state
   const [isNewModalOpen, setIsNewModalOpen] = useState(false);
@@ -249,10 +214,28 @@ export default function App() {
   const [rescheduleAppointment, setRescheduleAppointment] = useState<Appointment | null>(null);
   const [selectedApptForReceipt, setSelectedApptForReceipt] = useState<Appointment | null>(null);
 
+  // Limpeza automática de dados cadastrais legados do localStorage (manter apenas sessão e notificações)
+  useEffect(() => {
+    try {
+      const keysToRemove = [
+        'agendadocas_brand_settings',
+        'agendacais_brand_settings',
+        'agendadocas_destinations',
+        'agendacais_destinations',
+        'agendadocas_docks',
+        'agendacais_docks',
+        'agendadocas_timeslots',
+        'agendacais_timeslots',
+        'agendadocas_slot_limits',
+        'agendacais_slot_limits',
+      ];
+      keysToRemove.forEach(k => localStorage.removeItem(k));
+    } catch (_) {}
+  }, []);
+
   const handleSaveBrandSettings = async (newSettings: BrandSettings) => {
     setBrandSettings(newSettings);
     try {
-      localStorage.setItem('agendadocas_brand_settings', JSON.stringify(newSettings));
       await authFetch('/api/settings/branding', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -267,7 +250,6 @@ export default function App() {
   const handleSaveDestinations = async (newDestinations: DestinationBranch[]) => {
     setDestinations(newDestinations);
     try {
-      localStorage.setItem('agendadocas_destinations', JSON.stringify(newDestinations));
       const res = await authFetch('/api/destinations', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -303,35 +285,23 @@ export default function App() {
         const destsData = await destsRes.json();
         if (Array.isArray(destsData) && destsData.length > 0) {
           setDestinations(destsData);
-          try {
-            localStorage.setItem('agendadocas_destinations', JSON.stringify(destsData));
-          } catch (_) {}
         }
       }
 
       if (docksRes.ok) {
         const docksData = await docksRes.json();
         setDocks(docksData);
-        try {
-          localStorage.setItem('agendadocas_docks', JSON.stringify(docksData));
-        } catch (_) {}
       }
 
       if (slotsRes.ok) {
         const slotsData = await slotsRes.json();
         setTimeSlots(slotsData);
-        try {
-          localStorage.setItem('agendadocas_timeslots', JSON.stringify(slotsData));
-        } catch (_) {}
       }
 
       if (slotLimitsRes && slotLimitsRes.ok) {
         const slotLimitsData = await slotLimitsRes.json();
         if (slotLimitsData && typeof slotLimitsData === 'object') {
           setSlotSupplierLimits(slotLimitsData);
-          try {
-            localStorage.setItem('agendadocas_slot_limits', JSON.stringify(slotLimitsData));
-          } catch (_) {}
         }
       }
 
@@ -339,9 +309,6 @@ export default function App() {
         const brandData = await brandRes.json();
         if (brandData && brandData.appName) {
           setBrandSettings(brandData);
-          try {
-            localStorage.setItem('agendadocas_brand_settings', JSON.stringify(brandData));
-          } catch (_) {}
         }
       }
 
@@ -389,7 +356,6 @@ export default function App() {
   const handleSaveSlots = async (newSlots: string[]) => {
     setTimeSlots(newSlots);
     try {
-      localStorage.setItem('agendadocas_timeslots', JSON.stringify(newSlots));
       await authFetch('/api/timeslots', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -401,7 +367,6 @@ export default function App() {
   const handleSaveSlotLimits = async (newLimits: Record<string, number>) => {
     setSlotSupplierLimits(newLimits);
     try {
-      localStorage.setItem('agendadocas_slot_limits', JSON.stringify(newLimits));
       await authFetch('/api/slot-limits', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -413,7 +378,6 @@ export default function App() {
   const handleSaveDocks = async (updatedDocks: Dock[]) => {
     setDocks(updatedDocks);
     try {
-      localStorage.setItem('agendadocas_docks', JSON.stringify(updatedDocks));
       await authFetch('/api/docks', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },

@@ -473,7 +473,6 @@ export const TimeSlotConfigModal: React.FC<TimeSlotConfigModalProps> = ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(destinationsList),
       });
-      localStorage.setItem('agendadocas_destinations', JSON.stringify(destinationsList));
     } catch (_) {}
 
     setSavedSuccess(true);
