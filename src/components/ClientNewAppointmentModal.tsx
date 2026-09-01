@@ -914,10 +914,15 @@ export const ClientNewAppointmentModal: React.FC<ClientNewAppointmentModalProps>
                   </div>
 
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">Total de Volumes / Paletes</label>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      {formData.cargoType === 'BATIDA' || formData.cargoType === 'FRACIONADA'
+                        ? 'Total de Volumes (Caixas)'
+                        : 'Total de Paletes (PBR / Padrão)'}
+                    </label>
                     <input
                       type="number"
                       min="1"
+                      placeholder={formData.cargoType === 'BATIDA' || formData.cargoType === 'FRACIONADA' ? 'Ex: 150 volumes' : 'Ex: 24 paletes'}
                       value={formData.totalVolumes}
                       onChange={e => setFormData({ ...formData, totalVolumes: Number(e.target.value) })}
                       className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"

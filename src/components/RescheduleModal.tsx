@@ -484,11 +484,17 @@ export const RescheduleModal: React.FC<RescheduleModalProps> = ({
                     <div className="grid grid-cols-2 gap-2">
                       <div>
                         <label className="block text-[11px] font-semibold text-slate-700 mb-1 flex items-center gap-1">
-                          <Package className="w-3 h-3 text-slate-500" /> Novo Total de Volumes
+                          <Package className="w-3 h-3 text-slate-500" />
+                          <span>
+                            {appointment.cargoType === 'BATIDA' || appointment.cargoType === 'FRACIONADA'
+                              ? 'Novo Total de Volumes (Caixas)'
+                              : 'Novo Total de Paletes'}
+                          </span>
                         </label>
                         <input
                           type="number"
                           min={1}
+                          placeholder={appointment.cargoType === 'BATIDA' || appointment.cargoType === 'FRACIONADA' ? 'Ex: 150 volumes' : 'Ex: 24 paletes'}
                           value={updatedVolumes}
                           onChange={e => setUpdatedVolumes(Number(e.target.value))}
                           className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"

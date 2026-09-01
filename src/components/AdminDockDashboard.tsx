@@ -729,13 +729,28 @@ export const AdminDockDashboard: React.FC<AdminDockDashboardProps> = ({
             const dockAppts = dayAppointments.filter(a => isAppointmentAssignedToDock(a, dock));
             const activeAtDock = dockAppts.find(a => a.status === 'AGUARDANDO_DESCARGA' || a.status === 'NO_PATIO');
 
+            // Find unallocated appointments that match this dock's cargo type (e.g. BATIDA for BATIDA dock, PALETIZADA for PALETIZADA dock)
+            const unallocatedMatchingAppts = dayAppointments.filter(a => {
+              if (a.status === 'CANCELADO' || a.status === 'NO_SHOW') return false;
+              if (a.dockId && a.dockId.trim() !== '') return false;
+              // Check matching cargo type
+              const matchingDocks = activeDocksToDisplay.filter(d => d.type === (a.cargoType || 'PALETIZADA'));
+              const primaryDock = matchingDocks.find(d => d.isOperational) || matchingDocks[0] || activeDocksToDisplay[0];
+              return primaryDock?.id === dock.id;
+            });
+
             // Calculate dock volume/pallet load for the day
             const dailyLimit = dock.dailyLimit || (dock.type === 'REFRIGERADA' ? 40 : dock.type === 'BATIDA' ? 200 : dock.type === 'FRACIONADA' ? 50 : 140);
             const limitUnit = dock.limitUnit || (dock.type === 'BATIDA' || dock.type === 'FRACIONADA' ? 'volumes' : 'pallets');
             
-            const occupiedTotal = dockAppts
+            const explicitlyAssignedTotal = dockAppts
               .filter(a => a.status !== 'CANCELADO' && a.status !== 'NO_SHOW')
               .reduce((sum, a) => sum + getApptVolume(a), 0);
+
+            const unallocatedTotal = unallocatedMatchingAppts
+              .reduce((sum, a) => sum + getApptVolume(a), 0);
+
+            const occupiedTotal = explicitlyAssignedTotal + unallocatedTotal;
 
             const occupancyPercent = Math.min(100, Math.round((occupiedTotal / dailyLimit) * 100));
             const isFull = occupiedTotal >= dailyLimit;
@@ -810,6 +825,12 @@ export const AdminDockDashboard: React.FC<AdminDockDashboardProps> = ({
                       style={{ width: `${occupancyPercent}%` }}
                     />
                   </div>
+                  {unallocatedMatchingAppts.length > 0 && (
+                    <div className="text-[10px] text-amber-700 font-medium flex items-center justify-between pt-0.5">
+                      <span>Previstos sem doca:</span>
+                      <span className="font-mono font-bold">+{unallocatedTotal} {limitUnit} ({unallocatedMatchingAppts.length})</span>
+                    </div>
+                  )}
                 </div>
 
                 {/* Dock Queue / Schedule List */}
