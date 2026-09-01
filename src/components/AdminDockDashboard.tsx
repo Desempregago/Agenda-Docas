@@ -34,6 +34,7 @@ import { StatusBadge } from './StatusBadge';
 import { DiscrepancyModal } from './DiscrepancyModal';
 import { WalkInModal } from './WalkInModal';
 import { DoubleCheckUnloadModal } from './DoubleCheckUnloadModal';
+import { InteractiveCalendar } from './InteractiveCalendar';
 import { formatCurrencyBRL } from '../utils/formatters';
 
 interface AdminDockDashboardProps {
@@ -82,23 +83,35 @@ export const AdminDockDashboard: React.FC<AdminDockDashboardProps> = ({
   const [selectedDate, setSelectedDate] = useState<string>(() => {
     return getTodayDateString();
   });
+  const [isCalendarOpen, setIsCalendarOpen] = useState(false);
   const [selectedBranchFilter, setSelectedBranchFilter] = useState<string>('ALL');
   const dateInputRef = useRef<HTMLInputElement>(null);
 
   const activeDestinations = destinations.filter(d => d.active);
 
-  const handleOpenDatePicker = () => {
-    if (dateInputRef.current) {
-      if ('showPicker' in dateInputRef.current) {
-        try {
-          dateInputRef.current.showPicker();
-        } catch (_) {
-          dateInputRef.current.focus();
-        }
-      } else {
-        dateInputRef.current.focus();
+  // Map appointments count by date for calendar dots
+  const appointmentsCountByDate = React.useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const a of appointments) {
+      const d = String(a.scheduledDate || '').split('T')[0].trim();
+      if (d) {
+        counts[d] = (counts[d] || 0) + 1;
       }
     }
+    return counts;
+  }, [appointments]);
+
+  // Format date in DD/MM/YYYY
+  const formatBrDate = (dateStr: string) => {
+    try {
+      const [y, m, d] = dateStr.split('-');
+      if (y && m && d) return `${d}/${m}/${y}`;
+    } catch {}
+    return dateStr;
+  };
+
+  const handleOpenDatePicker = () => {
+    setIsCalendarOpen(prev => !prev);
   };
   const [selectedApptForDiscrepancy, setSelectedApptForDiscrepancy] = useState<Appointment | null>(null);
   const [selectedApptForDoubleCheck, setSelectedApptForDoubleCheck] = useState<Appointment | null>(null);
@@ -371,103 +384,215 @@ export const AdminDockDashboard: React.FC<AdminDockDashboardProps> = ({
 
   return (
     <div className="space-y-6">
-            {/* Header Bar */}
-      <div className="bg-white rounded-2xl p-3.5 sm:p-5 border border-slate-200 shadow-sm flex flex-col md:flex-row md:items-start justify-between gap-3.5 sm:gap-4 w-full overflow-hidden">
-        <div className="min-w-0">
-          <div className="flex items-center gap-1.5 sm:gap-2 text-[11px] sm:text-xs font-bold text-blue-600 uppercase tracking-wider mb-1">
-            <LayoutDashboard className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
-            <span className="truncate">Gestão Operacional de Docas</span>
-          </div>
-          <h1 className="text-lg sm:text-2xl font-bold text-slate-900 truncate">Controle de Docas & Janelas</h1>
-        </div>
-
-        {/* Date Selector & Slot Config (Right-Aligned) */}
-        <div className="flex flex-col items-stretch md:items-end gap-2 w-full md:w-auto">
+            {/* Header Panel with Horizontal Split: Left = Title + Calendar | Right = Status Metrics Grid */}
+      <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-sm">
+        <div className="flex flex-col lg:flex-row gap-5 items-stretch">
           
-          {/* Action Buttons Row */}
-          {onOpenTimeSlotConfig && effectiveIsAdmin && (
-            <div className="flex flex-wrap items-center justify-start md:justify-end gap-2">
-              <button
-                onClick={onOpenTimeSlotConfig}
-                className="inline-flex items-center gap-1.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl border border-slate-700 shadow-xs transition-colors cursor-pointer"
-                title="Cadastrar e gerenciar janelas de horário e capacidade de docas (Exclusivo Administrador)"
-              >
-                <Clock className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                <span>Janelas & Docas</span>
-              </button>
-            </div>
-          )}
-
-          {/* Interactive Calendar Control Bar */}
-          <div className="w-full md:w-auto flex items-center justify-between gap-1 sm:gap-1.5 bg-slate-900 text-white p-1 sm:p-1.5 rounded-2xl border border-slate-800 shadow-md">
-            
-            {/* Previous Day */}
-            <button
-              type="button"
-              onClick={() => shiftDate(-1)}
-              className="p-1 sm:p-1.5 hover:bg-slate-800 text-slate-300 hover:text-white rounded-xl transition-colors shrink-0"
-              title="Dia anterior"
-            >
-              <ChevronLeft className="w-4 h-4" />
-            </button>
-
-            {/* Interactive HTML Date Input + Display */}
-            <div className="flex-1 min-w-0 flex items-center justify-between gap-1 sm:gap-2 bg-slate-800 px-2 sm:px-3 py-1 sm:py-1.5 rounded-xl border border-slate-700 overflow-hidden">
-              <button
-                type="button"
-                onClick={handleOpenDatePicker}
-                className="flex items-center gap-1.5 hover:opacity-80 transition-opacity text-left min-w-0 flex-1"
-                title="Clique para abrir o calendário"
-              >
-                <CalendarDays className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-400 shrink-0" />
-                <div className="flex flex-col text-left min-w-0">
-                  <span className="text-[8px] sm:text-[10px] text-slate-400 font-bold uppercase leading-none truncate">Data da Operação</span>
-                  <span className="text-[11px] sm:text-xs font-bold text-white capitalize truncate">
-                    {formatFullDate(selectedDate)}
-                  </span>
+          {/* PAINEL ESQUERDO: Título, Ações e Calendário Interativo */}
+          <div className="w-full lg:w-[330px] shrink-0 flex flex-col gap-3.5">
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5 text-xs font-bold text-blue-600 uppercase tracking-wider mb-0.5">
+                  <LayoutDashboard className="w-4 h-4 shrink-0" />
+                  <span className="truncate">Gestão Operacional de Docas</span>
                 </div>
-              </button>
+                <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">Controle de Docas & Janelas</h1>
+              </div>
 
-              {/* Native Date Picker with dark theme color scheme */}
-              <input
-                ref={dateInputRef}
-                type="date"
-                value={selectedDate}
-                onChange={e => {
-                  if (e.target.value) {
-                    setSelectedDate(e.target.value);
-                  }
+              {onOpenTimeSlotConfig && effectiveIsAdmin && (
+                <button
+                  onClick={onOpenTimeSlotConfig}
+                  className="inline-flex items-center gap-1.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold px-3 py-1.5 rounded-xl border border-slate-700 shadow-xs transition-colors cursor-pointer shrink-0"
+                  title="Cadastrar e gerenciar janelas de horário e capacidade de docas (Exclusivo Administrador)"
+                >
+                  <Clock className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                  <span className="hidden sm:inline">Janelas & Docas</span>
+                </button>
+              )}
+            </div>
+
+            {/* Calendário Interativo: no Desktop fica embutido; no Mobile usamos a barra compacta com popover */}
+            {/* Versão Desktop (lg e acima): Grid completo expandido com largura de 100% no container de 330px */}
+            <div className="hidden lg:flex w-full">
+              <InteractiveCalendar
+                selectedDate={selectedDate}
+                onSelectDate={(newDate) => {
+                  setSelectedDate(newDate);
                 }}
-                className="bg-slate-900 text-amber-300 font-bold text-[10px] sm:text-xs px-1.5 py-0.5 sm:py-1 rounded-lg border border-slate-600 focus:ring-1 focus:ring-amber-400 focus:outline-none cursor-pointer [color-scheme:dark] shrink-0 w-[100px] sm:w-[125px]"
-                title="Escolher data no calendário"
+                appointmentsCountByDate={appointmentsCountByDate}
+                inline={true}
               />
             </div>
 
-            {/* Next Day */}
-            <button
-              type="button"
-              onClick={() => shiftDate(1)}
-              className="p-1 sm:p-1.5 hover:bg-slate-800 text-slate-300 hover:text-white rounded-xl transition-colors shrink-0"
-              title="Próximo dia"
-            >
-              <ChevronRight className="w-4 h-4" />
-            </button>
+            {/* Versão Mobile/Tablet (< lg): Barra compacta com popover exatamente como antes */}
+            <div className="lg:hidden relative w-full">
+              <div className="w-full flex items-center justify-between gap-1.5 bg-slate-900 text-white p-1.5 rounded-2xl border border-slate-800 shadow-md">
+                {/* Dia Anterior */}
+                <button
+                  type="button"
+                  onClick={() => shiftDate(-1)}
+                  className="p-1.5 hover:bg-slate-800 text-slate-300 hover:text-white rounded-xl transition-colors shrink-0 cursor-pointer"
+                  title="Dia anterior"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
 
-            {/* Quick Today button */}
-            {selectedDate !== todayStr ? (
-              <button
-                type="button"
-                onClick={() => setSelectedDate(todayStr)}
-                className="px-2 sm:px-2.5 py-1 text-[10px] sm:text-xs bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl transition-colors shadow-2xs cursor-pointer shrink-0"
-              >
-                Hoje
-              </button>
-            ) : (
-              <span className="px-2 sm:px-2.5 py-1 text-[10px] sm:text-xs bg-emerald-950 text-emerald-300 border border-emerald-800 font-bold rounded-xl shrink-0">
-                Hoje
-              </span>
-            )}
+                {/* Seletor com Data Formatada */}
+                <div
+                  onClick={handleOpenDatePicker}
+                  className="flex-1 min-w-0 flex items-center justify-between gap-2 bg-slate-800 hover:bg-slate-700/80 px-2.5 py-1.5 rounded-xl border border-slate-700 overflow-hidden cursor-pointer transition-colors"
+                  title="Toque para abrir o calendário"
+                >
+                  <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                    <CalendarDays className="w-4 h-4 text-amber-400 shrink-0" />
+                    <div className="flex flex-col text-left min-w-0">
+                      <span className="text-[9px] text-slate-400 font-bold uppercase leading-none truncate">Data da Operação</span>
+                      <span className="text-xs font-bold text-white capitalize truncate">
+                        {formatFullDate(selectedDate)}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1 bg-slate-900 text-amber-300 font-bold text-[11px] px-2 py-0.5 rounded-lg border border-slate-600 shrink-0">
+                    <span>{formatBrDate(selectedDate)}</span>
+                    <Calendar className="w-3 h-3 text-slate-400" />
+                  </div>
+                </div>
+
+                {/* Próximo Dia */}
+                <button
+                  type="button"
+                  onClick={() => shiftDate(1)}
+                  className="p-1.5 hover:bg-slate-800 text-slate-300 hover:text-white rounded-xl transition-colors shrink-0 cursor-pointer"
+                  title="Próximo dia"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+
+                {/* Botão Hoje */}
+                {selectedDate !== todayStr ? (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedDate(todayStr)}
+                    className="px-2.5 py-1 text-xs bg-emerald-700 hover:bg-emerald-600 text-white font-bold rounded-xl transition-colors shadow-2xs cursor-pointer shrink-0"
+                  >
+                    Hoje
+                  </button>
+                ) : (
+                  <span className="px-2.5 py-1 text-xs bg-emerald-950 text-emerald-300 border border-emerald-800 font-bold rounded-xl shrink-0">
+                    Hoje
+                  </span>
+                )}
+              </div>
+
+              {/* Popover no mobile quando clica no seletor */}
+              {isCalendarOpen && (
+                <div className="absolute left-0 right-0 top-full mt-2 z-50 flex justify-center shadow-2xl">
+                  <InteractiveCalendar
+                    selectedDate={selectedDate}
+                    onSelectDate={(newDate) => {
+                      setSelectedDate(newDate);
+                      setIsCalendarOpen(false);
+                    }}
+                    onClose={() => setIsCalendarOpen(false)}
+                    appointmentsCountByDate={appointmentsCountByDate}
+                    inline={false}
+                  />
+                </div>
+              )}
+            </div>
           </div>
+
+          {/* PAINEL DIREITO: Painel de Contagem de Cargas (Grid 2x3 compacto e proporcional ao calendário) */}
+          <div className="flex-1 flex flex-col justify-between bg-slate-50/70 border border-slate-200/80 rounded-2xl p-4 sm:p-5">
+            <div className="flex items-center justify-between pb-3 mb-3 border-b border-slate-200">
+              <div className="flex items-center gap-2">
+                <Truck className="w-4 h-4 text-slate-700" />
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-700">
+                  Resumo Operacional do Dia
+                </span>
+              </div>
+              <span className="text-xs font-bold px-2.5 py-0.5 bg-blue-100 text-blue-800 rounded-full">
+                {totalDay} carga{totalDay === 1 ? '' : 's'} no total
+              </span>
+            </div>
+
+            {/* Grid 2 colunas x 3 linhas em proporção elegante com os cards de status */}
+            <div className="grid grid-cols-2 md:grid-cols-2 xl:grid-cols-3 gap-3 flex-1">
+              {/* 1: Programados */}
+              <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs flex flex-col justify-between hover:border-slate-300 transition-colors">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-xs text-slate-600 font-bold uppercase tracking-wide truncate">Programados</span>
+                  <Calendar className="w-4 h-4 text-slate-400 shrink-0" />
+                </div>
+                <div className="flex items-baseline justify-between mt-1">
+                  <span className="text-2xl sm:text-2xl lg:text-4xl xl:text-5xl font-black text-slate-900 tracking-tight leading-none">{totalDay}</span>
+                  <span className="text-xs text-slate-400 font-semibold">Agendadas</span>
+                </div>
+              </div>
+
+              {/* 2: Na Portaria / Pátio */}
+              <div className="bg-purple-50/80 border border-purple-200/80 p-3.5 rounded-xl shadow-2xs flex flex-col justify-between hover:border-purple-300 transition-colors">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-xs text-purple-900 font-bold uppercase tracking-wide truncate">No Pátio</span>
+                  <Building2 className="w-4 h-4 text-purple-600 shrink-0" />
+                </div>
+                <div className="flex items-baseline justify-between mt-1">
+                  <span className="text-2xl sm:text-2xl lg:text-4xl xl:text-5xl font-black text-purple-950 tracking-tight leading-none">{noPatio}</span>
+                  <span className="text-xs text-purple-600 font-semibold">Aguardando</span>
+                </div>
+              </div>
+
+              {/* 3: Em Trânsito */}
+              <div className="bg-blue-50/80 border border-blue-200/80 p-3.5 rounded-xl shadow-2xs flex flex-col justify-between hover:border-blue-300 transition-colors">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-xs text-blue-900 font-bold uppercase tracking-wide truncate">Em Trânsito</span>
+                  <Truck className="w-4 h-4 text-blue-600 shrink-0" />
+                </div>
+                <div className="flex items-baseline justify-between mt-1">
+                  <span className="text-2xl sm:text-2xl lg:text-4xl xl:text-5xl font-black text-blue-950 tracking-tight leading-none">{inProgress}</span>
+                  <span className="text-xs text-blue-600 font-semibold">A caminho</span>
+                </div>
+              </div>
+
+              {/* 4: Liberação / Descarga */}
+              <div className="bg-amber-50/80 border border-amber-200/80 p-3.5 rounded-xl shadow-2xs flex flex-col justify-between hover:border-amber-300 transition-colors">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-xs text-amber-900 font-bold uppercase tracking-wide truncate">Em Descarga</span>
+                  <Clock className="w-4 h-4 text-amber-600 shrink-0" />
+                </div>
+                <div className="flex items-baseline justify-between mt-1">
+                  <span className="text-2xl sm:text-2xl lg:text-4xl xl:text-5xl font-black text-amber-950 tracking-tight leading-none">{aguardandoDescarga}</span>
+                  <span className="text-xs text-amber-600 font-semibold">Nas docas</span>
+                </div>
+              </div>
+
+              {/* 5: Concluído OK */}
+              <div className="bg-emerald-50/80 border border-emerald-200/80 p-3.5 rounded-xl shadow-2xs flex flex-col justify-between hover:border-emerald-300 transition-colors">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-xs text-emerald-900 font-bold uppercase tracking-wide truncate">Concluído OK</span>
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                </div>
+                <div className="flex items-baseline justify-between mt-1">
+                  <span className="text-2xl sm:text-2xl lg:text-4xl xl:text-5xl font-black text-emerald-950 tracking-tight leading-none">{completedClean}</span>
+                  <span className="text-xs text-emerald-600 font-semibold">Finalizadas</span>
+                </div>
+              </div>
+
+              {/* 6: Divergências */}
+              <div className="bg-orange-50/80 border border-orange-200/80 p-3.5 rounded-xl shadow-2xs flex flex-col justify-between hover:border-orange-300 transition-colors">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-xs text-orange-900 font-bold uppercase tracking-wide truncate">Divergências</span>
+                  <AlertTriangle className="w-4 h-4 text-orange-600 shrink-0" />
+                </div>
+                <div className="flex items-baseline justify-between mt-1">
+                  <span className="text-2xl sm:text-2xl lg:text-4xl xl:text-5xl font-black text-orange-950 tracking-tight leading-none">{completedDivergent}</span>
+                  <span className="text-xs text-orange-600 font-semibold">{noShowCount > 0 ? `+${noShowCount} No-show` : 'Ressalvas'}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
         </div>
       </div>
 
@@ -517,39 +642,6 @@ export const AdminDockDashboard: React.FC<AdminDockDashboardProps> = ({
           </div>
         </div>
       )}
-
-      {/* Operational KPI Grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-2 sm:gap-3">
-        <div className="bg-white p-2.5 sm:p-3.5 rounded-xl border border-slate-200 text-center shadow-2xs">
-          <span className="text-[10px] sm:text-[11px] text-slate-500 font-semibold uppercase block truncate">Programados</span>
-          <span className="text-lg sm:text-2xl font-bold text-slate-900">{totalDay}</span>
-        </div>
-
-        <div className="bg-purple-50 border border-purple-200 p-2.5 sm:p-3.5 rounded-xl text-center shadow-2xs">
-          <span className="text-[10px] sm:text-[11px] text-purple-800 font-semibold uppercase block truncate">Na Portaria / Pátio</span>
-          <span className="text-lg sm:text-2xl font-bold text-purple-950">{noPatio}</span>
-        </div>
-
-        <div className="bg-emerald-50 border border-emerald-200 p-2.5 sm:p-3.5 rounded-xl text-center shadow-2xs">
-          <span className="text-[10px] sm:text-[11px] text-emerald-800 font-semibold uppercase block truncate">Lib. Descarga</span>
-          <span className="text-lg sm:text-2xl font-bold text-emerald-950">{aguardandoDescarga}</span>
-        </div>
-
-        <div className="bg-blue-50 border border-blue-200 p-2.5 sm:p-3.5 rounded-xl text-center shadow-2xs">
-          <span className="text-[10px] sm:text-[11px] text-blue-700 font-semibold uppercase block truncate">Em Trânsito</span>
-          <span className="text-lg sm:text-2xl font-bold text-blue-900">{inProgress}</span>
-        </div>
-
-        <div className="bg-teal-50 border border-teal-200 p-2.5 sm:p-3.5 rounded-xl text-center shadow-2xs">
-          <span className="text-[10px] sm:text-[11px] text-teal-800 font-semibold uppercase block truncate">Concluído OK</span>
-          <span className="text-lg sm:text-2xl font-bold text-teal-950">{completedClean}</span>
-        </div>
-
-        <div className="bg-orange-50 border border-orange-200 p-2.5 sm:p-3.5 rounded-xl text-center shadow-2xs">
-          <span className="text-[10px] sm:text-[11px] text-orange-800 font-semibold uppercase block truncate">Divergência</span>
-          <span className="text-lg sm:text-2xl font-bold text-orange-950">{completedDivergent}</span>
-        </div>
-      </div>
 
       {/* Toast Notification for Drag and Drop / Quick Move Feedback */}
       {feedbackToast && (
