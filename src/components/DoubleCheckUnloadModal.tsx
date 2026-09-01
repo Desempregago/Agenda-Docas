@@ -19,7 +19,7 @@ import {
   Phone
 } from 'lucide-react';
 import { Appointment, Dock, SystemUser } from '../types';
-import { formatCurrencyBRL, parseCurrencyInput, formatNfeAccessKey, cleanNfeAccessKey, extractNfeKeysFromText, formatCpf } from '../utils/formatters';
+import { formatCurrencyBRL, parseCurrencyInput, formatNfeAccessKey, cleanNfeAccessKey, extractNfeKeysFromText, formatCpf, formatPhone } from '../utils/formatters';
 
 interface DoubleCheckUnloadModalProps {
   isOpen: boolean;
@@ -710,9 +710,10 @@ export const DoubleCheckUnloadModal: React.FC<DoubleCheckUnloadModalProps> = ({
                 <input
                   type="text"
                   placeholder="(11) 98765-4321"
+                  maxLength={15}
                   value={driverPhone}
-                  onChange={e => setDriverPhone(e.target.value)}
-                  className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-purple-500 focus:outline-none"
+                  onChange={e => setDriverPhone(formatPhone(e.target.value))}
+                  className="w-full px-3 py-1.5 text-xs font-mono border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-purple-500 focus:outline-none"
                 />
               </div>
             </div>

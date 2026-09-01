@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { X, Calendar, Clock, Truck, FileText, CheckCircle2, Copy, AlertCircle, Lock, MapPin, Building2, Info, Sparkles, KeyRound, Plus, Trash2, DollarSign, User, ShieldCheck, AlertTriangle } from 'lucide-react';
 import { Appointment, Dock, DestinationBranch } from '../types';
 import { SupplierSession } from './SupplierLoginModal';
-import { formatCpf, formatCurrencyBRL, parseCurrencyInput, formatNfeAccessKey, cleanNfeAccessKey, extractNfeKeysFromText } from '../utils/formatters';
+import { formatCpf, formatPhone, formatCurrencyBRL, parseCurrencyInput, formatNfeAccessKey, cleanNfeAccessKey, extractNfeKeysFromText } from '../utils/formatters';
 import {
   getDayOfWeekFromDate,
   getDayName,
@@ -880,9 +880,10 @@ export const ClientNewAppointmentModal: React.FC<ClientNewAppointmentModalProps>
                     <input
                       type="text"
                       placeholder="(11) 98765-4321"
+                      maxLength={15}
                       value={formData.driverPhone}
-                      onChange={e => setFormData({ ...formData, driverPhone: e.target.value })}
-                      className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      onChange={e => setFormData({ ...formData, driverPhone: formatPhone(e.target.value) })}
+                      className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 font-mono"
                     />
                   </div>
                 </div>

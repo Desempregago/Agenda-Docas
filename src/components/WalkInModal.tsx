@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, ShieldCheck, Truck, FileText, CheckCircle2, AlertTriangle, Zap, MapPin, KeyRound, Plus, Trash2, DollarSign, User, Building2, Sparkles, Loader2 } from 'lucide-react';
 import { Appointment, Dock, DestinationBranch } from '../types';
-import { formatCpf, formatCnpj, parseCurrencyInput, cleanNfeAccessKey, extractNfeKeysFromText } from '../utils/formatters';
+import { formatCpf, formatCnpj, formatPhone, parseCurrencyInput, cleanNfeAccessKey, extractNfeKeysFromText } from '../utils/formatters';
 
 interface WalkInModalProps {
   isOpen: boolean;
@@ -632,9 +632,10 @@ export const WalkInModal: React.FC<WalkInModalProps> = ({
               <input
                 type="text"
                 placeholder="(11) 99999-0000"
+                maxLength={15}
                 value={formData.driverPhone}
-                onChange={e => setFormData({ ...formData, driverPhone: e.target.value })}
-                className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-amber-500"
+                onChange={e => setFormData({ ...formData, driverPhone: formatPhone(e.target.value) })}
+                className="w-full px-3 py-2 text-xs font-mono border border-slate-300 rounded-xl focus:ring-2 focus:ring-amber-500"
               />
             </div>
           </div>

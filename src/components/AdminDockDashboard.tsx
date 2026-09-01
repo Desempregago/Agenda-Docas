@@ -186,6 +186,11 @@ export const AdminDockDashboard: React.FC<AdminDockDashboardProps> = ({
 
   // Helper to determine if an appointment belongs to a dock
   const isAppointmentAssignedToDock = (appt: Appointment, dock: Dock) => {
+    // Se o agendamento está na fila da portaria/pátio, ele não ocupa/pertence a nenhuma doca física ainda
+    if (appt.status === 'NO_PATIO') {
+      return false;
+    }
+
     // Se o agendamento não tem doca atribuída ou foi desatribuído (-- Atribuir Doca --), não pertence a nenhuma doca
     if (!appt.dockId || appt.dockId.trim() === '') {
       return false;
@@ -324,13 +329,13 @@ export const AdminDockDashboard: React.FC<AdminDockDashboardProps> = ({
     const appt = appointments.find(a => a.id === apptId || a.protocol === apptId);
     if (!appt) return;
 
-    if (appt.status === 'NO_PATIO') {
+    if (appt.status === 'NO_PATIO' && !appt.dockId) {
       showToast(`O agendamento ${appt.protocol} já está na fila do pátio.`, 'info');
       return;
     }
 
-    await onUpdateStatus(appt.id, 'NO_PATIO', appt.dockId);
-    showToast(`Veículo ${appt.protocol} retornado para a fila do Pátio / Portaria.`, 'info');
+    await onUpdateStatus(appt.id, 'NO_PATIO', '');
+    showToast(`Veículo ${appt.protocol} retornado para a fila do Pátio / Portaria e liberado da doca.`, 'info');
   };
 
   const handleQuickMoveConfirm = async (targetDockId: string | null) => {
@@ -338,7 +343,7 @@ export const AdminDockDashboard: React.FC<AdminDockDashboardProps> = ({
     const targetDock = activeDocksToDisplay.find(d => d.id === targetDockId);
     
     if (targetDockId === 'PATIO') {
-      await onUpdateStatus(quickMoveAppt.id, 'NO_PATIO', quickMoveAppt.dockId);
+      await onUpdateStatus(quickMoveAppt.id, 'NO_PATIO', '');
       showToast(`Veículo ${quickMoveAppt.protocol} movido para a Fila do Pátio.`, 'info');
     } else if (targetDock) {
       if (!targetDock.isOperational) {
@@ -670,18 +675,9 @@ export const AdminDockDashboard: React.FC<AdminDockDashboardProps> = ({
 
                   <div className="flex items-center gap-2 shrink-0">
                     <button
-                      onClick={() => setQuickMoveAppt(appt)}
-                      className="inline-flex items-center justify-center gap-1 bg-slate-700/80 hover:bg-slate-700 text-purple-200 border border-purple-500/40 text-xs font-semibold px-2.5 py-2 rounded-xl transition-all cursor-pointer shadow-2xs"
-                      title="Mover para doca rapidamente"
-                    >
-                      <Move className="w-3.5 h-3.5" />
-                      <span>Mover</span>
-                    </button>
-
-                    <button
                       onClick={() => setSelectedApptForDoubleCheck(appt)}
                       className="inline-flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs px-3.5 py-2 rounded-xl shadow-md transition-all active:scale-95 shrink-0 cursor-pointer"
-                      title="Prevenção de Perdas: Realizar Double Check de chaves de acesso, valor e boleto antes de liberar"
+                      title="Prevenção de Perdas: Realizar Double Check de chaves de acesso, valor, dados do motorista e boleto antes de liberar"
                     >
                       <ArrowRightCircle className="w-4 h-4 shrink-0" />
                       <span>Liberar</span>
