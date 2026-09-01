@@ -13,6 +13,10 @@ import {
   ShieldAlert,
   Zap,
   Calendar,
+  Edit2,
+  Layers,
+  Package,
+  Truck,
 } from 'lucide-react';
 import { Dock } from '../types';
 import {
@@ -60,8 +64,11 @@ export const TimeSlotConfigModal: React.FC<TimeSlotConfigModalProps> = ({
   const [newDockName, setNewDockName] = useState('');
   const [newDockType, setNewDockType] = useState('PALETIZADA');
   const [newDockCapacity, setNewDockCapacity] = useState(2);
-  const [newDockDailyLimit, setNewDockDailyLimit] = useState(140);
+  const [newDockDailyLimit, setNewDockDailyLimit] = useState<number>(140);
   const [newDockLimitUnit, setNewDockLimitUnit] = useState<'pallets' | 'volumes'>('pallets');
+
+  // Editing state for existing docks
+  const [editingDockId, setEditingDockId] = useState<string | null>(null);
 
   const [savedSuccess, setSavedSuccess] = useState(false);
 
@@ -72,6 +79,7 @@ export const TimeSlotConfigModal: React.FC<TimeSlotConfigModalProps> = ({
       setActiveSlots(timeSlots ? [...timeSlots] : []);
       setActiveLimits(slotLimits ? { ...slotLimits } : {});
       setSavedSuccess(false);
+      setEditingDockId(null);
 
       // Load operating days from API
       authFetch('/api/operating-days')
@@ -200,6 +208,19 @@ export const TimeSlotConfigModal: React.FC<TimeSlotConfigModalProps> = ({
     setNewDockCapacity(2);
   };
 
+  // Update specific fields of a dock
+  const handleUpdateDockField = (dockId: string, field: keyof Dock, value: any) => {
+    setActiveDocks(prev =>
+      prev.map(d => {
+        if (d.id !== dockId) return d;
+        return {
+          ...d,
+          [field]: value,
+        };
+      })
+    );
+  };
+
   // Remove dock
   const handleRemoveDock = (dockId: string) => {
     if (activeDocks.length <= 1) {
@@ -291,7 +312,7 @@ export const TimeSlotConfigModal: React.FC<TimeSlotConfigModalProps> = ({
             <div>
               <h2 className="text-base sm:text-lg font-bold">Configuração Operacional: Docas, Janelas & Dias</h2>
               <p className="text-xs text-slate-300">
-                Gerencie as docas físicas, capacidade por janela e dias de atendimento do sistema
+                Gerencie as docas físicas, limites diários de carga, capacidades e escala semanal
               </p>
             </div>
           </div>
@@ -314,7 +335,7 @@ export const TimeSlotConfigModal: React.FC<TimeSlotConfigModalProps> = ({
             }`}
           >
             <Building2 className="w-4 h-4" />
-            <span>Docas Físicas ({activeDocks.length})</span>
+            <span>Docas Físicas & Limites ({activeDocks.length})</span>
           </button>
 
           <button
@@ -326,7 +347,7 @@ export const TimeSlotConfigModal: React.FC<TimeSlotConfigModalProps> = ({
             }`}
           >
             <Clock className="w-4 h-4" />
-            <span>Janelas & Capacidades ({activeSlots.length})</span>
+            <span>Janelas & Veículos ({activeSlots.length})</span>
           </button>
 
           <button
@@ -345,7 +366,7 @@ export const TimeSlotConfigModal: React.FC<TimeSlotConfigModalProps> = ({
         {/* Content Body */}
         <div className="p-6 overflow-y-auto flex-1 space-y-6">
           
-          {/* TAB 1: DOCAS */}
+          {/* TAB 1: DOCAS E LIMITES DE CARGA */}
           {activeTab === 'docks' && (
             <div className="space-y-6">
               {/* Add Dock Form */}
@@ -355,13 +376,13 @@ export const TimeSlotConfigModal: React.FC<TimeSlotConfigModalProps> = ({
                   <span>Adicionar Nova Doca Física</span>
                 </h3>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3">
                   <div>
                     <label className="block text-xs font-semibold text-slate-600 mb-1">Tipo de Carga</label>
                     <select
                       value={newDockType}
                       onChange={e => handleTypeChange(e.target.value)}
-                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs sm:text-sm font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none"
                     >
                       <option value="PALETIZADA">Paletizada (Padrão)</option>
                       <option value="REFRIGERADA">Refrigerada / Climatizada</option>
@@ -374,42 +395,66 @@ export const TimeSlotConfigModal: React.FC<TimeSlotConfigModalProps> = ({
                     <label className="block text-xs font-semibold text-slate-600 mb-1">Nome / Identificação</label>
                     <input
                       type="text"
-                      placeholder={`Ex: Doca ${String(getNextSequentialDockNumber(activeDocks)).padStart(2, '0')}`}
+                      placeholder={`Ex: Mercearia ou Doca ${String(getNextSequentialDockNumber(activeDocks)).padStart(2, '0')}`}
                       value={newDockName}
                       onChange={e => setNewDockName(e.target.value)}
-                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs sm:text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1">Capacidade Simultânea</label>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">Veículos/Janela</label>
                     <input
                       type="number"
                       min={1}
-                      max={10}
+                      max={20}
                       value={newDockCapacity}
                       onChange={e => setNewDockCapacity(Math.max(1, parseInt(e.target.value) || 1))}
-                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs sm:text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none"
                     />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">
+                      Limite Diário ({newDockLimitUnit === 'pallets' ? 'Paletes' : 'Volumes'})
+                    </label>
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="number"
+                        min={1}
+                        max={5000}
+                        value={newDockDailyLimit}
+                        onChange={e => setNewDockDailyLimit(Math.max(1, parseInt(e.target.value) || 1))}
+                        className="w-full px-2 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                      />
+                      <select
+                        value={newDockLimitUnit}
+                        onChange={e => setNewDockLimitUnit(e.target.value as any)}
+                        className="px-2 py-2 bg-slate-100 border border-slate-300 rounded-xl text-[11px] font-semibold text-slate-700 focus:outline-none"
+                      >
+                        <option value="pallets">pallets</option>
+                        <option value="volumes">volumes</option>
+                      </select>
+                    </div>
                   </div>
 
                   <div className="flex items-end">
                     <button
                       onClick={handleAddDock}
-                      className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs sm:text-sm font-bold rounded-xl shadow-md transition-all active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer"
+                      className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-md transition-all active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer h-[38px]"
                     >
                       <Plus className="w-4 h-4" />
-                      <span>Cadastrar Doca</span>
+                      <span>Cadastrar</span>
                     </button>
                   </div>
                 </div>
               </div>
 
-              {/* Docks List */}
+              {/* Docks List with Direct Inline Modulation */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between text-xs font-bold text-slate-500 px-1">
-                  <span>Docas Cadastradas ({activeDocks.length})</span>
-                  <span>Operação & Status</span>
+                  <span>Docas Cadastradas & Modulação de Limites ({activeDocks.length})</span>
+                  <span>Modulação em Tempo Real</span>
                 </div>
 
                 {activeDocks.length === 0 ? (
@@ -419,70 +464,176 @@ export const TimeSlotConfigModal: React.FC<TimeSlotConfigModalProps> = ({
                     <p className="text-xs text-slate-500">Utilize o formulário acima para adicionar uma doca.</p>
                   </div>
                 ) : (
-                  activeDocks.map((dock, idx) => (
-                    <div
-                      key={`dock-${dock.id}-${idx}`}
-                      className={`p-4 rounded-2xl border flex items-center justify-between gap-4 transition-all ${
-                        dock.isOperational
-                          ? 'bg-white border-slate-200 shadow-xs hover:border-slate-300'
-                          : 'bg-rose-50/50 border-rose-200 opacity-75'
-                      }`}
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className={`p-2.5 rounded-xl border ${
+                  activeDocks.map((dock, idx) => {
+                    const isEditing = editingDockId === dock.id;
+
+                    return (
+                      <div
+                        key={`dock-${dock.id}-${idx}`}
+                        className={`p-4 rounded-2xl border transition-all ${
                           dock.isOperational
-                            ? 'bg-blue-50 text-blue-600 border-blue-200'
-                            : 'bg-rose-100 text-rose-600 border-rose-300'
-                        }`}>
-                          <Building2 className="w-5 h-5" />
-                        </div>
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <span className="font-bold text-slate-800 text-sm">{dock.name}</span>
-                            <span className="font-mono text-[10px] font-bold bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-md text-slate-700">
-                              {dock.id}
-                            </span>
-                            <span className="text-[10px] font-bold bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-md text-indigo-700">
-                              {dock.type}
-                            </span>
+                            ? 'bg-white border-slate-200 shadow-xs hover:border-slate-300'
+                            : 'bg-rose-50/50 border-rose-200 opacity-80'
+                        }`}
+                      >
+                        {/* Top Line: Header & Operational Switch */}
+                        <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-100">
+                          <div className="flex items-center gap-3">
+                            <div className={`p-2.5 rounded-xl border ${
+                              dock.isOperational
+                                ? 'bg-blue-50 text-blue-600 border-blue-200'
+                                : 'bg-rose-100 text-rose-600 border-rose-300'
+                            }`}>
+                              <Building2 className="w-5 h-5" />
+                            </div>
+
+                            <div>
+                              {isEditing ? (
+                                <div className="flex items-center gap-2">
+                                  <input
+                                    type="text"
+                                    value={dock.name}
+                                    onChange={e => handleUpdateDockField(dock.id, 'name', e.target.value)}
+                                    placeholder="Nome da Doca"
+                                    className="px-2 py-1 border border-blue-400 rounded-lg text-xs font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                  />
+                                  <select
+                                    value={dock.type}
+                                    onChange={e => handleUpdateDockField(dock.id, 'type', e.target.value)}
+                                    className="px-2 py-1 bg-white border border-slate-300 rounded-lg text-xs font-semibold"
+                                  >
+                                    <option value="PALETIZADA">PALETIZADA</option>
+                                    <option value="REFRIGERADA">REFRIGERADA</option>
+                                    <option value="BATIDA">BATIDA</option>
+                                    <option value="FRACIONADA">FRACIONADA</option>
+                                  </select>
+                                  <button
+                                    onClick={() => setEditingDockId(null)}
+                                    className="p-1 bg-emerald-600 text-white rounded-lg text-xs font-bold cursor-pointer"
+                                    title="Concluir edição de nome"
+                                  >
+                                    <Check className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              ) : (
+                                <div className="flex items-center gap-2">
+                                  <span className="font-bold text-slate-800 text-sm">{dock.name}</span>
+                                  <span className="font-mono text-[10px] font-bold bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-md text-slate-700">
+                                    {dock.id}
+                                  </span>
+                                  <span className="text-[10px] font-bold bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-md text-indigo-700">
+                                    {dock.type}
+                                  </span>
+                                  <button
+                                    onClick={() => setEditingDockId(dock.id)}
+                                    className="text-slate-400 hover:text-blue-600 p-0.5 rounded transition-colors cursor-pointer"
+                                    title="Editar nome e tipo da doca"
+                                  >
+                                    <Edit2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              )}
+                            </div>
                           </div>
-                          <p className="text-xs text-slate-500 mt-0.5">
-                            Capacidade: <strong>{dock.capacityPerSlot} caminhão(ões)/janela</strong>
-                            {dock.dailyLimit && (
-                              <span> • Limite Diário: <strong>{dock.dailyLimit} {dock.limitUnit || 'volumes'}</strong></span>
-                            )}
-                          </p>
+
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => handleToggleDockOperational(dock.id)}
+                              className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-colors cursor-pointer ${
+                                dock.isOperational
+                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-300 hover:bg-emerald-100'
+                                  : 'bg-rose-50 text-rose-700 border-rose-300 hover:bg-rose-100'
+                              }`}
+                            >
+                              {dock.isOperational ? 'Ativa / Operacional' : 'Em Manutenção'}
+                            </button>
+
+                            <button
+                              onClick={() => handleRemoveDock(dock.id)}
+                              className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer"
+                              title="Excluir Doca"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Bottom Line: Direct Modular Limit Inputs */}
+                        <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 bg-slate-50 p-3 rounded-xl border border-slate-200/80">
+                          {/* Modulação de Capacidade de Veículos */}
+                          <div className="flex items-center justify-between sm:justify-start gap-2">
+                            <div className="flex items-center gap-1.5 text-xs text-slate-600 font-medium">
+                              <Truck className="w-3.5 h-3.5 text-blue-600" />
+                              <span>Veículos / Janela:</span>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <input
+                                type="number"
+                                min={1}
+                                max={20}
+                                value={dock.capacityPerSlot}
+                                onChange={e =>
+                                  handleUpdateDockField(
+                                    dock.id,
+                                    'capacityPerSlot',
+                                    Math.max(1, parseInt(e.target.value) || 1)
+                                  )
+                                }
+                                className="w-16 px-2 py-1 bg-white border border-slate-300 rounded-lg text-xs font-bold text-center text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none shadow-2xs"
+                              />
+                              <span className="text-[11px] text-slate-500">veíc.</span>
+                            </div>
+                          </div>
+
+                          {/* Modulação de Limite Diário de Carga */}
+                          <div className="flex items-center justify-between sm:justify-start gap-2">
+                            <div className="flex items-center gap-1.5 text-xs text-slate-600 font-medium">
+                              <Layers className="w-3.5 h-3.5 text-indigo-600" />
+                              <span>Limite Diário de Carga:</span>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <input
+                                type="number"
+                                min={1}
+                                max={9999}
+                                value={dock.dailyLimit || 100}
+                                onChange={e =>
+                                  handleUpdateDockField(
+                                    dock.id,
+                                    'dailyLimit',
+                                    Math.max(1, parseInt(e.target.value) || 1)
+                                  )
+                                }
+                                className="w-20 px-2 py-1 bg-white border border-slate-300 rounded-lg text-xs font-bold text-center text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none shadow-2xs"
+                              />
+                            </div>
+                          </div>
+
+                          {/* Seletor de Unidade */}
+                          <div className="flex items-center justify-between sm:justify-start gap-2">
+                            <div className="flex items-center gap-1.5 text-xs text-slate-600 font-medium">
+                              <Package className="w-3.5 h-3.5 text-amber-600" />
+                              <span>Unidade do Limite:</span>
+                            </div>
+                            <select
+                              value={dock.limitUnit || 'pallets'}
+                              onChange={e => handleUpdateDockField(dock.id, 'limitUnit', e.target.value)}
+                              className="px-2.5 py-1 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-700 focus:ring-2 focus:ring-blue-500 focus:outline-none shadow-2xs cursor-pointer"
+                            >
+                              <option value="pallets">pallets (Paletes)</option>
+                              <option value="volumes">volumes (Caixas)</option>
+                            </select>
+                          </div>
                         </div>
                       </div>
-
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => handleToggleDockOperational(dock.id)}
-                          className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-colors cursor-pointer ${
-                            dock.isOperational
-                              ? 'bg-emerald-50 text-emerald-700 border-emerald-300 hover:bg-emerald-100'
-                              : 'bg-rose-50 text-rose-700 border-rose-300 hover:bg-rose-100'
-                          }`}
-                        >
-                          {dock.isOperational ? 'Ativa / Operacional' : 'Em Manutenção'}
-                        </button>
-
-                        <button
-                          onClick={() => handleRemoveDock(dock.id)}
-                          className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer"
-                          title="Excluir Doca"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
-                  ))
+                    );
+                  })
                 )}
               </div>
             </div>
           )}
 
-          {/* TAB 2: JANELAS & LIMITES */}
+          {/* TAB 2: JANELAS & CAPACIDADE DE FORNECEDORES */}
           {activeTab === 'slots' && (
             <div className="space-y-6">
               {/* Add Slot and Bulk Limit */}
