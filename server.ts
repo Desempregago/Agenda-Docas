@@ -486,7 +486,13 @@ async function startServer() {
       invoiceTotalValue,
       preventionDoubleChecked,
       preventionCheckedBy,
-      preventionCheckedAt
+      preventionCheckedAt,
+      driverName,
+      driverCpf,
+      driverPhone,
+      vehiclePlate,
+      vehicleType,
+      carrierName
     } = req.body as {
       status?: AppointmentStatus;
       dockId?: string;
@@ -501,6 +507,12 @@ async function startServer() {
       preventionDoubleChecked?: boolean;
       preventionCheckedBy?: string;
       preventionCheckedAt?: string;
+      driverName?: string;
+      driverCpf?: string;
+      driverPhone?: string;
+      vehiclePlate?: string;
+      vehicleType?: 'TRUCK_34' | 'TOCO' | 'VUC' | 'CARRETA' | 'VAN';
+      carrierName?: string;
     };
 
     const index = appointments.findIndex(a => a.id === id || a.protocol === id);
@@ -547,6 +559,12 @@ async function startServer() {
       preventionDoubleChecked: preventionDoubleChecked !== undefined ? Boolean(preventionDoubleChecked) : current.preventionDoubleChecked,
       preventionCheckedBy: preventionCheckedBy !== undefined ? preventionCheckedBy : current.preventionCheckedBy,
       preventionCheckedAt: preventionCheckedAt !== undefined ? preventionCheckedAt : current.preventionCheckedAt,
+      driverName: driverName !== undefined ? (driverName.trim() || undefined) : current.driverName,
+      driverCpf: driverCpf !== undefined ? (driverCpf.trim() || undefined) : current.driverCpf,
+      driverPhone: driverPhone !== undefined ? (driverPhone.trim() || undefined) : current.driverPhone,
+      vehiclePlate: vehiclePlate !== undefined ? (vehiclePlate.trim() ? vehiclePlate.trim().toUpperCase() : undefined) : current.vehiclePlate,
+      vehicleType: vehicleType !== undefined ? vehicleType : current.vehicleType,
+      carrierName: carrierName !== undefined ? (carrierName.trim() || current.carrierName) : current.carrierName,
       updatedAt: nowIso,
       statusTimestamps: updatedTimestamps,
       ...(discrepancy ? { discrepancy } : {})

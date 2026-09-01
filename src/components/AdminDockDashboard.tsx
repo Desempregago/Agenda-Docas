@@ -1195,7 +1195,13 @@ export const AdminDockDashboard: React.FC<AdminDockDashboardProps> = ({
                 notes: data.notes,
                 preventionDoubleChecked: true,
                 preventionCheckedBy: data.preventionCheckedBy,
-                preventionCheckedAt: new Date().toISOString()
+                preventionCheckedAt: new Date().toISOString(),
+                driverName: data.driverName,
+                driverCpf: data.driverCpf,
+                driverPhone: data.driverPhone,
+                vehiclePlate: data.vehiclePlate,
+                vehicleType: data.vehicleType,
+                carrierName: data.carrierName,
               }
             );
             setSelectedApptForDoubleCheck(null);

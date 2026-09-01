@@ -15,10 +15,11 @@ import {
   ArrowRightCircle, 
   AlertCircle,
   Copy,
-  Info
+  Info,
+  Phone
 } from 'lucide-react';
 import { Appointment, Dock, SystemUser } from '../types';
-import { formatCurrencyBRL, parseCurrencyInput, formatNfeAccessKey, cleanNfeAccessKey, extractNfeKeysFromText } from '../utils/formatters';
+import { formatCurrencyBRL, parseCurrencyInput, formatNfeAccessKey, cleanNfeAccessKey, extractNfeKeysFromText, formatCpf } from '../utils/formatters';
 
 interface DoubleCheckUnloadModalProps {
   isOpen: boolean;
@@ -36,6 +37,12 @@ interface DoubleCheckUnloadModalProps {
       invoiceDueDate?: string;
       notes?: string;
       preventionCheckedBy?: string;
+      driverName?: string;
+      driverCpf?: string;
+      driverPhone?: string;
+      vehiclePlate?: string;
+      vehicleType?: 'TRUCK_34' | 'TOCO' | 'VUC' | 'CARRETA' | 'VAN';
+      carrierName?: string;
     }
   ) => Promise<void> | void;
 }
@@ -84,6 +91,15 @@ export const DoubleCheckUnloadModal: React.FC<DoubleCheckUnloadModalProps> = ({
   const [invoiceDueDate, setInvoiceDueDate] = useState<string>(appointment.invoiceDueDate || '');
   const [notes, setNotes] = useState<string>(appointment.notes || '');
   const [operatorName, setOperatorName] = useState<string>(currentSystemUser?.name || 'Prevenção de Perdas');
+
+  // Dados do Motorista e Veículo para conferência e preenchimento na guarita/double check
+  const [driverName, setDriverName] = useState<string>(appointment.driverName || '');
+  const [driverCpf, setDriverCpf] = useState<string>(appointment.driverCpf || '');
+  const [driverPhone, setDriverPhone] = useState<string>(appointment.driverPhone || '');
+  const [vehiclePlate, setVehiclePlate] = useState<string>(appointment.vehiclePlate || '');
+  const [vehicleType, setVehicleType] = useState<'TRUCK_34' | 'TOCO' | 'VUC' | 'CARRETA' | 'VAN'>(appointment.vehicleType || 'TRUCK_34');
+  const [carrierName, setCarrierName] = useState<string>(appointment.carrierName || '');
+
   const [error, setError] = useState<string | null>(null);
   const [warningConfirm, setWarningConfirm] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
@@ -107,6 +123,12 @@ export const DoubleCheckUnloadModal: React.FC<DoubleCheckUnloadModalProps> = ({
       );
       setInvoiceDueDate(appointment.invoiceDueDate || '');
       setNotes(appointment.notes || '');
+      setDriverName(appointment.driverName || '');
+      setDriverCpf(appointment.driverCpf || '');
+      setDriverPhone(appointment.driverPhone || '');
+      setVehiclePlate(appointment.vehiclePlate || '');
+      setVehicleType(appointment.vehicleType || 'TRUCK_34');
+      setCarrierName(appointment.carrierName || '');
       setError(null);
       setWarningConfirm(null);
     }
@@ -264,6 +286,12 @@ export const DoubleCheckUnloadModal: React.FC<DoubleCheckUnloadModalProps> = ({
         invoiceDueDate: invoiceDueDate || undefined,
         notes: notes.trim() || undefined,
         preventionCheckedBy: operatorName.trim() || (currentSystemUser?.name || 'Prevenção de Perdas'),
+        driverName: driverName.trim() || undefined,
+        driverCpf: driverCpf.trim() || undefined,
+        driverPhone: driverPhone.trim() || undefined,
+        vehiclePlate: vehiclePlate.trim() ? vehiclePlate.trim().toUpperCase() : undefined,
+        vehicleType,
+        carrierName: carrierName.trim() || undefined,
       });
       onClose();
     } catch (err: any) {
@@ -330,18 +358,18 @@ export const DoubleCheckUnloadModal: React.FC<DoubleCheckUnloadModalProps> = ({
           <div>
             <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 block">Veículo / Placa</span>
             <span className="font-bold text-slate-900 font-mono block">
-              {appointment.vehiclePlate || 'NÃO INFORMADA'}
+              {vehiclePlate.trim() || appointment.vehiclePlate || 'NÃO INFORMADA'}
             </span>
-            <span className="text-[10px] text-slate-500">{appointment.vehicleType}</span>
+            <span className="text-[10px] text-slate-500">{vehicleType || appointment.vehicleType}</span>
           </div>
 
           <div>
             <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 block">Motorista</span>
             <span className="font-bold text-slate-900 truncate block">
-              {appointment.driverName || 'Não informado'}
+              {driverName.trim() || appointment.driverName || 'Pendente de preenchimento'}
             </span>
-            {appointment.driverCpf && (
-              <span className="text-[10px] font-mono text-slate-500">{appointment.driverCpf}</span>
+            {(driverCpf.trim() || appointment.driverCpf) && (
+              <span className="text-[10px] font-mono text-slate-500">{driverCpf.trim() || appointment.driverCpf}</span>
             )}
           </div>
         </div>
@@ -623,7 +651,123 @@ export const DoubleCheckUnloadModal: React.FC<DoubleCheckUnloadModalProps> = ({
             </div>
           </div>
 
-          {/* Seção 3: Doca de Destino & Números de NFs */}
+          {/* Seção 3: Identificação do Motorista & Veículo (Conferência / Registro de Acesso) */}
+          <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <label className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                <Truck className="w-4 h-4 text-purple-700" />
+                <span>Dados do Motorista & Veículo</span>
+              </label>
+              {!appointment.driverName && !appointment.driverCpf ? (
+                <span className="text-[10px] font-semibold text-amber-800 bg-amber-100 border border-amber-300 px-2 py-0.5 rounded-md flex items-center gap-1">
+                  <AlertCircle className="w-3 h-3 text-amber-600" />
+                  Não informados na solicitação inicial
+                </span>
+              ) : (
+                <span className="text-[10px] font-semibold text-slate-600 bg-slate-200/70 px-2 py-0.5 rounded-md">
+                  Conferir ou atualizar
+                </span>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {/* Nome do Motorista */}
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-700 mb-1 flex items-center gap-1">
+                  <User className="w-3 h-3 text-slate-500" />
+                  <span>Nome do Motorista</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="Ex: Carlos Alberto da Silva"
+                  value={driverName}
+                  onChange={e => setDriverName(e.target.value)}
+                  className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-purple-500 focus:outline-none"
+                />
+              </div>
+
+              {/* CPF do Motorista */}
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                  CPF do Motorista
+                </label>
+                <input
+                  type="text"
+                  placeholder="000.000.000-00"
+                  maxLength={14}
+                  value={driverCpf}
+                  onChange={e => setDriverCpf(formatCpf(e.target.value))}
+                  className="w-full px-3 py-1.5 text-xs font-mono border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-purple-500 focus:outline-none"
+                />
+              </div>
+
+              {/* Telefone / WhatsApp */}
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-700 mb-1 flex items-center gap-1">
+                  <Phone className="w-3 h-3 text-slate-500" />
+                  <span>Telefone / WhatsApp</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="(11) 98765-4321"
+                  value={driverPhone}
+                  onChange={e => setDriverPhone(e.target.value)}
+                  className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-purple-500 focus:outline-none"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+              {/* Placa do Veículo */}
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                  Placa do Veículo
+                </label>
+                <input
+                  type="text"
+                  placeholder="ABC-1234 ou ABC1D23"
+                  maxLength={8}
+                  value={vehiclePlate}
+                  onChange={e => setVehiclePlate(e.target.value.toUpperCase())}
+                  className="w-full px-3 py-1.5 text-xs font-mono font-bold uppercase border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-purple-500 focus:outline-none"
+                />
+              </div>
+
+              {/* Tipo de Veículo */}
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                  Tipo de Veículo
+                </label>
+                <select
+                  value={vehicleType}
+                  onChange={e => setVehicleType(e.target.value as any)}
+                  className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-purple-500 focus:outline-none"
+                >
+                  <option value="CARRETA">Carreta (Pesada)</option>
+                  <option value="TRUCK_34">Truck 3/4</option>
+                  <option value="TOCO">Toco</option>
+                  <option value="VUC">VUC / Urbano</option>
+                  <option value="VAN">Van / Furgão</option>
+                </select>
+              </div>
+
+              {/* Transportadora */}
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                  Transportadora (Opcional)
+                </label>
+                <input
+                  type="text"
+                  placeholder="Nome da Transportadora"
+                  value={carrierName}
+                  onChange={e => setCarrierName(e.target.value)}
+                  className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-purple-500 focus:outline-none"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Seção 4: Doca de Destino & Números de NFs */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
             {/* Doca de Descarga */}
             <div>
@@ -660,7 +804,7 @@ export const DoubleCheckUnloadModal: React.FC<DoubleCheckUnloadModalProps> = ({
             </div>
           </div>
 
-          {/* Seção 4: Operador da Prevenção & Observações */}
+          {/* Seção 5: Operador da Prevenção & Observações */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
             <div>
               <label className="block text-xs font-bold text-slate-800 mb-1 flex items-center gap-1.5">
