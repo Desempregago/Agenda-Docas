@@ -59,15 +59,16 @@ export function getSession(req: Request): SessionPayload | null {
   }
 }
 
-export function setSessionCookie(res: Response, principal: SessionPrincipal): void {
-  const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
-  res.setHeader('Set-Cookie', 
-    SESSION_COOKIE + '=' + encodeURIComponent(createSessionToken(principal)) +
-    '; Path=/; HttpOnly; SameSite=Lax; Max-Age=' + SESSION_TTL_SECONDS + secure);
+export function setSessionCookie(res: Response, principal: SessionPrincipal): string {
+  const token = createSessionToken(principal);
+  // SameSite=None; Secure ensures cookies can be sent in embedded iframe previews
+  const cookieFlags = '; Path=/; HttpOnly; SameSite=None; Secure; Partitioned; Max-Age=' + SESSION_TTL_SECONDS;
+  res.setHeader('Set-Cookie', SESSION_COOKIE + '=' + encodeURIComponent(token) + cookieFlags);
+  return token;
 }
 
 export function clearSessionCookie(res: Response): void {
-  res.setHeader('Set-Cookie', SESSION_COOKIE + '=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0');
+  res.setHeader('Set-Cookie', SESSION_COOKIE + '=; Path=/; HttpOnly; SameSite=None; Secure; Partitioned; Max-Age=0');
 }
 
 export function requireAuth(): RequestHandler {

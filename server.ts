@@ -14,7 +14,6 @@ async function startServer() {
   app.disable('x-powered-by');
   app.use((_, res, next) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
-    res.setHeader('X-Frame-Options', 'DENY');
     res.setHeader('Referrer-Policy', 'no-referrer');
     next();
   });
@@ -768,13 +767,40 @@ async function startServer() {
 
     users.push(newAdmin);
     StorageService.saveUsers(users);
-    setSessionCookie(res, { type: 'system', userId: newAdmin.id, username: newAdmin.username, role: newAdmin.role });
+    const token = setSessionCookie(res, { type: 'system', userId: newAdmin.id, username: newAdmin.username, role: newAdmin.role });
 
     const { password: _, pin: __, ...sanitized } = newAdmin;
     res.status(201).json({
       message: 'Administrador cadastrado com sucesso no servidor.',
-      user: sanitized
+      user: sanitized,
+      token
     });
+  });
+
+  // Check Current Active Session
+  app.get('/api/auth/me', (req, res) => {
+    const session = getSession(req);
+    if (!session) {
+      return res.status(401).json({ error: 'Nenhuma sessão ativa.' });
+    }
+    if (session.type === 'system') {
+      const user = users.find(u => (u.id === session.userId || u.username.toLowerCase() === session.username.toLowerCase()) && u.active !== false);
+      if (!user) {
+        return res.status(401).json({ error: 'Usuário não encontrado ou inativo.' });
+      }
+      const { password: _, pin: __, ...sanitized } = user;
+      return res.json({
+        type: 'system',
+        user: sanitized
+      });
+    } else if (session.type === 'supplier') {
+      const found = suppliers.find(s => s.cnpj === session.supplierCnpj);
+      return res.json({
+        type: 'supplier',
+        supplier: found || { cnpj: session.supplierCnpj, name: session.supplierName }
+      });
+    }
+    return res.status(401).json({ error: 'Tipo de sessão desconhecido.' });
   });
 
   // User Login Authentication
@@ -827,12 +853,13 @@ async function startServer() {
     if (matchesPin && needsSecretMigration(user.pin)) user.pin = hashSecret(inputSecret);
     user.lastLogin = new Date().toISOString();
     StorageService.saveUsers(users);
-    setSessionCookie(res, { type: 'system', userId: user.id, username: user.username, role: user.role });
+    const token = setSessionCookie(res, { type: 'system', userId: user.id, username: user.username, role: user.role });
 
     const { password: _, pin: __, ...sanitized } = user;
     res.json({
       message: 'Autenticado com sucesso.',
-      user: sanitized
+      user: sanitized,
+      token
     });
   });
 
@@ -1003,13 +1030,14 @@ async function startServer() {
     }
 
     StorageService.saveSuppliers(suppliers);
-    setSessionCookie(res, { type: 'supplier', supplierCnpj: supplierRecord.cnpj, supplierName: supplierRecord.name });
+    const token = setSessionCookie(res, { type: 'supplier', supplierCnpj: supplierRecord.cnpj, supplierName: supplierRecord.name });
 
     const apptCount = appointments.filter(a => a.supplierCnpj.replace(/\D/g, '') === cleanDigits).length;
 
     res.json({
       success: true,
       message: existingIndex >= 0 ? 'Login de fornecedor realizado com sucesso.' : 'Novo fornecedor cadastrado com sucesso.',
+      token,
       supplier: {
         ...supplierRecord,
         appointmentCount: apptCount

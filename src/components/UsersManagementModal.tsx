@@ -18,6 +18,7 @@ import {
   RefreshCw
 } from 'lucide-react';
 import { SystemUser, SystemUserRole } from '../types';
+import { authFetch } from '../services/api';
 
 interface UsersManagementModalProps {
   isOpen: boolean;
@@ -60,7 +61,7 @@ export const UsersManagementModal: React.FC<UsersManagementModalProps> = ({
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch('/api/users');
+      const res = await authFetch('/api/users');
       if (res.ok) {
         const data = await res.json();
         setUsers(data);
@@ -126,7 +127,7 @@ export const UsersManagementModal: React.FC<UsersManagementModalProps> = ({
           return;
         }
 
-        const res = await fetch('/api/users', {
+        const res = await authFetch('/api/users', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -150,7 +151,7 @@ export const UsersManagementModal: React.FC<UsersManagementModalProps> = ({
           setError(errData.error || 'Erro ao cadastrar usuário.');
         }
       } else if (mode === 'EDIT' && editingUserId) {
-        const res = await fetch(`/api/users/${editingUserId}`, {
+        const res = await authFetch(`/api/users/${editingUserId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -192,7 +193,7 @@ export const UsersManagementModal: React.FC<UsersManagementModalProps> = ({
     }
 
     try {
-      const res = await fetch(`/api/users/${userId}`, {
+      const res = await authFetch(`/api/users/${userId}`, {
         method: 'DELETE',
       });
       if (res.ok) {
@@ -213,7 +214,7 @@ export const UsersManagementModal: React.FC<UsersManagementModalProps> = ({
     }
 
     try {
-      const res = await fetch('/api/auth/reset-users', {
+      const res = await authFetch('/api/auth/reset-users', {
         method: 'POST'
       });
       if (res.ok) {

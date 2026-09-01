@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { ShieldCheck, Lock, KeyRound, AlertCircle, X, CheckCircle2, User, UserPlus, Sparkles, Building2 } from 'lucide-react';
 import { SystemUser } from '../types';
+import { authFetch, setAuthToken } from '../services/api';
 
 interface AdminAuthModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onAuthenticate: (user: SystemUser) => void;
+  onAuthenticate: (user: SystemUser, token?: string) => void;
 }
 
 export const AdminAuthModal: React.FC<AdminAuthModalProps> = ({
@@ -37,7 +38,7 @@ export const AdminAuthModal: React.FC<AdminAuthModalProps> = ({
       setPassword('');
       setLoading(true);
 
-      fetch('/api/auth/status')
+      authFetch('/api/auth/status')
         .then(res => res.json())
         .then(data => {
           if (!data.hasUsers) {
@@ -64,7 +65,7 @@ export const AdminAuthModal: React.FC<AdminAuthModalProps> = ({
     setErrorMessage(null);
 
     try {
-      const res = await fetch('/api/auth/login', {
+      const res = await authFetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -77,10 +78,13 @@ export const AdminAuthModal: React.FC<AdminAuthModalProps> = ({
       const data = await res.json();
 
       if (res.ok && data.user) {
+        if (data.token) {
+          setAuthToken(data.token);
+        }
         setErrorMessage(null);
         setPassword('');
         setUsername('');
-        onAuthenticate(data.user);
+        onAuthenticate(data.user, data.token);
         onClose();
       } else {
         if (data.needsSetup) {
@@ -110,7 +114,7 @@ export const AdminAuthModal: React.FC<AdminAuthModalProps> = ({
     }
 
     try {
-      const res = await fetch('/api/auth/setup-admin', {
+      const res = await authFetch('/api/auth/setup-admin', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -126,8 +130,11 @@ export const AdminAuthModal: React.FC<AdminAuthModalProps> = ({
       const data = await res.json();
 
       if (res.ok && data.user) {
+        if (data.token) {
+          setAuthToken(data.token);
+        }
         setErrorMessage(null);
-        onAuthenticate(data.user);
+        onAuthenticate(data.user, data.token);
         onClose();
       } else {
         setErrorMessage(data.error || 'Erro ao registrar administrador inicial.');

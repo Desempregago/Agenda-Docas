@@ -18,6 +18,7 @@ import { AppointmentReceiptModal } from './components/AppointmentReceiptModal';
 import { DestinationsManagementModal } from './components/DestinationsManagementModal';
 import { Appointment, AppointmentStatus, DiscrepancyReport, Dock, SystemUser, DestinationBranch } from './types';
 import { Bell, CheckCircle2, AlertCircle, ShieldAlert, X } from 'lucide-react';
+import { authFetch, getAuthToken, setAuthToken } from './services/api';
 
 export default function App() {
   const [currentView, setCurrentView] = useState<AppViewMode>('CLIENT');
@@ -178,7 +179,7 @@ export default function App() {
     try {
       localStorage.setItem('agendadocas_supplier_session', JSON.stringify(session));
       // Persist / Register supplier in backend ./data/suppliers.json
-      const res = await fetch('/api/suppliers/auth', {
+      const res = await authFetch('/api/suppliers/auth', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -188,6 +189,9 @@ export default function App() {
       });
       if (res.ok) {
         const data = await res.json();
+        if (data.token) {
+          setAuthToken(data.token);
+        }
         if (data.supplier && data.supplier.name) {
           const updatedSession = { cnpj: data.supplier.cnpj, name: data.supplier.name };
           setCurrentSupplierSession(updatedSession);
@@ -202,7 +206,8 @@ export default function App() {
   };
 
   const handleSupplierLogout = () => {
-    void fetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
+    void authFetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
+    setAuthToken(null);
     setCurrentSupplierSession(null);
     try {
       localStorage.removeItem('agendadocas_supplier_session');
@@ -212,7 +217,8 @@ export default function App() {
   };
 
   const handleAdminLogout = () => {
-    void fetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
+    void authFetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
+    setAuthToken(null);
     setCurrentSystemUser(null);
     setUserRole('CLIENT');
     setCurrentView('CLIENT');
@@ -247,7 +253,7 @@ export default function App() {
     setBrandSettings(newSettings);
     try {
       localStorage.setItem('agendadocas_brand_settings', JSON.stringify(newSettings));
-      await fetch('/api/settings/branding', {
+      await authFetch('/api/settings/branding', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newSettings)
@@ -262,7 +268,7 @@ export default function App() {
     setDestinations(newDestinations);
     try {
       localStorage.setItem('agendadocas_destinations', JSON.stringify(newDestinations));
-      const res = await fetch('/api/destinations', {
+      const res = await authFetch('/api/destinations', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newDestinations)
@@ -280,12 +286,12 @@ export default function App() {
     try {
       setLoading(true);
       const [apptsRes, docksRes, slotsRes, slotLimitsRes, brandRes, destsRes] = await Promise.all([
-        fetch('/api/appointments'),
-        fetch('/api/docks'),
-        fetch('/api/timeslots'),
-        fetch('/api/slot-limits'),
-        fetch('/api/settings/branding'),
-        fetch('/api/destinations')
+        authFetch('/api/appointments'),
+        authFetch('/api/docks'),
+        authFetch('/api/timeslots'),
+        authFetch('/api/slot-limits'),
+        authFetch('/api/settings/branding'),
+        authFetch('/api/destinations')
       ]);
 
       if (apptsRes.ok) {
@@ -339,34 +345,21 @@ export default function App() {
         }
       }
 
-      // Validar se o usuário salvo localmente realmente existe e está cadastrado no servidor
-      const savedUserRaw = localStorage.getItem('agendadocas_system_user');
-      if (savedUserRaw) {
-        try {
-          const parsedUser: SystemUser = JSON.parse(savedUserRaw);
-          const usersRes = await fetch('/api/users');
-          if (usersRes.ok) {
-            const serverUsers: SystemUser[] = await usersRes.json();
-            const validUser = serverUsers.find(
-              u => (u.id === parsedUser.id || u.username.toLowerCase() === parsedUser.username.toLowerCase()) && u.active !== false
-            );
-            if (!validUser) {
-              // Usuário não existe no banco do servidor (ex: projeto recém-instalado ou banco zerado)
-              localStorage.removeItem('agendadocas_system_user');
-              setCurrentSystemUser(null);
-              setUserRole('CLIENT');
-            } else {
-              // Atualiza dados atualizados do usuário
-              setCurrentSystemUser(validUser);
-              setUserRole('ADMIN');
-            }
-          } else if (usersRes.status === 401) {
-            localStorage.removeItem('agendadocas_system_user');
-            setCurrentSystemUser(null);
-            setUserRole('CLIENT');
+      // Validar sessão com o backend (/api/auth/me)
+      try {
+        const meRes = await authFetch('/api/auth/me');
+        if (meRes.ok) {
+          const meData = await meRes.json();
+          if (meData.type === 'system' && meData.user) {
+            setCurrentSystemUser(meData.user);
+            setUserRole('ADMIN');
+            localStorage.setItem('agendadocas_system_user', JSON.stringify(meData.user));
+          } else if (meData.type === 'supplier' && meData.supplier) {
+            setCurrentSupplierSession(meData.supplier);
+            localStorage.setItem('agendadocas_supplier_session', JSON.stringify(meData.supplier));
           }
-        } catch (_) {}
-      }
+        }
+      } catch (_) {}
     } catch (e) {
       console.warn('Usando dados locais de reserva:', e);
     } finally {
@@ -397,7 +390,7 @@ export default function App() {
     setTimeSlots(newSlots);
     try {
       localStorage.setItem('agendadocas_timeslots', JSON.stringify(newSlots));
-      await fetch('/api/timeslots', {
+      await authFetch('/api/timeslots', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newSlots),
@@ -409,7 +402,7 @@ export default function App() {
     setSlotSupplierLimits(newLimits);
     try {
       localStorage.setItem('agendadocas_slot_limits', JSON.stringify(newLimits));
-      await fetch('/api/slot-limits', {
+      await authFetch('/api/slot-limits', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newLimits),
@@ -421,7 +414,7 @@ export default function App() {
     setDocks(updatedDocks);
     try {
       localStorage.setItem('agendadocas_docks', JSON.stringify(updatedDocks));
-      await fetch('/api/docks', {
+      await authFetch('/api/docks', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updatedDocks),
@@ -445,7 +438,7 @@ export default function App() {
         ...(additionalData || {})
       };
 
-      const res = await fetch(`/api/appointments/${apptId}/status`, {
+      const res = await authFetch(`/api/appointments/${apptId}/status`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -526,7 +519,7 @@ export default function App() {
   // Clear all appointments (zero database)
   const handleClearAllAppointments = async () => {
     try {
-      await fetch('/api/appointments', { method: 'DELETE' });
+      await authFetch('/api/appointments', { method: 'DELETE' });
     } catch (_) {}
     setAppointments([]);
     showToast('Base Zerada', 'Todos os agendamentos foram removidos com sucesso.', 'info');
@@ -535,7 +528,7 @@ export default function App() {
   // Factory reset (Appointments + Suppliers + Notifications)
   const handleFactoryReset = async () => {
     try {
-      await fetch('/api/storage/factory-reset', { method: 'POST' });
+      await authFetch('/api/storage/factory-reset', { method: 'POST' });
     } catch (_) {}
     setAppointments([]);
     setNotifications([]);
@@ -548,14 +541,14 @@ export default function App() {
   // Reload appointments on demand (or seed sample data)
   const handleLoadMockData = async () => {
     try {
-      const res = await fetch('/api/appointments/seed', { method: 'POST' });
+      const res = await authFetch('/api/appointments/seed', { method: 'POST' });
       if (res.ok) {
         const data = await res.json();
         if (data.appointments) {
           setAppointments(data.appointments);
         }
       } else {
-        const data = await fetch('/api/appointments');
+        const data = await authFetch('/api/appointments');
         if (data.ok) {
           const list = await data.json();
           setAppointments(list);
@@ -960,7 +953,10 @@ export default function App() {
       <AdminAuthModal
         isOpen={isAdminAuthOpen}
         onClose={() => setIsAdminAuthOpen(false)}
-        onAuthenticate={(authenticatedUser: SystemUser) => {
+        onAuthenticate={(authenticatedUser: SystemUser, token?: string) => {
+          if (token) {
+            setAuthToken(token);
+          }
           setCurrentSystemUser(authenticatedUser);
           try {
             localStorage.setItem('agendadocas_system_user', JSON.stringify(authenticatedUser));
@@ -968,6 +964,7 @@ export default function App() {
           setUserRole('ADMIN');
           setCurrentView('ADMIN');
           void loadData();
+          showToast('Modo Operacional Ativado', `Bem-vindo(a), ${authenticatedUser.name}! Acesso de nível ${authenticatedUser.role === 'ADMIN' ? 'Administrador' : 'Operador'} liberado.`, 'success');
           addNotification(
             `Sessão de ${authenticatedUser.name} Iniciada`,
             `Acesso concedido como ${authenticatedUser.role === 'ADMIN' ? 'Administrador Geral' : 'Operador'} (${authenticatedUser.department}).`,
