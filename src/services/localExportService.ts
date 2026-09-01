@@ -33,12 +33,19 @@ export function exportAppointmentsToExcelCSV(appointments: Appointment[], dateFi
     'CNPJ Fornecedor',
     'Transportadora',
     'Motorista',
+    'CPF Motorista',
     'Telefone Motorista',
     'Placa Veículo',
     'Tipo Veículo',
     'Tipo Carga',
     'Notas Fiscais',
     'Série NF',
+    'Chaves de Acesso NF-e (44 dígitos)',
+    'Valor Total das Notas (R$)',
+    'Vencimento do Boleto',
+    'Double Check Prevenção',
+    'Operador Prevenção',
+    'Data/Hora Double Check',
     'Volumes',
     'Peso (kg)',
     'Doca ID',
@@ -54,29 +61,52 @@ export function exportAppointmentsToExcelCSV(appointments: Appointment[], dateFi
     return `"${str}"`;
   };
 
-  const rows = list.map(a => [
-    escapeCSV(a.protocol),
-    escapeCSV(a.scheduledDate),
-    escapeCSV(a.timeSlot),
-    escapeCSV(a.status),
-    escapeCSV(a.supplierName),
-    escapeCSV(a.supplierCnpj),
-    escapeCSV(a.carrierName || ''),
-    escapeCSV(a.driverName || ''),
-    escapeCSV(a.driverPhone || ''),
-    escapeCSV(a.vehiclePlate || ''),
-    escapeCSV(a.vehicleType),
-    escapeCSV(a.cargoType),
-    escapeCSV(Array.isArray(a.invoiceNumbers) && a.invoiceNumbers.length > 0 ? a.invoiceNumbers.join(' / ') : a.invoiceNumber),
-    escapeCSV(a.invoiceSeries || '1'),
-    escapeCSV(a.totalVolumes),
-    escapeCSV(a.weightKg),
-    escapeCSV(a.dockId || 'Não atribuída'),
-    escapeCSV(a.isWalkIn ? 'SIM' : 'NÃO'),
-    escapeCSV(a.isPreApprovedContract ? 'SIM' : 'NÃO'),
-    escapeCSV(a.createdAt ? new Date(a.createdAt).toLocaleString('pt-BR') : ''),
-    escapeCSV(a.notes || '')
-  ]);
+  const rows = list.map(a => {
+    const keysJoined = Array.isArray(a.nfeAccessKeys) && a.nfeAccessKeys.length > 0
+      ? a.nfeAccessKeys.join(' | ')
+      : '';
+
+    const formattedValue = a.invoiceTotalValue !== undefined && a.invoiceTotalValue !== null
+      ? Number(a.invoiceTotalValue).toFixed(2).replace('.', ',')
+      : '';
+
+    const dueDateFormatted = a.invoiceDueDate
+      ? (a.invoiceDueDate.includes('-')
+          ? a.invoiceDueDate.split('-').reverse().join('/')
+          : a.invoiceDueDate)
+      : '';
+
+    return [
+      escapeCSV(a.protocol),
+      escapeCSV(a.scheduledDate),
+      escapeCSV(a.timeSlot),
+      escapeCSV(a.status),
+      escapeCSV(a.supplierName),
+      escapeCSV(a.supplierCnpj),
+      escapeCSV(a.carrierName || ''),
+      escapeCSV(a.driverName || ''),
+      escapeCSV(a.driverCpf || ''),
+      escapeCSV(a.driverPhone || ''),
+      escapeCSV(a.vehiclePlate || ''),
+      escapeCSV(a.vehicleType),
+      escapeCSV(a.cargoType),
+      escapeCSV(Array.isArray(a.invoiceNumbers) && a.invoiceNumbers.length > 0 ? a.invoiceNumbers.join(' / ') : a.invoiceNumber),
+      escapeCSV(a.invoiceSeries || '1'),
+      escapeCSV(keysJoined),
+      escapeCSV(formattedValue),
+      escapeCSV(dueDateFormatted),
+      escapeCSV(a.preventionDoubleChecked ? 'SIM' : 'NÃO'),
+      escapeCSV(a.preventionCheckedBy || ''),
+      escapeCSV(a.preventionCheckedAt ? new Date(a.preventionCheckedAt).toLocaleString('pt-BR') : ''),
+      escapeCSV(a.totalVolumes),
+      escapeCSV(a.weightKg),
+      escapeCSV(a.dockId || 'Não atribuída'),
+      escapeCSV(a.isWalkIn ? 'SIM' : 'NÃO'),
+      escapeCSV(a.isPreApprovedContract ? 'SIM' : 'NÃO'),
+      escapeCSV(a.createdAt ? new Date(a.createdAt).toLocaleString('pt-BR') : ''),
+      escapeCSV(a.notes || '')
+    ];
+  });
 
   // Prepend UTF-8 BOM (\uFEFF) so Excel opens UTF-8 special characters (ç, ã, é, etc.) correctly
   const csvContent = '\uFEFF' + [
@@ -125,7 +155,8 @@ export function exportAppointmentsToSQL(appointments: Appointment[], docks: Dock
   sql += `\n-- 2. AGENDAMENTOS REGISTRADOS\n`;
   appointments.forEach(a => {
     const nfList = Array.isArray(a.invoiceNumbers) && a.invoiceNumbers.length > 0 ? a.invoiceNumbers.join(', ') : a.invoiceNumber;
-    sql += `INSERT INTO agendamentos (id, protocolo, fornecedor_nome, fornecedor_cnpj, transportadora_nome, motorista_nome, motorista_telefone, veiculo_placa, veiculo_tipo, tipo_carga, notas_fiscais, total_volumes, peso_kg, data_agendamento, horario_janela, doca_id, status, observacoes, is_walk_in, is_pre_approved, created_at, updated_at) VALUES (${escapeSQL(a.id)}, ${escapeSQL(a.protocol)}, ${escapeSQL(a.supplierName)}, ${escapeSQL(a.supplierCnpj)}, ${escapeSQL(a.carrierName)}, ${escapeSQL(a.driverName)}, ${escapeSQL(a.driverPhone)}, ${escapeSQL(a.vehiclePlate)}, ${escapeSQL(a.vehicleType)}, ${escapeSQL(a.cargoType)}, ${escapeSQL(nfList)}, ${Number(a.totalVolumes || 0)}, ${Number(a.weightKg || 0)}, ${escapeSQL(a.scheduledDate)}, ${escapeSQL(a.timeSlot)}, ${escapeSQL(a.dockId)}, ${escapeSQL(a.status)}, ${escapeSQL(a.notes)}, ${a.isWalkIn ? 'TRUE' : 'FALSE'}, ${a.isPreApprovedContract ? 'TRUE' : 'FALSE'}, ${escapeSQL(a.createdAt)}, ${escapeSQL(a.updatedAt)}) ON CONFLICT (id) DO UPDATE SET status = EXCLUDED.status, updated_at = EXCLUDED.updated_at;\n`;
+    const nfeKeysStr = Array.isArray(a.nfeAccessKeys) && a.nfeAccessKeys.length > 0 ? a.nfeAccessKeys.join(';') : '';
+    sql += `INSERT INTO agendamentos (id, protocolo, fornecedor_nome, fornecedor_cnpj, transportadora_nome, motorista_nome, motorista_cpf, motorista_telefone, veiculo_placa, veiculo_tipo, tipo_carga, notas_fiscais, chaves_nfe, valor_total_nf, vencimento_boleto, prevention_double_checked, prevention_checked_by, prevention_checked_at, total_volumes, peso_kg, data_agendamento, horario_janela, doca_id, status, observacoes, is_walk_in, is_pre_approved, created_at, updated_at) VALUES (${escapeSQL(a.id)}, ${escapeSQL(a.protocol)}, ${escapeSQL(a.supplierName)}, ${escapeSQL(a.supplierCnpj)}, ${escapeSQL(a.carrierName)}, ${escapeSQL(a.driverName)}, ${escapeSQL(a.driverCpf)}, ${escapeSQL(a.driverPhone)}, ${escapeSQL(a.vehiclePlate)}, ${escapeSQL(a.vehicleType)}, ${escapeSQL(a.cargoType)}, ${escapeSQL(nfList)}, ${escapeSQL(nfeKeysStr)}, ${a.invoiceTotalValue !== undefined ? Number(a.invoiceTotalValue) : 'NULL'}, ${escapeSQL(a.invoiceDueDate)}, ${a.preventionDoubleChecked ? 'TRUE' : 'FALSE'}, ${escapeSQL(a.preventionCheckedBy)}, ${escapeSQL(a.preventionCheckedAt)}, ${Number(a.totalVolumes || 0)}, ${Number(a.weightKg || 0)}, ${escapeSQL(a.scheduledDate)}, ${escapeSQL(a.timeSlot)}, ${escapeSQL(a.dockId)}, ${escapeSQL(a.status)}, ${escapeSQL(a.notes)}, ${a.isWalkIn ? 'TRUE' : 'FALSE'}, ${a.isPreApprovedContract ? 'TRUE' : 'FALSE'}, ${escapeSQL(a.createdAt)}, ${escapeSQL(a.updatedAt)}) ON CONFLICT (id) DO UPDATE SET status = EXCLUDED.status, updated_at = EXCLUDED.updated_at;\n`;
   });
 
   triggerLocalDownload(sql, filename, 'application/sql;charset=utf-8');

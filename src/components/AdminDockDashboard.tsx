@@ -385,8 +385,8 @@ export const AdminDockDashboard: React.FC<AdminDockDashboardProps> = ({
         <div className="flex flex-col items-stretch md:items-end gap-2 w-full md:w-auto">
           
           {/* Action Buttons Row */}
-          <div className="flex flex-wrap items-center justify-start md:justify-end gap-2">
-            {onOpenTimeSlotConfig && effectiveIsAdmin && (
+          {onOpenTimeSlotConfig && effectiveIsAdmin && (
+            <div className="flex flex-wrap items-center justify-start md:justify-end gap-2">
               <button
                 onClick={onOpenTimeSlotConfig}
                 className="inline-flex items-center gap-1.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl border border-slate-700 shadow-xs transition-colors cursor-pointer"
@@ -395,8 +395,8 @@ export const AdminDockDashboard: React.FC<AdminDockDashboardProps> = ({
                 <Clock className="w-3.5 h-3.5 text-amber-400 shrink-0" />
                 <span>Janelas & Docas</span>
               </button>
-            )}
-          </div>
+            </div>
+          )}
 
           {/* Interactive Calendar Control Bar */}
           <div className="w-full md:w-auto flex items-center justify-between gap-1 sm:gap-1.5 bg-slate-900 text-white p-1 sm:p-1.5 rounded-2xl border border-slate-800 shadow-md">
