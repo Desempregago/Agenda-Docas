@@ -394,7 +394,7 @@ export const AdminDockDashboard: React.FC<AdminDockDashboardProps> = ({
               <div className="min-w-0">
                 <div className="flex items-center gap-1.5 text-xs font-bold text-blue-600 uppercase tracking-wider mb-0.5">
                   <LayoutDashboard className="w-4 h-4 shrink-0" />
-                  <span className="truncate">Gestão Operacional de Docas</span>
+                  <span className="truncate">Gestão Operacional</span>
                 </div>
                 <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">Controle de Docas & Janelas</h1>
               </div>
