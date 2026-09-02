@@ -1,5 +1,7 @@
 import type { NextFunction, Request, RequestHandler, Response } from 'express';
 import { createHmac, randomBytes, scryptSync, timingSafeEqual } from 'crypto';
+import fs from 'fs';
+import path from 'path';
 import type { SystemUserRole } from '../types';
 
 export type SessionPrincipal =
@@ -10,9 +12,41 @@ type SessionPayload = SessionPrincipal & { iat: number; exp: number };
 
 const SESSION_COOKIE = 'agenda_session';
 const SESSION_TTL_SECONDS = 8 * 60 * 60;
-const SESSION_SECRET = process.env.SESSION_SECRET || (process.env.NODE_ENV === 'production'
-  ? (() => { throw new Error('SESSION_SECRET must be configured in production.'); })()
-  : randomBytes(32).toString('hex'));
+
+/**
+ * Resolve a persistent session secret:
+ * 1. Explicit env var process.env.SESSION_SECRET (highest priority)
+ * 2. Or a locally generated file-based secret (data/.session_secret) so it never hardcodes
+ *    a shared secret into git while maintaining session persistence across server restarts.
+ */
+function resolveSessionSecret(): string {
+  if (process.env.SESSION_SECRET && process.env.SESSION_SECRET.trim().length > 0) {
+    return process.env.SESSION_SECRET.trim();
+  }
+
+  const dataDir = process.env.DATA_DIR || path.join(process.cwd(), 'data');
+  const secretPath = path.join(dataDir, '.session_secret');
+
+  try {
+    if (!fs.existsSync(dataDir)) {
+      fs.mkdirSync(dataDir, { recursive: true });
+    }
+    if (fs.existsSync(secretPath)) {
+      const savedSecret = fs.readFileSync(secretPath, 'utf8').trim();
+      if (savedSecret.length >= 32) {
+        return savedSecret;
+      }
+    }
+    const newSecret = randomBytes(48).toString('hex');
+    fs.writeFileSync(secretPath, newSecret, { encoding: 'utf8', mode: 0o600 });
+    return newSecret;
+  } catch (err) {
+    // If filesystem is somehow read-only, use an in-memory random secret for this process lifetime
+    return randomBytes(48).toString('hex');
+  }
+}
+
+const SESSION_SECRET = resolveSessionSecret();
 
 function base64UrlEncode(value: string): string {
   return Buffer.from(value, 'utf8').toString('base64url');

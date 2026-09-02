@@ -8,5 +8,6 @@ coverage/
 !.env.example
 data/*.json
 data/cnpjs/
+data/.session_secret
 !data/.gitkeep
 
