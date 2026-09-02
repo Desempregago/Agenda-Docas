@@ -406,7 +406,7 @@ export const AdminDockDashboard: React.FC<AdminDockDashboardProps> = ({
                   title="Cadastrar e gerenciar janelas de horário e capacidade de docas (Exclusivo Administrador)"
                 >
                   <Clock className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                  <span className="hidden sm:inline">Janelas & Docas</span>
+                  <span className="hidden sm:inline">Gerenciar Pátio</span>
                 </button>
               )}
             </div>
