@@ -74,6 +74,34 @@ export const DestinationsManagementModal: React.FC<DestinationsManagementModalPr
 
   const [formError, setFormError] = useState<string | null>(null);
 
+  // Mask formatters
+  const formatCnpj = (value: string) => {
+    const digits = value.replace(/\D/g, '').slice(0, 14);
+    if (digits.length <= 2) return digits;
+    if (digits.length <= 5) return `${digits.slice(0, 2)}.${digits.slice(2)}`;
+    if (digits.length <= 8) return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5)}`;
+    if (digits.length <= 12) return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5, 8)}/${digits.slice(8)}`;
+    return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5, 8)}/${digits.slice(8, 12)}-${digits.slice(12, 14)}`;
+  };
+
+  const formatCep = (value: string) => {
+    const digits = value.replace(/\D/g, '').slice(0, 8);
+    if (digits.length <= 5) return digits;
+    return `${digits.slice(0, 5)}-${digits.slice(5, 8)}`;
+  };
+
+  const formatPhone = (value: string) => {
+    const digits = value.replace(/\D/g, '').slice(0, 11);
+    if (digits.length <= 2) return digits.length ? `(${digits}` : '';
+    if (digits.length <= 6) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
+    if (digits.length <= 10) {
+      // Landline: (XX) XXXX-XXXX
+      return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
+    }
+    // Mobile: (XX) XXXXX-XXXX
+    return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7, 11)}`;
+  };
+
   const startCreate = () => {
     setEditingBranch(null);
     setFormData({
@@ -98,7 +126,12 @@ export const DestinationsManagementModal: React.FC<DestinationsManagementModalPr
   const startEdit = (branch: DestinationBranch) => {
     setIsCreatingNew(false);
     setEditingBranch(branch);
-    setFormData({ ...branch });
+    setFormData({
+      ...branch,
+      cnpj: branch.cnpj ? formatCnpj(branch.cnpj) : '',
+      zipCode: branch.zipCode ? formatCep(branch.zipCode) : '',
+      contactPhone: branch.contactPhone ? formatPhone(branch.contactPhone) : '',
+    });
     setFormError(null);
   };
 
@@ -345,7 +378,8 @@ export const DestinationsManagementModal: React.FC<DestinationsManagementModalPr
                       type="text"
                       placeholder="00.000.000/0000-00"
                       value={formData.cnpj || ''}
-                      onChange={e => setFormData({ ...formData, cnpj: e.target.value })}
+                      onChange={e => setFormData({ ...formData, cnpj: formatCnpj(e.target.value) })}
+                      maxLength={18}
                       className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs sm:text-sm text-slate-900 font-mono focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                     />
                   </div>
@@ -358,7 +392,8 @@ export const DestinationsManagementModal: React.FC<DestinationsManagementModalPr
                       type="text"
                       placeholder="(11) 4002-8922"
                       value={formData.contactPhone || ''}
-                      onChange={e => setFormData({ ...formData, contactPhone: e.target.value })}
+                      onChange={e => setFormData({ ...formData, contactPhone: formatPhone(e.target.value) })}
+                      maxLength={15}
                       className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs sm:text-sm text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                     />
                   </div>
@@ -441,7 +476,8 @@ export const DestinationsManagementModal: React.FC<DestinationsManagementModalPr
                       type="text"
                       placeholder="00000-000"
                       value={formData.zipCode || ''}
-                      onChange={e => setFormData({ ...formData, zipCode: e.target.value })}
+                      onChange={e => setFormData({ ...formData, zipCode: formatCep(e.target.value) })}
+                      maxLength={9}
                       className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs sm:text-sm text-slate-900 font-mono focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                     />
                   </div>
