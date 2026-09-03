@@ -652,8 +652,59 @@ async function startServer() {
     res.json(operatingDays);
   });
 
+  // Helper to verify admin password for critical management operations
+  function verifyAdminPassword(suppliedPassword?: string, sessionUserId?: string, sessionUsername?: string): { valid: boolean; adminUser?: SystemUser; error?: string } {
+    if (!suppliedPassword || typeof suppliedPassword !== 'string' || !suppliedPassword.trim()) {
+      return { valid: false, error: 'A confirmação de senha do Administrador Geral é obrigatória.' };
+    }
+
+    const cleanSecret = suppliedPassword.trim();
+    const adminUsers = users.filter(u => u.role === 'ADMIN' && u.active !== false);
+
+    // If no admins are registered in the system, allow bypass for initial setup
+    if (adminUsers.length === 0) {
+      return { valid: true };
+    }
+
+    // Check specific session user if provided and if they are an admin
+    if (sessionUserId || sessionUsername) {
+      const sessionAdmin = adminUsers.find(u =>
+        (sessionUserId && u.id === sessionUserId) ||
+        (sessionUsername && u.username.toLowerCase() === sessionUsername.toLowerCase())
+      );
+      if (sessionAdmin) {
+        const match = verifySecret(sessionAdmin.password, cleanSecret) || verifySecret(sessionAdmin.pin, cleanSecret);
+        if (match) {
+          return { valid: true, adminUser: sessionAdmin };
+        }
+      }
+    }
+
+    // Check if the secret matches ANY active Administrador Geral
+    const matchedAdmin = adminUsers.find(u =>
+      verifySecret(u.password, cleanSecret) || verifySecret(u.pin, cleanSecret)
+    );
+
+    if (matchedAdmin) {
+      return { valid: true, adminUser: matchedAdmin };
+    }
+
+    return { valid: false, error: 'Senha ou PIN de Administrador Geral incorreto.' };
+  }
+
   // Clear all appointments (start clean)
-  app.delete('/api/appointments', requireSystemRole('ADMIN'), (_req, res) => {
+  app.delete('/api/appointments', requireSystemRole('ADMIN'), (req, res) => {
+    const pass = req.body?.password || req.body?.adminPassword || req.headers['x-admin-password'];
+    const session = getSession(req);
+    const check = verifyAdminPassword(
+      pass ? String(pass) : undefined,
+      session?.type === 'system' ? session.userId : undefined,
+      session?.type === 'system' ? session.username : undefined
+    );
+    if (!check.valid) {
+      return res.status(401).json({ error: check.error || 'Senha de Administrador Geral incorreta.' });
+    }
+
     appointments = [];
     StorageService.saveAppointments(appointments);
     StorageService.cleanCnpjFolders();
@@ -661,7 +712,18 @@ async function startServer() {
   });
 
   // Reset appointments to clean state
-  app.post('/api/appointments/reset', requireSystemRole('ADMIN'), (_req, res) => {
+  app.post('/api/appointments/reset', requireSystemRole('ADMIN'), (req, res) => {
+    const pass = req.body?.password || req.body?.adminPassword || req.headers['x-admin-password'];
+    const session = getSession(req);
+    const check = verifyAdminPassword(
+      pass ? String(pass) : undefined,
+      session?.type === 'system' ? session.userId : undefined,
+      session?.type === 'system' ? session.username : undefined
+    );
+    if (!check.valid) {
+      return res.status(401).json({ error: check.error || 'Senha de Administrador Geral incorreta.' });
+    }
+
     appointments = [];
     StorageService.saveAppointments(appointments);
     StorageService.cleanCnpjFolders();
@@ -669,7 +731,18 @@ async function startServer() {
   });
 
   // Factory reset (Appointments + Suppliers + Reset Docks to defaults)
-  app.post('/api/storage/factory-reset', requireSystemRole('ADMIN'), (_req, res) => {
+  app.post('/api/storage/factory-reset', requireSystemRole('ADMIN'), (req, res) => {
+    const pass = req.body?.password || req.body?.adminPassword || req.headers['x-admin-password'];
+    const session = getSession(req);
+    const check = verifyAdminPassword(
+      pass ? String(pass) : undefined,
+      session?.type === 'system' ? session.userId : undefined,
+      session?.type === 'system' ? session.username : undefined
+    );
+    if (!check.valid) {
+      return res.status(401).json({ error: check.error || 'Senha de Administrador Geral incorreta.' });
+    }
+
     appointments = [];
     suppliers = [];
     docks = StorageService.loadDocks();
@@ -730,8 +803,40 @@ async function startServer() {
     });
   });
 
+  // Verify Admin Password Endpoint
+  app.post('/api/auth/verify-admin-password', (req, res) => {
+    const { password, adminPassword } = req.body || {};
+    const pass = password || adminPassword || req.headers['x-admin-password'];
+    const session = getSession(req);
+    const result = verifyAdminPassword(
+      pass ? String(pass) : undefined,
+      session?.type === 'system' ? session.userId : undefined,
+      session?.type === 'system' ? session.username : undefined
+    );
+
+    if (!result.valid) {
+      return res.status(401).json({ error: result.error || 'Senha ou PIN incorreto.' });
+    }
+
+    return res.json({
+      valid: true,
+      adminName: result.adminUser?.name || 'Administrador Geral'
+    });
+  });
+
   // Reset all system users (Clean slate for setup)
-  app.post('/api/auth/reset-users', requireSystemRole('ADMIN'), (_req, res) => {
+  app.post('/api/auth/reset-users', requireSystemRole('ADMIN'), (req, res) => {
+    const pass = req.body?.password || req.body?.adminPassword || req.headers['x-admin-password'];
+    const session = getSession(req);
+    const check = verifyAdminPassword(
+      pass ? String(pass) : undefined,
+      session?.type === 'system' ? session.userId : undefined,
+      session?.type === 'system' ? session.username : undefined
+    );
+    if (!check.valid) {
+      return res.status(401).json({ error: check.error || 'Senha de Administrador Geral incorreta.' });
+    }
+
     users = [];
     StorageService.saveUsers(users);
     res.json({ message: 'Todos os usuários foram removidos com sucesso. O sistema retornou ao estado de configuração inicial.' });

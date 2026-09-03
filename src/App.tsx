@@ -503,19 +503,37 @@ export default function App() {
   };
 
   // Clear all appointments (zero database)
-  const handleClearAllAppointments = async () => {
-    try {
-      await authFetch('/api/appointments', { method: 'DELETE' });
-    } catch (_) {}
+  const handleClearAllAppointments = async (adminPassword: string) => {
+    const res = await authFetch('/api/appointments', {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-admin-password': adminPassword,
+      },
+      body: JSON.stringify({ password: adminPassword, adminPassword }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => null);
+      throw new Error(err?.error || 'Falha ao zerar agendamentos no servidor.');
+    }
     setAppointments([]);
     showToast('Base Zerada', 'Todos os agendamentos foram removidos com sucesso.', 'info');
   };
 
   // Factory reset (Appointments + Suppliers + Notifications)
-  const handleFactoryReset = async () => {
-    try {
-      await authFetch('/api/storage/factory-reset', { method: 'POST' });
-    } catch (_) {}
+  const handleFactoryReset = async (adminPassword: string) => {
+    const res = await authFetch('/api/storage/factory-reset', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-admin-password': adminPassword,
+      },
+      body: JSON.stringify({ password: adminPassword, adminPassword }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => null);
+      throw new Error(err?.error || 'Falha na limpeza completa da base.');
+    }
     setAppointments([]);
     setNotifications([]);
     try {
@@ -524,24 +542,22 @@ export default function App() {
     showToast('Limpeza Completa', 'Agendamentos, fornecedores e notificações foram zerados com sucesso.', 'info');
   };
 
-  // Reload appointments on demand (or seed sample data)
-  const handleLoadMockData = async () => {
-    try {
-      const res = await authFetch('/api/appointments/seed', { method: 'POST' });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.appointments) {
-          setAppointments(data.appointments);
-        }
-      } else {
-        const data = await authFetch('/api/appointments');
-        if (data.ok) {
-          const list = await data.json();
-          setAppointments(list);
-        }
-      }
-    } catch (_) {}
-    showToast('Dados Atualizados', 'Agendamentos de demonstração carregados com sucesso.', 'info');
+  // Reset all users (Clear database of users & return to initial setup)
+  const handleResetUsers = async (adminPassword: string) => {
+    const res = await authFetch('/api/auth/reset-users', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-admin-password': adminPassword,
+      },
+      body: JSON.stringify({ password: adminPassword, adminPassword }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => null);
+      throw new Error(err?.error || 'Falha ao zerar base de usuários.');
+    }
+    showToast('Base de Usuários Zerada', 'Todos os usuários foram removidos. O sistema retornou ao estado inicial de configuração.', 'info');
+    handleAdminLogout();
   };
 
   const isLoggedIn = userRole === 'ADMIN' || Boolean(currentSystemUser) || Boolean(currentSupplierSession);
@@ -973,7 +989,8 @@ export default function App() {
         appointmentsCount={appointments.length}
         onClearAppointments={handleClearAllAppointments}
         onFactoryReset={handleFactoryReset}
-        onLoadMockData={handleLoadMockData}
+        onResetUsers={handleResetUsers}
+        currentSystemUser={currentSystemUser}
       />
 
       {/* Appointment Official Receipt & Voucher Modal */}

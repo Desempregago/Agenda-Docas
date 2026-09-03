@@ -209,20 +209,27 @@ export const UsersManagementModal: React.FC<UsersManagementModalProps> = ({
   };
 
   const handleResetAllUsers = async () => {
-    if (!window.confirm('Atenção: Deseja realmente zerar todos os usuários do sistema? Isso removerá todos os administradores e operadores cadastrados para permitir reconfiguração inicial.')) {
+    const adminPass = window.prompt('Atenção: Esta ação removerá todos os administradores e operadores cadastrados.\n\nPor favor, digite a senha ou PIN de Administrador Geral para autorizar:');
+    if (!adminPass || !adminPass.trim()) {
       return;
     }
 
     try {
       const res = await authFetch('/api/auth/reset-users', {
-        method: 'POST'
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-password': adminPass.trim(),
+        },
+        body: JSON.stringify({ password: adminPass.trim(), adminPassword: adminPass.trim() }),
       });
       if (res.ok) {
         onShowToast?.('Usuários Resetados', 'Todos os usuários foram removidos. O sistema retornou ao estado inicial.', 'info');
         onUsersReset?.();
         onClose();
       } else {
-        alert('Erro ao resetar usuários.');
+        const err = await res.json().catch(() => null);
+        alert(err?.error || 'Erro ao resetar usuários. Senha incorreta.');
       }
     } catch (_) {
       alert('Falha de conexão com o servidor.');
