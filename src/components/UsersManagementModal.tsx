@@ -25,7 +25,6 @@ interface UsersManagementModalProps {
   onClose: () => void;
   currentUser?: SystemUser | null;
   onUserUpdated?: (updatedUser: SystemUser) => void;
-  onUsersReset?: () => void;
   onShowToast?: (title: string, desc: string, type: 'success' | 'error' | 'info') => void;
 }
 
@@ -34,7 +33,6 @@ export const UsersManagementModal: React.FC<UsersManagementModalProps> = ({
   onClose,
   currentUser,
   onUserUpdated,
-  onUsersReset,
   onShowToast
 }) => {
   const isUserAdmin = !currentUser || currentUser.role === 'ADMIN';
@@ -205,34 +203,6 @@ export const UsersManagementModal: React.FC<UsersManagementModalProps> = ({
       }
     } catch (_) {
       alert('Erro de conexão ao remover usuário.');
-    }
-  };
-
-  const handleResetAllUsers = async () => {
-    const adminPass = window.prompt('Atenção: Esta ação removerá todos os administradores e operadores cadastrados.\n\nPor favor, digite a senha ou PIN de Administrador Geral para autorizar:');
-    if (!adminPass || !adminPass.trim()) {
-      return;
-    }
-
-    try {
-      const res = await authFetch('/api/auth/reset-users', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-admin-password': adminPass.trim(),
-        },
-        body: JSON.stringify({ password: adminPass.trim(), adminPassword: adminPass.trim() }),
-      });
-      if (res.ok) {
-        onShowToast?.('Usuários Resetados', 'Todos os usuários foram removidos. O sistema retornou ao estado inicial.', 'info');
-        onUsersReset?.();
-        onClose();
-      } else {
-        const err = await res.json().catch(() => null);
-        alert(err?.error || 'Erro ao resetar usuários. Senha incorreta.');
-      }
-    } catch (_) {
-      alert('Falha de conexão com o servidor.');
     }
   };
 
@@ -413,17 +383,9 @@ export const UsersManagementModal: React.FC<UsersManagementModalProps> = ({
               )}
 
               {users.length > 0 && (
-                <div className="pt-2 flex items-center justify-between border-t border-slate-100 text-xs">
-                  <span className="text-slate-400">Ambiente persistente com armazenamento no servidor</span>
-                  <button
-                    type="button"
-                    onClick={handleResetAllUsers}
-                    className="inline-flex items-center gap-1 text-rose-600 hover:text-rose-700 hover:bg-rose-50 px-2.5 py-1.5 rounded-lg border border-rose-200 transition-colors font-medium cursor-pointer"
-                    title="Zerar todos os usuários e voltar ao setup inicial"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                    Zerar Todos os Usuários
-                  </button>
+                <div className="pt-2 flex items-center justify-between border-t border-slate-100 text-xs text-slate-400">
+                  <span>Ambiente persistente com armazenamento no servidor</span>
+                  <span>{users.length} {users.length === 1 ? 'usuário cadastrado' : 'usuários cadastrados'}</span>
                 </div>
               )}
             </div>

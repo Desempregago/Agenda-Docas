@@ -945,9 +945,6 @@ export default function App() {
             localStorage.setItem('agendadocas_system_user', JSON.stringify(updatedUser));
           } catch (_) {}
         }}
-        onUsersReset={() => {
-          handleAdminLogout();
-        }}
         onShowToast={showToast}
       />
 
