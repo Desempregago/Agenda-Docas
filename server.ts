@@ -10,7 +10,7 @@ import { clearSessionCookie, getSession, hashSecret, needsSecretMigration, requi
 
 async function startServer() {
   const app = express();
-  const PORT = Number(process.env.PORT || 3000);
+  const PORT = 3000;
 
   app.disable('x-powered-by');
   app.use((_, res, next) => {
