@@ -168,7 +168,7 @@ export const ClientAppointmentsList: React.FC<ClientAppointmentsListProps> = ({
           </div>
         </div>
       ) : (
-        <div className="bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 text-white shadow-md flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+        <div className="bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 text-white shadow-md flex items-center justify-between gap-4">
           <div className="flex items-start gap-3">
             <div className="p-2.5 bg-blue-600/30 border border-blue-500/40 text-blue-300 rounded-xl shrink-0 mt-0.5">
               <Building2 className="w-6 h-6" />
@@ -176,29 +176,9 @@ export const ClientAppointmentsList: React.FC<ClientAppointmentsListProps> = ({
             <div>
               <h2 className="font-bold text-base text-white">Painel de Solicitações e Agendamentos de Carga</h2>
               <p className="text-xs sm:text-sm text-slate-300 mt-0.5">
-                Consulte o status das entregas agendadas ou solicite uma nova data/janela de recebimento.
+                Consulte o status das entregas agendadas e acompanhe as janelas de recebimento.
               </p>
             </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2 shrink-0 w-full md:w-auto justify-start md:justify-end">
-            {onOpenSupplierLogin && (
-              <button
-                onClick={onOpenSupplierLogin}
-                className="inline-flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold px-3.5 py-2.5 rounded-xl border border-slate-700 transition-all cursor-pointer"
-                title="Filtrar exclusivamente os agendamentos da sua empresa pelo CNPJ"
-              >
-                <LogIn className="w-3.5 h-3.5 text-blue-400" />
-                Filtrar por CNPJ
-              </button>
-            )}
-            <button
-              onClick={onOpenNewModal}
-              className="inline-flex items-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs sm:text-sm font-bold px-4 py-2.5 rounded-xl shadow-md transition-all active:scale-95 cursor-pointer"
-            >
-              <Plus className="w-4 h-4" />
-              Solicitar Agendamento
-            </button>
           </div>
         </div>
       )}

@@ -55,99 +55,103 @@ export const Header: React.FC<HeaderProps> = ({
   return (
     <header className="bg-slate-900 text-white border-b border-slate-800 sticky top-0 z-40 shadow-md w-full">
       <div className="max-w-[1680px] mx-auto px-3 sm:px-6 lg:px-8 xl:px-10 w-full">
-        <div className="flex items-center justify-between h-14 sm:h-16 gap-2 w-full">
+        <div className="flex items-center justify-between h-14 sm:h-16 gap-3 w-full">
           
-          {/* Logo & Brand */}
-          <div 
-            className="flex items-center gap-2 sm:gap-2.5 cursor-pointer shrink-0 min-w-0" 
-            onClick={() => handleNavClick('CLIENT')}
-            title="Ir para o início"
-          >
-            <div className={`w-8 h-8 sm:w-9 sm:h-9 md:w-10 md:h-10 rounded-xl bg-gradient-to-tr ${brandTheme.gradient} flex items-center justify-center shadow-md text-white font-bold text-sm sm:text-base overflow-hidden shrink-0 border border-slate-700/80 transition-all duration-300`}>
-              {brandSettings.logoUrl ? (
-                <img src={brandSettings.logoUrl} alt={brandSettings.appName} className="w-full h-full object-contain p-0.5" />
-              ) : (
-                <Calendar className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
-              )}
-            </div>
-            <div className="min-w-0 flex flex-col justify-center">
-              <div className="flex items-center gap-1.5">
-                <span className="font-bold text-xs sm:text-sm lg:text-base tracking-tight text-white truncate max-w-[130px] sm:max-w-[180px] md:max-w-[240px]">
-                  {brandSettings.appName || 'Agendamento'}
-                </span>
-                <span className={`text-[9px] font-semibold ${brandTheme.badge} px-1.5 py-0.2 rounded-full hidden sm:inline-block shrink-0`}>
-                  Portal
-                </span>
+          {/* Logo & Brand - Left Section */}
+          <div className="flex-1 flex items-center justify-start min-w-0">
+            <div 
+              className="flex items-center gap-2 sm:gap-2.5 cursor-pointer shrink-0 min-w-0" 
+              onClick={() => handleNavClick('CLIENT')}
+              title="Ir para o início"
+            >
+              <div className={`w-8 h-8 sm:w-9 sm:h-9 md:w-10 md:h-10 rounded-xl bg-gradient-to-tr ${brandTheme.gradient} flex items-center justify-center shadow-md text-white font-bold text-sm sm:text-base overflow-hidden shrink-0 border border-slate-700/80 transition-all duration-300`}>
+                {brandSettings.logoUrl ? (
+                  <img src={brandSettings.logoUrl} alt={brandSettings.appName} className="w-full h-full object-contain p-0.5" />
+                ) : (
+                  <Calendar className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
+                )}
               </div>
-              {brandSettings.appSubtitle && (
-                <span className="text-[10px] sm:text-[11px] text-slate-400 font-normal truncate max-w-[130px] sm:max-w-[190px] md:max-w-[280px] leading-tight block">
-                  {brandSettings.appSubtitle}
-                </span>
-              )}
+              <div className="min-w-0 flex flex-col justify-center">
+                <div className="flex items-center gap-1.5">
+                  <span className="font-bold text-xs sm:text-sm lg:text-base tracking-tight text-white truncate max-w-[130px] sm:max-w-[180px] md:max-w-[240px]">
+                    {brandSettings.appName || 'Agendamento'}
+                  </span>
+                  <span className={`text-[9px] font-semibold ${brandTheme.badge} px-1.5 py-0.2 rounded-full hidden sm:inline-block shrink-0`}>
+                    Portal
+                  </span>
+                </div>
+                {brandSettings.appSubtitle && (
+                  <span className="text-[10px] sm:text-[11px] text-slate-400 font-normal truncate max-w-[130px] sm:max-w-[190px] md:max-w-[280px] leading-tight block">
+                    {brandSettings.appSubtitle}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
 
-          {/* Desktop Navigation Tabs */}
-          <nav className="hidden md:flex items-center gap-1 bg-slate-800/80 p-1 rounded-xl border border-slate-700/60 shrink-0">
-            <button
-              onClick={() => onSelectView('CLIENT')}
-              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                currentView === 'CLIENT'
-                  ? 'bg-blue-600 text-white shadow-xs'
-                  : 'text-slate-300 hover:text-white hover:bg-slate-700/50'
-              }`}
-            >
-              <Calendar className="w-3.5 h-3.5 shrink-0" />
-              <span>Agendamentos</span>
-            </button>
+          {/* Desktop Navigation Tabs - Perfectly Centered */}
+          <div className="hidden md:flex items-center justify-center shrink-0">
+            <nav className="flex items-center gap-1 bg-slate-800/80 p-1 rounded-xl border border-slate-700/60 shadow-xs">
+              <button
+                onClick={() => onSelectView('CLIENT')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                  currentView === 'CLIENT'
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : 'text-slate-300 hover:text-white hover:bg-slate-700/50'
+                }`}
+              >
+                <Calendar className="w-3.5 h-3.5 shrink-0" />
+                <span>Agendamentos</span>
+              </button>
 
-            <button
-              onClick={() => onSelectView('TRACKING')}
-              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                currentView === 'TRACKING'
-                  ? 'bg-blue-600 text-white shadow-xs'
-                  : 'text-slate-300 hover:text-white hover:bg-slate-700/50'
-              }`}
-            >
-              <Search className="w-3.5 h-3.5 shrink-0" />
-              <span>Rastreamento</span>
-            </button>
+              <button
+                onClick={() => onSelectView('TRACKING')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                  currentView === 'TRACKING'
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : 'text-slate-300 hover:text-white hover:bg-slate-700/50'
+                }`}
+              >
+                <Search className="w-3.5 h-3.5 shrink-0" />
+                <span>Rastreamento</span>
+              </button>
 
-            {isStaff && (
-              <>
-                <button
-                  onClick={() => onSelectView('ADMIN')}
-                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                    currentView === 'ADMIN'
-                      ? 'bg-blue-600 text-white shadow-xs'
-                      : 'text-slate-300 hover:text-white hover:bg-slate-700/50'
-                  }`}
-                  title="Visão geral e operação de docas"
-                >
-                  <LayoutDashboard className="w-3.5 h-3.5 shrink-0" />
-                  <span>Docas</span>
-                </button>
-
-                {isUserAdmin && (
+              {isStaff && (
+                <>
                   <button
-                    onClick={() => onSelectView('SYSTEM')}
+                    onClick={() => onSelectView('ADMIN')}
                     className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                      currentView === 'SYSTEM'
-                        ? 'bg-indigo-600 text-white shadow-xs'
+                      currentView === 'ADMIN'
+                        ? 'bg-blue-600 text-white shadow-xs'
                         : 'text-slate-300 hover:text-white hover:bg-slate-700/50'
                     }`}
-                    title="Backups, Exportações e Status do Sistema (Exclusivo Administrador)"
+                    title="Visão geral e operação de docas"
                   >
-                    <Database className="w-3.5 h-3.5 shrink-0" />
-                    <span>Sistema</span>
+                    <LayoutDashboard className="w-3.5 h-3.5 shrink-0" />
+                    <span>Docas</span>
                   </button>
-                )}
-              </>
-            )}
-          </nav>
 
-          {/* Action Buttons & Controls */}
-          <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+                  {isUserAdmin && (
+                    <button
+                      onClick={() => onSelectView('SYSTEM')}
+                      className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                        currentView === 'SYSTEM'
+                          ? 'bg-indigo-600 text-white shadow-xs'
+                          : 'text-slate-300 hover:text-white hover:bg-slate-700/50'
+                      }`}
+                      title="Backups, Exportações e Status do Sistema (Exclusivo Administrador)"
+                    >
+                      <Database className="w-3.5 h-3.5 shrink-0" />
+                      <span>Sistema</span>
+                    </button>
+                  )}
+                </>
+              )}
+            </nav>
+          </div>
+
+          {/* Action Buttons & Controls - Right Section */}
+          <div className="flex-1 flex items-center justify-end min-w-0 gap-1 sm:gap-1.5 shrink-0">
             
             {/* Notification Bell Button (Exibido apenas após autenticação do operador ou fornecedor) */}
             {isLoggedIn && onOpenNotifications && (
@@ -247,15 +251,6 @@ export const Header: React.FC<HeaderProps> = ({
                 </button>
               )}
             </div>
-
-            {/* New Scheduling Modal Button - Hidden on mobile, as MobileNav provides the central action button */}
-            <button
-              onClick={onOpenNewModal}
-              className="hidden sm:inline-flex items-center gap-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-semibold px-3 py-1.5 rounded-xl shadow-md transition-all active:scale-95 shrink-0 cursor-pointer"
-            >
-              <Plus className="w-3.5 h-3.5 shrink-0" />
-              <span>Agendar</span>
-            </button>
 
             {/* Mobile Hamburger Menu Toggle */}
             <button
