@@ -35,6 +35,9 @@ export const TrackingView: React.FC<TrackingViewProps> = ({
   // Operational / Admin users have full system access to view all appointments and suppliers
   const isOperatorOrAdmin = userRole === 'ADMIN' || !!currentSystemUser;
   const isSupplierLoggedIn = !isOperatorOrAdmin && !!currentSupplierSession;
+  const canApproveReject = currentSystemUser
+    ? currentSystemUser.role === 'ADMIN' || currentSystemUser.role === 'SUPERVISOR'
+    : userRole === 'ADMIN';
 
   const [selectedApptId, setSelectedApptId] = useState<string | null>(null);
 
@@ -379,23 +382,35 @@ export const TrackingView: React.FC<TrackingViewProps> = ({
                 <div className="flex items-center gap-2 flex-wrap">
                   <StatusBadge status={selectedAppt.status} size="lg" />
                   
-                  {/* Pending Quick Approval Actions for Operator (Exclusively for Logged-In Operators/Admins) */}
-                  {selectedAppt.status === 'PENDENTE' && onUpdateStatus && isOperatorOrAdmin && (
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => onUpdateStatus(selectedAppt.id, 'CONFIRMADO', selectedAppt.dockId)}
-                        className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-3.5 py-2 rounded-xl transition-all shadow-2xs active:scale-95 cursor-pointer"
+                  {/* Pending Quick Approval Actions (Exclusively for Logged-In Supervisors/Admins) */}
+                  {selectedAppt.status === 'PENDENTE' && onUpdateStatus && (
+                    canApproveReject ? (
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => onUpdateStatus(selectedAppt.id, 'CONFIRMADO', selectedAppt.dockId)}
+                          className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-3.5 py-2 rounded-xl transition-all shadow-2xs active:scale-95 cursor-pointer"
+                          title="Aprovar e confirmar solicitação (Supervisor ou Administrador)"
+                        >
+                          <CheckCircle2 className="w-4 h-4" />
+                          Confirmar
+                        </button>
+                        <button
+                          onClick={() => onUpdateStatus(selectedAppt.id, 'CANCELADO')}
+                          className="inline-flex items-center gap-1.5 text-rose-700 hover:bg-rose-50 border border-rose-200 font-semibold text-xs px-3 py-2 rounded-xl transition-all cursor-pointer"
+                          title="Rejeitar solicitação (Supervisor ou Administrador)"
+                        >
+                          Rejeitar
+                        </button>
+                      </div>
+                    ) : isOperatorOrAdmin ? (
+                      <span
+                        className="text-xs text-amber-800 bg-amber-50 border border-amber-200/80 px-2.5 py-1.5 rounded-lg font-medium inline-flex items-center gap-1.5"
+                        title="Apenas Supervisores de Logística ou Administradores possuem permissão para aprovar ou rejeitar solicitações."
                       >
-                        <CheckCircle2 className="w-4 h-4" />
-                        Confirmar
-                      </button>
-                      <button
-                        onClick={() => onUpdateStatus(selectedAppt.id, 'REJEITADO')}
-                        className="inline-flex items-center gap-1.5 text-rose-700 hover:bg-rose-50 border border-rose-200 font-semibold text-xs px-3 py-2 rounded-xl transition-all cursor-pointer"
-                      >
-                        Rejeitar
-                      </button>
-                    </div>
+                        <Lock className="w-3.5 h-3.5 text-amber-600" />
+                        Aguardando Aprovação de Supervisor/Admin
+                      </span>
+                    ) : null
                   )}
 
                   {/* Signal In Transit button */}

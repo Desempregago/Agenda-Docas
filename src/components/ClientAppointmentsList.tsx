@@ -44,6 +44,9 @@ export const ClientAppointmentsList: React.FC<ClientAppointmentsListProps> = ({
 
   const isOperator = userRole === 'ADMIN' || !!currentSystemUser;
   const isSupplierLoggedIn = !!currentSupplierSession;
+  const canApproveReject = currentSystemUser
+    ? currentSystemUser.role === 'ADMIN' || currentSystemUser.role === 'SUPERVISOR'
+    : userRole === 'ADMIN';
 
   // Visible appointments:
   // 1. If supplier logged in, isolate strictly to their CNPJ/Name
@@ -453,26 +456,36 @@ export const ClientAppointmentsList: React.FC<ClientAppointmentsListProps> = ({
                     <td className="py-3.5 px-4 text-right whitespace-nowrap">
                       <div className="flex items-center justify-end gap-1.5 sm:gap-2">
                         
-                        {/* Pending Quick Approval Actions (Exclusively for Logged-In Operators/Admins) */}
-                        {appt.status === 'PENDENTE' && onUpdateStatus && isOperator && (
-                          <div className="flex items-center gap-1.5 mr-1">
-                            <button
-                              onClick={() => onUpdateStatus(appt.id, 'CONFIRMADO', appt.dockId)}
-                              className="inline-flex items-center gap-1 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-2.5 py-1 rounded-lg transition-all shadow-2xs active:scale-95 cursor-pointer"
-                              title="Aprovar e confirmar este agendamento (Apenas Operador)"
+                        {/* Pending Quick Approval Actions (Exclusively for Logged-In Supervisors/Admins) */}
+                        {appt.status === 'PENDENTE' && onUpdateStatus && (
+                          canApproveReject ? (
+                            <div className="flex items-center gap-1.5 mr-1">
+                              <button
+                                onClick={() => onUpdateStatus(appt.id, 'CONFIRMADO', appt.dockId)}
+                                className="inline-flex items-center gap-1 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-2.5 py-1 rounded-lg transition-all shadow-2xs active:scale-95 cursor-pointer"
+                                title="Aprovar e confirmar este agendamento (Apenas Supervisores ou Administradores)"
+                              >
+                                <CheckCircle2 className="w-3.5 h-3.5" />
+                                <span>Confirmar</span>
+                              </button>
+                              <button
+                                onClick={() => onUpdateStatus(appt.id, 'CANCELADO')}
+                                className="inline-flex items-center gap-1 text-xs text-rose-700 hover:bg-rose-50 border border-rose-200 font-semibold px-2 py-1 rounded-lg transition-all cursor-pointer"
+                                title="Rejeitar solicitação de agendamento (Apenas Supervisores ou Administradores)"
+                              >
+                                <XCircle className="w-3.5 h-3.5" />
+                                <span>Rejeitar</span>
+                              </button>
+                            </div>
+                          ) : isOperator ? (
+                            <span
+                              className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200/80 px-2 py-1 rounded-md font-medium inline-flex items-center gap-1 mr-1"
+                              title="Apenas Supervisores de Logística ou Administradores Gerais possuem permissão para aprovar ou rejeitar solicitações."
                             >
-                              <CheckCircle2 className="w-3.5 h-3.5" />
-                              <span>Confirmar</span>
-                            </button>
-                            <button
-                              onClick={() => onUpdateStatus(appt.id, 'REJEITADO')}
-                              className="inline-flex items-center gap-1 text-xs text-rose-700 hover:bg-rose-50 border border-rose-200 font-semibold px-2 py-1 rounded-lg transition-all cursor-pointer"
-                              title="Rejeitar solicitação de agendamento (Apenas Operador)"
-                            >
-                              <XCircle className="w-3.5 h-3.5" />
-                              <span>Rejeitar</span>
-                            </button>
-                          </div>
+                              <Lock className="w-3 h-3 text-amber-600" />
+                              Aguardando Supervisor/Admin
+                            </span>
+                          ) : null
                         )}
 
                         {/* Signal In Transit button */}
@@ -564,13 +577,6 @@ export const ClientAppointmentsList: React.FC<ClientAppointmentsListProps> = ({
                               Acesso Operação
                             </button>
                           )}
-                          <button
-                            onClick={onOpenNewModal}
-                            className="inline-flex items-center gap-1.5 bg-white hover:bg-slate-50 text-slate-700 font-semibold text-xs px-3.5 py-2.5 rounded-xl border border-slate-300 transition-all cursor-pointer"
-                          >
-                            <Plus className="w-3.5 h-3.5" />
-                            Novo Agendamento
-                          </button>
                         </div>
                       </div>
                     ) : (

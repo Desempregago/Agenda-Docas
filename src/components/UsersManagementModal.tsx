@@ -458,11 +458,15 @@ export const UsersManagementModal: React.FC<UsersManagementModalProps> = ({
                     onChange={e => setRole(e.target.value as SystemUserRole)}
                     className="w-full px-3.5 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 bg-white"
                   >
-                    <option value="OPERATOR">Operador (Aprovação e Docas)</option>
-                    <option value="SUPERVISOR">Supervisor de Logística</option>
-                    <option value="SECURITY_GATE">Portaria & Triagem</option>
-                    <option value="ADMIN">Administrador Geral</option>
+                    <option value="OPERATOR">Operador de Docas e Pátio (Execução Operacional)</option>
+                    <option value="SUPERVISOR">Supervisor de Logística (Aprovações e Auditoria)</option>
+                    <option value="SECURITY_GATE">Portaria & Triagem (Prevenção de Perdas)</option>
+                    <option value="ADMIN">Administrador Geral (Acesso Total)</option>
                   </select>
+                  <p className="text-[11px] text-slate-500 mt-1.5 flex items-center gap-1">
+                    <Shield className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                    <span>Apenas <strong>Supervisores</strong> e <strong>Administradores</strong> podem aprovar ou rejeitar agendamentos.</span>
+                  </p>
                 </div>
 
                 {mode === 'EDIT' && (

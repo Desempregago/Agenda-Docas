@@ -471,7 +471,7 @@ async function startServer() {
   });
 
   // Update Status & Discrepancy & Double Check (Persistent)
-  app.patch('/api/appointments/:id/status', requireSystemRole('ADMIN', 'OPERATOR'), (req, res) => {
+  app.patch('/api/appointments/:id/status', requireSystemRole('ADMIN', 'SUPERVISOR', 'OPERATOR', 'SECURITY_GATE'), (req, res) => {
     const { id } = req.params;
     const { 
       status, 
@@ -515,23 +515,46 @@ async function startServer() {
       carrierName?: string;
     };
 
+    const session = getSession(req);
+    const userRole = session && session.type === 'system' ? session.role : null;
+
     const index = appointments.findIndex(a => a.id === id || a.protocol === id);
     if (index === -1) {
       return res.status(404).json({ error: 'Agendamento não encontrado' });
     }
 
     const current = appointments[index];
-    if (status !== undefined && !isAppointmentStatus(status)) {
+
+    // Normalização de status (mapeia REJEITADO para CANCELADO)
+    const normalizedStatus: AppointmentStatus | undefined = 
+      (status as string) === 'REJEITADO' ? 'CANCELADO' : status;
+
+    if (normalizedStatus !== undefined && !isAppointmentStatus(normalizedStatus)) {
       return res.status(400).json({ error: 'Status de agendamento inválido.' });
     }
-    if (status && status !== current.status && (current.status === 'ENTREGUE_SEM_DIVERGENCIA' || current.status === 'ENTREGUE_COM_DIVERGENCIA')) {
+
+    // Regra de Governança e Restrição de Permissão:
+    // Apenas Administradores e Supervisores podem aprovar (PENDENTE -> CONFIRMADO) ou rejeitar (PENDENTE -> CANCELADO/REJEITADO).
+    // Operadores de docas/pátio e Portaria/Prevenção não possuem permissão para aprovação ou rejeição.
+    const isApproving = normalizedStatus === 'CONFIRMADO' && current.status !== 'CONFIRMADO';
+    const isRejecting = (normalizedStatus === 'CANCELADO' || (status as string) === 'REJEITADO') && current.status === 'PENDENTE';
+
+    if (isApproving || isRejecting) {
+      if (userRole !== 'ADMIN' && userRole !== 'SUPERVISOR') {
+        return res.status(403).json({
+          error: 'Permissão negada. Apenas Supervisores de Logística ou Administradores Gerais podem aprovar ou rejeitar solicitações de agendamento.'
+        });
+      }
+    }
+
+    if (normalizedStatus && normalizedStatus !== current.status && (current.status === 'ENTREGUE_SEM_DIVERGENCIA' || current.status === 'ENTREGUE_COM_DIVERGENCIA')) {
       return res.status(409).json({ error: 'Agendamentos concluídos não podem voltar para um status anterior.' });
     }
     const nowIso = new Date().toISOString();
 
     const updatedTimestamps = {
       ...(current.statusTimestamps || {}),
-      ...(status ? { [status]: nowIso } : {})
+      ...(normalizedStatus ? { [normalizedStatus]: nowIso } : {})
     };
 
     // Formatação de chaves e notas se fornecidas
@@ -545,7 +568,7 @@ async function startServer() {
 
     const updated: Appointment = {
       ...current,
-      status: status || current.status,
+      status: normalizedStatus || current.status,
       dockId: dockId !== undefined ? dockId : current.dockId,
       notes: notes !== undefined ? notes : current.notes,
       nfeAccessKeys: parsedNfeKeys.length > 0 ? parsedNfeKeys : current.nfeAccessKeys,

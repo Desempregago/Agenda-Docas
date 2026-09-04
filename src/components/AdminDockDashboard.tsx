@@ -27,6 +27,7 @@ import {
   GripVertical,
   Move,
   Sparkles,
+  Lock,
   X,
 } from 'lucide-react';
 import { Appointment, AppointmentStatus, Dock, DiscrepancyReport, DestinationBranch, SystemUser } from '../types';
@@ -80,6 +81,7 @@ export const AdminDockDashboard: React.FC<AdminDockDashboardProps> = ({
   const effectiveIsAdmin = isUserAdmin !== undefined 
     ? isUserAdmin 
     : Boolean(currentSystemUser ? currentSystemUser.role === 'ADMIN' : true);
+  const canApproveReject = effectiveIsAdmin || currentSystemUser?.role === 'SUPERVISOR';
   const [selectedDate, setSelectedDate] = useState<string>(() => {
     return getTodayDateString();
   });
@@ -1140,24 +1142,34 @@ export const AdminDockDashboard: React.FC<AdminDockDashboardProps> = ({
                     <td className="py-3.5 px-4 text-right whitespace-nowrap">
                       <div className="flex items-center justify-end gap-1.5">
                         
-                        {/* Action 1: Approve pending request */}
+                        {/* Action 1: Approve pending request (Restricted to SUPERVISOR and ADMIN) */}
                         {appt.status === 'PENDENTE' && (
-                          <div className="flex items-center gap-1">
-                            <button
-                              onClick={() => onUpdateStatus(appt.id, 'CONFIRMADO', appt.dockId)}
-                              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-3 py-1.5 rounded-lg shadow-2xs flex items-center gap-1 transition-all"
-                              title="Aprovar e Confirmar Agendamento"
+                          canApproveReject ? (
+                            <div className="flex items-center gap-1">
+                              <button
+                                onClick={() => onUpdateStatus(appt.id, 'CONFIRMADO', appt.dockId)}
+                                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-3 py-1.5 rounded-lg shadow-2xs flex items-center gap-1 transition-all cursor-pointer"
+                                title="Aprovar e Confirmar Agendamento (Supervisor ou Administrador)"
+                              >
+                                <CheckCircle2 className="w-3.5 h-3.5" /> Confirmar
+                              </button>
+                              <button
+                                onClick={() => onUpdateStatus(appt.id, 'CANCELADO')}
+                                className="bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-semibold text-xs px-2 py-1.5 rounded-lg transition-colors cursor-pointer"
+                                title="Rejeitar Solicitação de Agendamento (Supervisor ou Administrador)"
+                              >
+                                Rejeitar
+                              </button>
+                            </div>
+                          ) : (
+                            <span
+                              className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200/80 px-2 py-1 rounded-md font-medium inline-flex items-center gap-1"
+                              title="Apenas Supervisores de Logística ou Administradores Gerais possuem permissão para aprovar ou rejeitar solicitações."
                             >
-                              <CheckCircle2 className="w-3.5 h-3.5" /> Confirmar
-                            </button>
-                            <button
-                              onClick={() => onUpdateStatus(appt.id, 'REJEITADO')}
-                              className="bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-semibold text-xs px-2 py-1.5 rounded-lg transition-colors"
-                              title="Rejeitar Agendamento"
-                            >
-                              Rejeitar
-                            </button>
-                          </div>
+                              <Lock className="w-3 h-3 text-amber-600" />
+                              Aguardando Supervisor/Admin
+                            </span>
+                          )
                         )}
 
                         {/* Action 2: Check-in at Gate (Prevenção de Perdas) */}
