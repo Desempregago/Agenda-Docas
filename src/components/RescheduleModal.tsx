@@ -1,7 +1,8 @@
-import React, { useState, useMemo } from 'react';
-import { X, Calendar, Clock, RefreshCw, AlertCircle, CheckCircle2, History, FilePlus, Package, Weight, Lock, LogIn, Building2, ShieldAlert, AlertTriangle, MapPin } from 'lucide-react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { X, Calendar, Clock, RefreshCw, AlertCircle, CheckCircle2, History, FilePlus, Package, Weight, Lock, Unlock, RotateCcw, LogIn, Building2, ShieldAlert, AlertTriangle, MapPin, KeyRound, Trash2, FileText } from 'lucide-react';
 import { Appointment, Dock, DestinationBranch } from '../types';
 import { SupplierSession } from './SupplierLoginModal';
+import { cleanNfeAccessKey, extractNfeKeysFromText, extractInvoiceNumberFromNfeKey } from '../utils/formatters';
 import {
   getDayOfWeekFromDate,
   getDayName,
@@ -71,6 +72,59 @@ export const RescheduleModal: React.FC<RescheduleModalProps> = ({
   // Extra Invoices & Volumes options for supplier returning with additional NFs
   const [addExtraInvoices, setAddExtraInvoices] = useState(false);
   const [additionalInvoices, setAdditionalInvoices] = useState('');
+  const [extraNfeKeys, setExtraNfeKeys] = useState<string[]>(['']);
+  const extraNfeInputRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const [isExtraInvoiceManualEdit, setIsExtraInvoiceManualEdit] = useState(false);
+
+  // Sincronização automática das NFs adicionais via Chaves de Acesso
+  useEffect(() => {
+    if (!addExtraInvoices || isExtraInvoiceManualEdit) return;
+    const derived = extraNfeKeys
+      .map(k => extractInvoiceNumberFromNfeKey(cleanNfeAccessKey(k)))
+      .filter(Boolean);
+
+    if (derived.length > 0) {
+      setAdditionalInvoices(derived.join(', '));
+    }
+  }, [extraNfeKeys, isExtraInvoiceManualEdit, addExtraInvoices]);
+
+  const handleExtraNfeKeyChange = (index: number, val: string) => {
+    const extracted = extractNfeKeysFromText(val);
+    if (extracted.length > 1) {
+      setExtraNfeKeys(prev => {
+        const next = [...prev];
+        next.splice(index, 1, ...extracted);
+        if (next.length < 10 && !next[next.length - 1]) {
+          // ok
+        } else if (next.length < 10) {
+          next.push('');
+        }
+        const trimmed = next.slice(0, 10);
+        setTimeout(() => {
+          const nextFocus = Math.min(index + extracted.length, trimmed.length - 1);
+          extraNfeInputRefs.current[nextFocus]?.focus();
+        }, 40);
+        return trimmed;
+      });
+      return;
+    }
+
+    const cleaned = cleanNfeAccessKey(val);
+    setExtraNfeKeys(prev => {
+      const updated = [...prev];
+      updated[index] = cleaned;
+      if (cleaned.length === 44) {
+        if (index === updated.length - 1 && updated.length < 10) {
+          updated.push('');
+        }
+        setTimeout(() => {
+          extraNfeInputRefs.current[index + 1]?.focus();
+        }, 40);
+      }
+      return updated;
+    });
+  };
+
   const [updatedVolumes, setUpdatedVolumes] = useState(appointment.totalVolumes || 10);
   const [updatedWeightKg, setUpdatedWeightKg] = useState(appointment.weightKg || 1000);
 
@@ -465,17 +519,129 @@ export const RescheduleModal: React.FC<RescheduleModalProps> = ({
 
                 {addExtraInvoices && (
                   <div className="space-y-3 pt-2 border-t border-blue-200/60 animate-in fade-in duration-150">
+                    {/* Chaves de Acesso das Novas NFs */}
+                    <div className="bg-white/80 border border-blue-200 rounded-lg p-2.5 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <label className="block text-[11px] font-bold text-slate-800 flex items-center gap-1">
+                          <KeyRound className="w-3 h-3 text-blue-600" />
+                          <span>Chaves de Acesso das Novas NFs (44 dígitos)</span>
+                          <span className="text-slate-400 font-normal text-[10px]">(Opcional)</span>
+                        </label>
+                        <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
+                          {extraNfeKeys.filter(k => cleanNfeAccessKey(k).length === 44).length} de {extraNfeKeys.length}
+                        </span>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        {extraNfeKeys.map((keyVal, idx) => {
+                          const cleanKey = cleanNfeAccessKey(keyVal);
+                          const isComplete = cleanKey.length === 44;
+                          return (
+                            <div key={`extra-nfe-${idx}`} className="flex items-center gap-1">
+                              <div className="relative flex-1">
+                                <input
+                                  ref={el => { extraNfeInputRefs.current[idx] = el; }}
+                                  type="text"
+                                  maxLength={54}
+                                  placeholder="Cole ou bipe a chave de 44 dígitos da nova NF..."
+                                  value={keyVal}
+                                  onChange={e => handleExtraNfeKeyChange(idx, e.target.value)}
+                                  className={`w-full px-2 py-1 text-[11px] font-mono border rounded-md focus:ring-1 focus:ring-blue-500 ${
+                                    isComplete
+                                      ? 'border-emerald-400 bg-emerald-50/40 text-emerald-950 font-semibold'
+                                      : cleanKey.length > 0
+                                      ? 'border-amber-300 bg-amber-50/30'
+                                      : 'border-slate-300 bg-white'
+                                  }`}
+                                />
+                                <div className="absolute right-2 top-1/2 -translate-y-1/2 text-[9px] font-bold">
+                                  <span className={isComplete ? 'text-emerald-700' : 'text-slate-400'}>
+                                    {cleanKey.length}/44
+                                  </span>
+                                </div>
+                              </div>
+                              {extraNfeKeys.length > 1 && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setExtraNfeKeys(prev => prev.filter((_, i) => i !== idx));
+                                  }}
+                                  className="p-1 text-slate-400 hover:text-rose-600 rounded"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Campo de Número das NFs Adicionais com bloqueio inteligente */}
                     <div>
-                      <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-                        Números das Novas NFs Adicionais (separadas por vírgula ou espaço)
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="Ex: NF-8891, NF-8892"
-                        value={additionalInvoices}
-                        onChange={e => setAdditionalInvoices(e.target.value)}
-                        className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"
-                      />
+                      <div className="flex items-center justify-between mb-1 flex-wrap gap-1">
+                        <div className="flex items-center gap-1.5">
+                          <label className="block text-[11px] font-semibold text-slate-700 flex items-center gap-1">
+                            <FileText className="w-3 h-3 text-blue-600" />
+                            <span>Números das Novas NFs Adicionais</span>
+                          </label>
+                          {extraNfeKeys.some(k => cleanNfeAccessKey(k).length === 44) && !isExtraInvoiceManualEdit ? (
+                            <span className="text-[9px] font-bold bg-slate-100 text-slate-700 border border-slate-300 px-1.5 py-0.2 rounded-full flex items-center gap-0.5">
+                              <Lock className="w-2.5 h-2.5 text-slate-500" /> Extraído da Chave de Acesso
+                            </span>
+                          ) : isExtraInvoiceManualEdit ? (
+                            <span className="text-[9px] font-bold bg-blue-100 text-blue-900 border border-blue-300 px-1.5 py-0.2 rounded-full flex items-center gap-0.5">
+                              <Unlock className="w-2.5 h-2.5 text-blue-700" /> Edição manual
+                            </span>
+                          ) : null}
+                        </div>
+
+                        {extraNfeKeys.some(k => cleanNfeAccessKey(k).length === 44) && (
+                          <div>
+                            {!isExtraInvoiceManualEdit ? (
+                              <button
+                                type="button"
+                                onClick={() => setIsExtraInvoiceManualEdit(true)}
+                                className="text-[10px] font-bold text-blue-700 hover:underline flex items-center gap-0.5"
+                              >
+                                <Unlock className="w-2.5 h-2.5" /> Editar manualmente
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => setIsExtraInvoiceManualEdit(false)}
+                                className="text-[10px] font-bold text-blue-700 hover:underline flex items-center gap-0.5"
+                              >
+                                <RotateCcw className="w-2.5 h-2.5" /> Re-sincronizar com chaves
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="relative">
+                        <input
+                          type="text"
+                          readOnly={extraNfeKeys.some(k => cleanNfeAccessKey(k).length === 44) && !isExtraInvoiceManualEdit}
+                          placeholder={
+                            extraNfeKeys.some(k => cleanNfeAccessKey(k).length === 44) && !isExtraInvoiceManualEdit
+                              ? "Preenchido automaticamente pelas chaves..."
+                              : "Ex: NF-8891, NF-8892"
+                          }
+                          value={additionalInvoices}
+                          onChange={e => setAdditionalInvoices(e.target.value)}
+                          className={`w-full px-3 py-1.5 text-xs border rounded-lg font-mono ${
+                            extraNfeKeys.some(k => cleanNfeAccessKey(k).length === 44) && !isExtraInvoiceManualEdit
+                              ? 'bg-slate-100 text-slate-800 border-slate-300 cursor-not-allowed select-all font-semibold'
+                              : 'bg-white text-slate-900 border-slate-300 focus:ring-2 focus:ring-blue-500'
+                          }`}
+                        />
+                        {extraNfeKeys.some(k => cleanNfeAccessKey(k).length === 44) && !isExtraInvoiceManualEdit && (
+                          <div className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400">
+                            <Lock className="w-3 h-3" />
+                          </div>
+                        )}
+                      </div>
                       <p className="text-[10px] text-slate-500 mt-1">
                         Essas notas serão vinculadas ao agendamento atual (NFs atuais: <span className="font-semibold">{appointment.invoiceNumber}</span>).
                       </p>

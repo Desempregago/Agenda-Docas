@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Calendar, Clock, Truck, FileText, CheckCircle2, Copy, AlertCircle, Lock, MapPin, Building2, Info, Sparkles, KeyRound, Plus, Trash2, DollarSign, User, ShieldCheck, AlertTriangle } from 'lucide-react';
+import { X, Calendar, Clock, Truck, FileText, CheckCircle2, Copy, AlertCircle, Lock, Unlock, RotateCcw, MapPin, Building2, Info, Sparkles, KeyRound, Plus, Trash2, DollarSign, User, ShieldCheck, AlertTriangle } from 'lucide-react';
 import { Appointment, Dock, DestinationBranch } from '../types';
 import { SupplierSession } from './SupplierLoginModal';
-import { formatCpf, formatCnpj, formatPhone, formatCurrencyBRL, parseCurrencyInput, formatNfeAccessKey, cleanNfeAccessKey, extractNfeKeysFromText } from '../utils/formatters';
+import { formatCpf, formatCnpj, formatPhone, formatCurrencyBRL, parseCurrencyInput, formatNfeAccessKey, cleanNfeAccessKey, extractNfeKeysFromText, extractInvoiceNumberFromNfeKey } from '../utils/formatters';
 import {
   getDayOfWeekFromDate,
   getDayName,
@@ -68,6 +68,23 @@ export const ClientNewAppointmentModal: React.FC<ClientNewAppointmentModalProps>
   // Lista de Chaves de Acesso da NF-e (permitindo até 5 ou mais chaves de 44 dígitos)
   const [nfeAccessKeys, setNfeAccessKeys] = useState<string[]>(['']);
   const nfeInputRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const [isInvoiceManualEdit, setIsInvoiceManualEdit] = useState<boolean>(false);
+
+  // Sincronização automática do número da NF quando chaves de acesso são informadas
+  useEffect(() => {
+    if (isInvoiceManualEdit) return;
+    const derived = nfeAccessKeys
+      .map(k => extractInvoiceNumberFromNfeKey(cleanNfeAccessKey(k)))
+      .filter(Boolean);
+
+    // Se houver chaves válidas informadas, atualiza automaticamente o número da NF
+    if (derived.length > 0) {
+      setFormData(prev => ({
+        ...prev,
+        invoiceNumber: derived.join(', '),
+      }));
+    }
+  }, [nfeAccessKeys, isInvoiceManualEdit]);
 
   const handleAddNfeKey = () => {
     if (nfeAccessKeys.length < 20) {
@@ -619,31 +636,6 @@ export const ClientNewAppointmentModal: React.FC<ClientNewAppointmentModalProps>
                   1. Documentação & Pedido de Compra
                 </h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  
-                  {/* Campo Nota Fiscal (OPCIONAL) */}
-                  <div className="sm:col-span-2">
-                    <div className="flex items-center justify-between mb-1">
-                      <label className="block text-xs font-semibold text-slate-700">
-                        Nº(s) das Notas Fiscais (NFs) <span className="text-slate-400 font-normal text-[11px]">(Opcional)</span>
-                      </label>
-                      {formData.invoiceNumber && formData.invoiceNumber.split(/[,;\n\/]+/).filter(Boolean).length > 1 && (
-                        <span className="text-[11px] font-bold bg-blue-100 text-blue-900 border border-blue-300 px-2 py-0.5 rounded-full">
-                          📦 {formData.invoiceNumber.split(/[,;\n\/]+/).filter(Boolean).length} NFs no agendamento
-                        </span>
-                      )}
-                    </div>
-                    <input
-                      type="text"
-                      placeholder="Ex: 849201 (Opcional - caso já emitida)"
-                      value={formData.invoiceNumber}
-                      onChange={e => setFormData({ ...formData, invoiceNumber: e.target.value })}
-                      className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono"
-                    />
-                    <p className="text-[10px] text-slate-500 mt-1">
-                      Caso a NF ainda não tenha sido emitida, o agendamento pode ser solicitado e a NF informada posteriormente.
-                    </p>
-                  </div>
-
                   {/* Campo Pedido de Compra (PO / Ordem de Fornecimento) */}
                   <div className="sm:col-span-2 bg-blue-50/50 p-3.5 rounded-xl border border-blue-100">
                     <div className="flex items-center justify-between mb-1.5 gap-2">
@@ -675,33 +667,6 @@ export const ClientNewAppointmentModal: React.FC<ClientNewAppointmentModalProps>
                     </p>
                   </div>
 
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">Série da NF</label>
-                    <input
-                      type="text"
-                      placeholder="1"
-                      value={formData.invoiceSeries}
-                      onChange={e => setFormData({ ...formData, invoiceSeries: e.target.value })}
-                      className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    />
-                  </div>
-
-                  {/* Campo Valor Total das Notas Fiscais */}
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1 flex items-center gap-1">
-                      <DollarSign className="w-3.5 h-3.5 text-emerald-600" />
-                      <span>Valor Total das NFs (R$)</span>
-                      <span className="text-slate-400 font-normal text-[11px]">(Opcional)</span>
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="Ex: 15450,00"
-                      value={formData.invoiceTotalValue}
-                      onChange={e => setFormData({ ...formData, invoiceTotalValue: e.target.value })}
-                      className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-emerald-800 font-semibold"
-                    />
-                  </div>
-
                   {/* Seção Chaves de Acesso da NF-e (44 dígitos - suporte a múltiplas chaves) */}
                   <div className="sm:col-span-2 bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-2.5">
                     <div className="flex items-center justify-between">
@@ -716,7 +681,7 @@ export const ClientNewAppointmentModal: React.FC<ClientNewAppointmentModalProps>
                     </div>
 
                     <p className="text-[10px] text-slate-500">
-                      Cole ou leia com leitor de código de barras (44 dígitos). <strong className="text-blue-700">Novas linhas são criadas e focadas automaticamente</strong>.
+                      Cole ou leia com leitor de código de barras (44 dígitos). <strong className="text-blue-700">Novas linhas são criadas automaticamente</strong>.
                     </p>
 
                     <div className="space-y-2">
@@ -775,6 +740,117 @@ export const ClientNewAppointmentModal: React.FC<ClientNewAppointmentModalProps>
                         );
                       })}
                     </div>
+                  </div>
+
+                  {/* Campo Nota Fiscal (Bloqueado por padrão se houver chaves, com botão de edição manual) */}
+                  <div className="sm:col-span-2">
+                    <div className="flex items-center justify-between mb-1.5 flex-wrap gap-2">
+                      <div className="flex items-center gap-2">
+                        <label className="block text-xs font-semibold text-slate-700 flex items-center gap-1.5">
+                          <FileText className="w-3.5 h-3.5 text-blue-600" />
+                          <span>Nº(s) das Notas Fiscais (NFs)</span>
+                        </label>
+                        {nfeAccessKeys.some(k => cleanNfeAccessKey(k).length === 44) && !isInvoiceManualEdit ? (
+                          <span className="text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-300 px-2 py-0.5 rounded-full flex items-center gap-1">
+                            <Lock className="w-3 h-3 text-slate-500" /> Extraído da Chave de Acesso
+                          </span>
+                        ) : isInvoiceManualEdit ? (
+                          <span className="text-[10px] font-bold bg-blue-100 text-blue-900 border border-blue-300 px-2 py-0.5 rounded-full flex items-center gap-1">
+                            <Unlock className="w-3 h-3 text-blue-700" /> Edição manual liberada
+                          </span>
+                        ) : (
+                          <span className="text-slate-400 font-normal text-[11px]">(Opcional)</span>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        {formData.invoiceNumber && formData.invoiceNumber.split(/[,;\n\/]+/).filter(Boolean).length > 1 && (
+                          <span className="text-[11px] font-bold bg-blue-100 text-blue-900 border border-blue-300 px-2 py-0.5 rounded-full">
+                            📦 {formData.invoiceNumber.split(/[,;\n\/]+/).filter(Boolean).length} NFs no agendamento
+                          </span>
+                        )}
+
+                        {nfeAccessKeys.some(k => cleanNfeAccessKey(k).length === 44) && (
+                          <>
+                            {!isInvoiceManualEdit ? (
+                              <button
+                                type="button"
+                                onClick={() => setIsInvoiceManualEdit(true)}
+                                className="text-[11px] font-bold text-blue-700 hover:text-blue-900 hover:underline flex items-center gap-1 cursor-pointer bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-md transition-colors"
+                                title="Permitir digitação manual do número da nota"
+                              >
+                                <Unlock className="w-3 h-3" /> Editar manualmente
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => setIsInvoiceManualEdit(false)}
+                                className="text-[11px] font-bold text-blue-700 hover:text-blue-900 hover:underline flex items-center gap-1 cursor-pointer bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-md transition-colors"
+                                title="Restaurar preenchimento automático a partir das chaves informadas"
+                              >
+                                <RotateCcw className="w-3 h-3" /> Re-sincronizar com chaves
+                              </button>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="relative">
+                      <input
+                        type="text"
+                        readOnly={nfeAccessKeys.some(k => cleanNfeAccessKey(k).length === 44) && !isInvoiceManualEdit}
+                        placeholder={
+                          nfeAccessKeys.some(k => cleanNfeAccessKey(k).length === 44) && !isInvoiceManualEdit
+                            ? "Preenchido automaticamente a partir das chaves de acesso..."
+                            : "Ex: 849201, 849202 (Opcional - caso já emitida)"
+                        }
+                        value={formData.invoiceNumber}
+                        onChange={e => setFormData({ ...formData, invoiceNumber: e.target.value })}
+                        className={`w-full px-3 py-2 text-sm border rounded-lg font-mono transition-colors ${
+                          nfeAccessKeys.some(k => cleanNfeAccessKey(k).length === 44) && !isInvoiceManualEdit
+                            ? 'bg-slate-100 text-slate-800 border-slate-300 cursor-not-allowed select-all font-semibold'
+                            : 'bg-white text-slate-900 border-slate-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500'
+                        }`}
+                      />
+                      {nfeAccessKeys.some(k => cleanNfeAccessKey(k).length === 44) && !isInvoiceManualEdit && (
+                        <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1 text-slate-400 pointer-events-none text-xs">
+                          <Lock className="w-3.5 h-3.5" />
+                        </div>
+                      )}
+                    </div>
+                    <p className="text-[10px] text-slate-500 mt-1">
+                      {nfeAccessKeys.some(k => cleanNfeAccessKey(k).length === 44) && !isInvoiceManualEdit
+                        ? "🔒 Campo protegido contra erros de digitação. O número é extraído matematicamente dos 44 dígitos da chave de acesso."
+                        : "Caso a NF ainda não tenha sido emitida, o agendamento pode ser solicitado e a NF informada posteriormente."}
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">Série da NF</label>
+                    <input
+                      type="text"
+                      placeholder="1"
+                      value={formData.invoiceSeries}
+                      onChange={e => setFormData({ ...formData, invoiceSeries: e.target.value })}
+                      className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
+
+                  {/* Campo Valor Total das Notas Fiscais */}
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1 flex items-center gap-1">
+                      <DollarSign className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>Valor Total das NFs (R$)</span>
+                      <span className="text-slate-400 font-normal text-[11px]">(Opcional)</span>
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Ex: 15450,00"
+                      value={formData.invoiceTotalValue}
+                      onChange={e => setFormData({ ...formData, invoiceTotalValue: e.target.value })}
+                      className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-emerald-800 font-semibold"
+                    />
                   </div>
 
                   <div>

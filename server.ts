@@ -5,7 +5,7 @@ import { randomUUID } from 'crypto';
 import { createServer as createViteServer } from 'vite';
 import { Appointment, AppointmentStatus, DiscrepancyReport, Dock, RescheduleHistory, SystemUser, SystemUserRole, RegisteredSupplier, DestinationBranch } from './src/types';
 import { StorageService, BrandSettings } from './src/server/storage';
-import { businessToday, dayOfWeekForDate, isAppointmentStatus, isValidDateOnly, normalizeNfeKeys } from './src/server/validation';
+import { businessToday, dayOfWeekForDate, isAppointmentStatus, isValidDateOnly, normalizeNfeKeys, extractInvoiceNumberFromNfeKey } from './src/server/validation';
 import { clearSessionCookie, getSession, hashSecret, needsSecretMigration, requireAuth, requireSystemRole, setSessionCookie, verifySecret } from './src/server/security';
 
 async function startServer() {
@@ -228,17 +228,7 @@ async function startServer() {
       ? 'CONFIRMADO'
       : 'PENDENTE';
 
-    const rawInvoiceStr = String(body.invoiceNumber || '').trim();
-    // Parse multiple invoice numbers separated by commas, spaces, or slashes
-    const parsedInvoiceNumbers = rawInvoiceStr
-      ? rawInvoiceStr.split(/[,;\n\/]+/).map(s => s.trim()).filter(Boolean)
-      : [];
-
-    const mainInvoiceNumber = parsedInvoiceNumbers.length > 0
-      ? (parsedInvoiceNumbers.length > 1 ? parsedInvoiceNumbers.join(', ') : parsedInvoiceNumbers[0])
-      : 'A emitir';
-
-    // Parse NF-e Access Keys (44 digits) - Optional field
+    // Parse NF-e Access Keys (44 digits)
     let parsedNfeKeys: string[] = [];
     if (Array.isArray(body.nfeAccessKeys)) {
       parsedNfeKeys = normalizeNfeKeys(body.nfeAccessKeys);
@@ -253,6 +243,22 @@ async function startServer() {
     if (rawKeysGiven.length > 0 && parsedNfeKeys.length === 0) {
       return res.status(400).json({ error: 'A chave de acesso NF-e informada é inválida (deve conter 44 dígitos numéricos).' });
     }
+
+    const rawInvoiceStr = String(body.invoiceNumber || '').trim();
+    // Parse multiple invoice numbers separated by commas, spaces, or slashes, or derive from NFe access keys
+    let parsedInvoiceNumbers = rawInvoiceStr
+      ? rawInvoiceStr.split(/[,;\n\/]+/).map(s => s.trim()).filter(Boolean)
+      : [];
+
+    if (parsedInvoiceNumbers.length === 0 && parsedNfeKeys.length > 0) {
+      parsedInvoiceNumbers = parsedNfeKeys
+        .map(k => extractInvoiceNumberFromNfeKey(k))
+        .filter(Boolean);
+    }
+
+    const mainInvoiceNumber = parsedInvoiceNumbers.length > 0
+      ? (parsedInvoiceNumbers.length > 1 ? parsedInvoiceNumbers.join(', ') : parsedInvoiceNumbers[0])
+      : 'A emitir';
 
     const rawPOStr = String(body.purchaseOrder || '').trim();
     // Parse multiple purchase order numbers separated by commas, semicolons, newlines, or slashes

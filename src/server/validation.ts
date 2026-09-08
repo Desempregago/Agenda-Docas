@@ -32,3 +32,13 @@ export function normalizeNfeKeys(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   return value.map(item => String(item ?? '').replace(/\D/g, '')).filter(item => item.length === 44).slice(0, 20);
 }
+
+export function extractInvoiceNumberFromNfeKey(key: string): string {
+  const clean = String(key || '').replace(/\D/g, '');
+  if (clean.length === 44) {
+    const rawNumber = clean.substring(25, 34);
+    const parsed = parseInt(rawNumber, 10);
+    return isNaN(parsed) ? rawNumber : String(parsed);
+  }
+  return '';
+}

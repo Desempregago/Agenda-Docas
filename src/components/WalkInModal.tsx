@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, ShieldCheck, Truck, FileText, CheckCircle2, AlertTriangle, Zap, MapPin, KeyRound, Plus, Trash2, DollarSign, User, Building2, Sparkles, Loader2 } from 'lucide-react';
+import { X, ShieldCheck, Truck, FileText, CheckCircle2, AlertTriangle, Zap, MapPin, KeyRound, Plus, Trash2, DollarSign, User, Building2, Sparkles, Loader2, Lock, Unlock, RotateCcw } from 'lucide-react';
 import { Appointment, Dock, DestinationBranch } from '../types';
-import { formatCpf, formatCnpj, formatPhone, parseCurrencyInput, cleanNfeAccessKey, extractNfeKeysFromText } from '../utils/formatters';
+import { formatCpf, formatCnpj, formatPhone, parseCurrencyInput, cleanNfeAccessKey, extractNfeKeysFromText, extractInvoiceNumberFromNfeKey } from '../utils/formatters';
 
 interface WalkInModalProps {
   isOpen: boolean;
@@ -44,6 +44,20 @@ export const WalkInModal: React.FC<WalkInModalProps> = ({
 
   const [nfeAccessKeys, setNfeAccessKeys] = useState<string[]>(['']);
   const nfeInputRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const [isInvoiceManualEdit, setIsInvoiceManualEdit] = useState<boolean>(false);
+
+  // Auto-sincronização do número da Nota Fiscal a partir das Chaves de Acesso da SEFAZ
+  useEffect(() => {
+    if (isInvoiceManualEdit) return;
+    const derived = nfeAccessKeys
+      .map(k => extractInvoiceNumberFromNfeKey(cleanNfeAccessKey(k)))
+      .filter(Boolean);
+
+    setFormData(prev => ({
+      ...prev,
+      invoiceNumber: derived.length > 0 ? derived.join(', ') : '',
+    }));
+  }, [nfeAccessKeys, isInvoiceManualEdit]);
 
   // Estados para validação automática de CNPJ contra o banco de fornecedores (suppliers.json)
   const [isSearchingSupplier, setIsSearchingSupplier] = useState<boolean>(false);
@@ -207,10 +221,30 @@ export const WalkInModal: React.FC<WalkInModalProps> = ({
     e.preventDefault();
     setError(null);
 
-    if (!formData.invoiceNumber.trim()) {
-      setError('Informe o número da Nota Fiscal (NF).');
+    // Validação da Chave de Acesso da NF-e (44 dígitos obrigatória para Encaixe)
+    const validNfeKeys = nfeAccessKeys.map(k => cleanNfeAccessKey(k)).filter(k => k.length === 44);
+    if (validNfeKeys.length === 0) {
+      setError('Informe ao menos uma Chave de Acesso da NF-e válida (44 dígitos numéricos) para realizar o encaixe.');
       return;
     }
+
+    // Se o usuário digitou alguma chave incompleta, avisa
+    const anyIncomplete = nfeAccessKeys.some(k => {
+      const c = cleanNfeAccessKey(k);
+      return c.length > 0 && c.length !== 44;
+    });
+    if (anyIncomplete) {
+      setError('Uma ou mais Chaves de Acesso da NF-e não possuem os 44 dígitos exigidos pela SEFAZ.');
+      return;
+    }
+
+    // Auto-derivação do número da nota fiscal a partir das chaves de acesso se estiver vazio
+    let finalInvoiceNumber = formData.invoiceNumber.trim();
+    if (!finalInvoiceNumber) {
+      const derived = validNfeKeys.map(k => extractInvoiceNumberFromNfeKey(k)).filter(Boolean);
+      finalInvoiceNumber = derived.length > 0 ? derived.join(', ') : 'A emitir';
+    }
+
     if (!formData.supplierName.trim()) {
       setError('Informe o nome/razão social do fornecedor.');
       return;
@@ -219,7 +253,6 @@ export const WalkInModal: React.FC<WalkInModalProps> = ({
     setLoading(true);
 
     try {
-      const validNfeKeys = nfeAccessKeys.map(k => cleanNfeAccessKey(k)).filter(Boolean);
       const parsedVal = typeof formData.invoiceTotalValue === 'string'
         ? parseCurrencyInput(formData.invoiceTotalValue)
         : formData.invoiceTotalValue;
@@ -229,6 +262,7 @@ export const WalkInModal: React.FC<WalkInModalProps> = ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...formData,
+          invoiceNumber: finalInvoiceNumber,
           invoiceTotalValue: parsedVal > 0 ? parsedVal : undefined,
           nfeAccessKeys: validNfeKeys,
           nfeAccessKey: validNfeKeys[0] || undefined,
@@ -347,27 +381,161 @@ export const WalkInModal: React.FC<WalkInModalProps> = ({
               />
             </div>
 
-            <div className="sm:col-span-2">
-              <div className="flex items-center justify-between mb-1">
-                <label className="block text-xs font-bold text-slate-800">
-                  Nº(s) das Notas Fiscais (NFs) <span className="text-rose-500">*</span>
+            {/* Chaves de Acesso da NF-e (44 dígitos) - Obrigatório para Encaixe */}
+            <div className="sm:col-span-2 bg-amber-50/60 border-2 border-amber-300 rounded-xl p-3.5 space-y-2.5 shadow-xs">
+              <div className="flex items-center justify-between">
+                <label className="block text-xs font-bold text-amber-950 flex items-center gap-1.5">
+                  <KeyRound className="w-4 h-4 text-amber-700" />
+                  <span>Chaves de Acesso da NF-e (44 dígitos)</span>
+                  <span className="text-rose-500 font-black text-sm">*</span>
                 </label>
-                {formData.invoiceNumber.split(/[,;\n\/]+/).filter(Boolean).length > 1 && (
-                  <span className="text-[11px] font-bold bg-amber-100 text-amber-900 border border-amber-300 px-2 py-0.5 rounded-full">
-                    📦 {formData.invoiceNumber.split(/[,;\n\/]+/).filter(Boolean).length} NFs identificadas
-                  </span>
+                <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${
+                  nfeAccessKeys.filter(k => cleanNfeAccessKey(k).length === 44).length > 0
+                    ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                    : 'bg-amber-100 text-amber-900 border-amber-300'
+                }`}>
+                  {nfeAccessKeys.filter(k => cleanNfeAccessKey(k).length === 44).length} de {nfeAccessKeys.length} válida(s)
+                </span>
+              </div>
+
+              <p className="text-[11px] text-amber-900/90 leading-relaxed">
+                Informe a chave de 44 dígitos (leitor de código de barras ou colar). O número da Nota Fiscal será <strong className="text-amber-950">extraído automaticamente</strong>.
+              </p>
+
+              <div className="space-y-1.5">
+                {nfeAccessKeys.map((keyVal, idx) => {
+                  const cleanKey = cleanNfeAccessKey(keyVal);
+                  const isComplete = cleanKey.length === 44;
+                  return (
+                    <div key={idx} className="flex items-center gap-1.5">
+                      <div className="relative flex-1">
+                        <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400">
+                          #{idx + 1}
+                        </span>
+                        <input
+                          ref={el => { nfeInputRefs.current[idx] = el; }}
+                          type="text"
+                          maxLength={54}
+                          placeholder="Cole a chave de 44 dígitos ou bipe o código de barras da DANFE"
+                          value={keyVal}
+                          onChange={e => handleNfeKeyChange(idx, e.target.value)}
+                          onKeyDown={e => handleNfeKeyDown(e, idx)}
+                          className={`w-full pl-8 pr-16 py-2 text-xs font-mono border rounded-lg focus:ring-2 focus:ring-amber-500 focus:outline-none transition-colors ${
+                            isComplete
+                              ? 'border-emerald-500 bg-emerald-50/50 text-emerald-950 font-semibold'
+                              : cleanKey.length > 0
+                              ? 'border-amber-400 bg-amber-50/40 text-slate-800'
+                              : 'border-slate-300 bg-white text-slate-800'
+                          }`}
+                        />
+                        <div className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1 text-[11px]">
+                          <span className={isComplete ? 'text-emerald-700 font-bold' : cleanKey.length > 0 ? 'text-amber-700 font-semibold' : 'text-slate-400'}>
+                            {cleanKey.length}/44
+                          </span>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => handlePasteNfeKey(idx)}
+                        className="px-2.5 py-2 text-slate-700 hover:text-amber-800 hover:bg-amber-100 bg-white rounded-lg border border-slate-300 text-xs font-semibold transition-colors cursor-pointer shrink-0 shadow-xs"
+                        title="Colar Chave da Área de Transferência"
+                      >
+                        Colar
+                      </button>
+
+                      {nfeAccessKeys.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveNfeKey(idx)}
+                          className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer shrink-0"
+                          title="Remover esta chave"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Nº das Notas Fiscais (NFs) - Bloqueado por padrão com opção de desbloqueio */}
+            <div className="sm:col-span-2">
+              <div className="flex items-center justify-between mb-1.5 flex-wrap gap-2">
+                <div className="flex items-center gap-2">
+                  <label className="block text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                    <FileText className="w-3.5 h-3.5 text-amber-700" />
+                    <span>Nº(s) das Notas Fiscais (NFs)</span>
+                  </label>
+                  {!isInvoiceManualEdit ? (
+                    <span className="text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-300 px-2 py-0.5 rounded-full flex items-center gap-1">
+                      <Lock className="w-3 h-3 text-slate-500" /> Extraído da Chave de Acesso
+                    </span>
+                  ) : (
+                    <span className="text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300 px-2 py-0.5 rounded-full flex items-center gap-1">
+                      <Unlock className="w-3 h-3 text-amber-700" /> Edição manual liberada
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2">
+                  {formData.invoiceNumber && formData.invoiceNumber.split(/[,;\n\/]+/).filter(Boolean).length > 1 && (
+                    <span className="text-[11px] font-bold bg-amber-100 text-amber-900 border border-amber-300 px-2 py-0.5 rounded-full">
+                      📦 {formData.invoiceNumber.split(/[,;\n\/]+/).filter(Boolean).length} NFs identificadas
+                    </span>
+                  )}
+                  {!isInvoiceManualEdit ? (
+                    <button
+                      type="button"
+                      onClick={() => setIsInvoiceManualEdit(true)}
+                      className="text-[11px] font-bold text-amber-800 hover:text-amber-950 hover:underline flex items-center gap-1 cursor-pointer bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-md transition-colors"
+                      title="Permitir alteração manual do número da nota"
+                    >
+                      <Unlock className="w-3 h-3" /> Editar manualmente
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsInvoiceManualEdit(false);
+                      }}
+                      className="text-[11px] font-bold text-amber-800 hover:text-amber-950 hover:underline flex items-center gap-1 cursor-pointer bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-md transition-colors"
+                      title="Restaurar preenchimento automático a partir das chaves bipadas"
+                    >
+                      <RotateCcw className="w-3 h-3" /> Re-sincronizar com chaves
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div className="relative">
+                <input
+                  type="text"
+                  readOnly={!isInvoiceManualEdit}
+                  placeholder={
+                    !isInvoiceManualEdit
+                      ? "Aguardando leitura da Chave de Acesso da NF-e acima..."
+                      : "Ex: 90214, 90215 (separe por vírgula se houver mais de uma NF)"
+                  }
+                  value={formData.invoiceNumber}
+                  onChange={e => setFormData({ ...formData, invoiceNumber: e.target.value })}
+                  className={`w-full px-3 py-2 text-sm border rounded-xl font-mono transition-colors ${
+                    !isInvoiceManualEdit
+                      ? 'bg-slate-100 text-slate-800 border-slate-300 cursor-not-allowed select-all font-semibold'
+                      : 'bg-white text-slate-900 border-amber-400 focus:ring-2 focus:ring-amber-500 font-semibold'
+                  }`}
+                />
+                {!isInvoiceManualEdit && (
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1 text-slate-400 pointer-events-none text-xs">
+                    <Lock className="w-3.5 h-3.5" />
+                  </div>
                 )}
               </div>
-              <input
-                type="text"
-                required
-                placeholder="Ex: 90214, 90215, 90216 (separe por vírgula se houver mais de uma NF)"
-                value={formData.invoiceNumber}
-                onChange={e => setFormData({ ...formData, invoiceNumber: e.target.value })}
-                className="w-full px-3 py-2 text-sm border border-slate-300 rounded-xl focus:ring-2 focus:ring-amber-500 font-mono"
-              />
               <p className="text-[10px] text-slate-500 mt-1">
-                💡 Se o motorista trouxer mais de uma nota na mesma carga, digite os números separados por vírgula.
+                {!isInvoiceManualEdit
+                  ? "🔒 Campo protegido contra erros de digitação. O número é extraído matematicamente dos 44 dígitos da chave de acesso."
+                  : "⚠️ Modo manual ativo. Certifique-se de que os números digitados coincidem com as DANFEs entregues."}
               </p>
             </div>
 
@@ -396,80 +564,6 @@ export const WalkInModal: React.FC<WalkInModalProps> = ({
                 onChange={e => setFormData({ ...formData, invoiceDueDate: e.target.value })}
                 className="w-full px-3 py-2 text-sm border border-slate-300 rounded-xl focus:ring-2 focus:ring-amber-500 font-mono text-slate-800"
               />
-            </div>
-
-            {/* Chaves de Acesso da NF-e (44 dígitos) */}
-            <div className="sm:col-span-2 bg-amber-50/50 border border-amber-200 rounded-xl p-3 space-y-2">
-              <div className="flex items-center justify-between">
-                <label className="block text-xs font-bold text-amber-950 flex items-center gap-1.5">
-                  <KeyRound className="w-3.5 h-3.5 text-amber-700" />
-                  <span>Chaves de Acesso da NF-e (44 dígitos)</span>
-                </label>
-                <span className="text-[11px] font-semibold text-amber-900 bg-amber-200/60 px-2 py-0.5 rounded-md">
-                  {nfeAccessKeys.filter(k => cleanNfeAccessKey(k).length === 44).length} de {nfeAccessKeys.length} preenchida(s)
-                </span>
-              </div>
-
-              <p className="text-[10px] text-amber-900/80">
-                Cole ou leia com leitor de código de barras (44 dígitos). <strong className="text-amber-950">Novas linhas são criadas e focadas automaticamente</strong>.
-              </p>
-
-              <div className="space-y-1.5">
-                {nfeAccessKeys.map((keyVal, idx) => {
-                  const cleanKey = cleanNfeAccessKey(keyVal);
-                  const isComplete = cleanKey.length === 44;
-                  return (
-                    <div key={idx} className="flex items-center gap-1.5">
-                      <div className="relative flex-1">
-                        <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400">
-                          #{idx + 1}
-                        </span>
-                        <input
-                          ref={el => { nfeInputRefs.current[idx] = el; }}
-                          type="text"
-                          maxLength={54}
-                          placeholder="35260800000000000000550010000000001000000000"
-                          value={keyVal}
-                          onChange={e => handleNfeKeyChange(idx, e.target.value)}
-                          onKeyDown={e => handleNfeKeyDown(e, idx)}
-                          className={`w-full pl-8 pr-16 py-1.5 text-xs font-mono border rounded-lg focus:ring-2 focus:ring-amber-500 focus:outline-none ${
-                            isComplete
-                              ? 'border-emerald-400 bg-emerald-50/40 text-emerald-950'
-                              : cleanKey.length > 0
-                              ? 'border-amber-300 bg-amber-50/30 text-slate-800'
-                              : 'border-slate-300 bg-white text-slate-800'
-                          }`}
-                        />
-                        <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 text-[10px]">
-                          <span className={isComplete ? 'text-emerald-700 font-bold' : cleanKey.length > 0 ? 'text-amber-700 font-semibold' : 'text-slate-400'}>
-                            {cleanKey.length}/44
-                          </span>
-                        </div>
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={() => handlePasteNfeKey(idx)}
-                        className="p-1.5 text-slate-600 hover:text-amber-700 hover:bg-white bg-slate-200/60 rounded-md border border-slate-300 text-[11px] font-medium transition-colors cursor-pointer shrink-0"
-                        title="Colar Chave da Área de Transferência"
-                      >
-                        Colar
-                      </button>
-
-                      {nfeAccessKeys.length > 1 && (
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveNfeKey(idx)}
-                          className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-colors cursor-pointer shrink-0"
-                          title="Remover esta chave"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
             </div>
 
             <div>

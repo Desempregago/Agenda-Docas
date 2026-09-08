@@ -113,3 +113,17 @@ export function extractNfeKeysFromText(text: string): string[] {
 
   return keys.length > 0 ? keys : [cleanNfeAccessKey(text)];
 }
+
+/**
+ * Extrai o número da Nota Fiscal a partir da chave de acesso de 44 dígitos
+ * No padrão SEFAZ: posições 26 a 34 (índices 25 a 34 da string de dígitos)
+ */
+export function extractInvoiceNumberFromNfeKey(key: string): string {
+  const clean = cleanNfeAccessKey(key);
+  if (clean.length === 44) {
+    const rawNumber = clean.substring(25, 34);
+    const parsed = parseInt(rawNumber, 10);
+    return isNaN(parsed) ? rawNumber : String(parsed);
+  }
+  return '';
+}
