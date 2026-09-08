@@ -206,15 +206,15 @@ export const TrackingView: React.FC<TrackingViewProps> = ({
             Rastreamento de Agendamentos & Status de Carga
           </h1>
           <p className="text-sm sm:text-base text-slate-300 mt-2">
-            Digite o código de protocolo (ex: <span className="font-mono text-amber-300 font-semibold">AGD-2026-1042</span>) ou o número da Nota Fiscal para verificar a situação do descarregamento.
+            Digite o código de protocolo (ex: <span className="font-mono text-amber-300 font-semibold">AGD-2026-A1B2C3D4E5</span>) ou o número da Nota Fiscal para verificar a situação do descarregamento.
           </p>
 
-          <form onSubmit={handleSearch} className="mt-5 flex items-center gap-2 max-w-2xl">
+          <form onSubmit={handleSearch} className="mt-5 flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 w-full">
             <div className="relative flex-1">
               <Search className="w-5 h-5 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
                 type="text"
-                placeholder="Ex: AGD-2026-1042 ou NF 849201"
+                placeholder="Ex: AGD-2026-A1B2C3D4E5 ou NF 849201"
                 value={query}
                 onChange={e => setQuery(e.target.value)}
                 className="w-full pl-11 pr-4 py-3 bg-slate-800/90 border border-slate-700 rounded-2xl text-white placeholder-slate-400 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-inner"
@@ -222,7 +222,7 @@ export const TrackingView: React.FC<TrackingViewProps> = ({
             </div>
             <button
               type="submit"
-              className="bg-blue-600 hover:bg-blue-500 text-white font-semibold px-6 py-3 rounded-2xl text-sm transition-all shadow-md active:scale-95 whitespace-nowrap cursor-pointer"
+              className="bg-blue-600 hover:bg-blue-500 text-white font-semibold px-7 py-3 rounded-2xl text-sm transition-all shadow-md active:scale-95 whitespace-nowrap cursor-pointer text-center"
             >
               Consultar
             </button>

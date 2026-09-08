@@ -61,7 +61,7 @@ export interface DestinationBranch {
 
 export interface Appointment {
   id: string;
-  protocol: string; // Ex: AGD-2026-9821
+  protocol: string; // Ex: AGD-2026-A1B2C3D4E5
   purchaseOrder: string; // Pedido de Compra (PO) - OBRIGATÓRIO
   purchaseOrders?: string[]; // Múltiplos Pedidos de Compra se houver mais de um
   invoiceNumber: string; // Número da Nota Fiscal (NF principal ou lista) - OPCIONAL
