@@ -127,3 +127,37 @@ export function extractInvoiceNumberFromNfeKey(key: string): string {
   }
   return '';
 }
+
+/**
+ * Extrai o CNPJ do emitente a partir da chave de acesso de 44 dígitos da NF-e.
+ * No padrão SEFAZ: posições 7 a 20 (índices 6 a 20 da string de 44 dígitos).
+ * Retorna o CNPJ formatado (XX.XXX.XXX/XXXX-XX).
+ */
+export function extractCnpjFromNfeKey(key: string): string {
+  const clean = cleanNfeAccessKey(key);
+  if (clean.length === 44) {
+    const rawCnpj = clean.substring(6, 20);
+    return formatCnpj(rawCnpj);
+  }
+  return '';
+}
+
+/**
+ * Retorna os CNPJs únicos presentes em uma lista de chaves de NF-e
+ */
+export function extractUniqueCnpjsFromNfeKeys(keys: string[]): string[] {
+  const unique = new Set<string>();
+  for (const k of keys) {
+    const cnpj = extractCnpjFromNfeKey(k);
+    if (cnpj) unique.add(cnpj);
+  }
+  return Array.from(unique);
+}
+
+/**
+ * Retorna a raiz de 8 dígitos de um CNPJ para identificação do grupo empresarial (Matriz e Filiais)
+ */
+export function getRootCnpj(cnpj: string): string {
+  const digits = (cnpj || '').replace(/\D/g, '');
+  return digits.slice(0, 8);
+}

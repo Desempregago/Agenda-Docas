@@ -1089,7 +1089,7 @@ async function startServer() {
     res.json({ message: 'Usuário excluído com sucesso do servidor.' });
   });
 
-  // Supplier Lookup by CNPJ (Allows quick auto-complete and check if already registered)
+  // Supplier Lookup by CNPJ (Allows quick auto-complete and check if already registered, including filial identification)
   app.get('/api/suppliers/lookup/:cnpj', (req, res) => {
     const rawCnpj = req.params.cnpj || '';
     const cleanDigits = rawCnpj.replace(/\D/g, '');
@@ -1098,21 +1098,44 @@ async function startServer() {
       return res.status(400).json({ error: 'CNPJ inválido.' });
     }
 
-    const found = suppliers.find(s => s.cnpj.replace(/\D/g, '') === cleanDigits);
-    if (!found) {
-      return res.status(404).json({ message: 'Fornecedor ainda não cadastrado.', found: false });
+    // 1. Busca por correspondência exata de CNPJ (14 dígitos)
+    const exactMatch = suppliers.find(s => s.cnpj.replace(/\D/g, '') === cleanDigits);
+    if (exactMatch) {
+      const count = appointments.filter(a => a.supplierCnpj.replace(/\D/g, '') === cleanDigits).length;
+      return res.json({
+        found: true,
+        exactMatch: true,
+        supplier: {
+          ...exactMatch,
+          appointmentCount: count
+        }
+      });
     }
 
-    // Count how many appointments this supplier has
-    const count = appointments.filter(a => a.supplierCnpj.replace(/\D/g, '') === cleanDigits).length;
-
-    res.json({
-      found: true,
-      supplier: {
-        ...found,
-        appointmentCount: count
+    // 2. Se não encontrou o CNPJ exato, busca pela raiz do CNPJ (primeiros 8 dígitos - grupo empresarial / matriz)
+    if (cleanDigits.length >= 8) {
+      const root = cleanDigits.slice(0, 8);
+      const rootMatch = suppliers.find(s => s.cnpj.replace(/\D/g, '').slice(0, 8) === root);
+      if (rootMatch) {
+        const count = appointments.filter(a => a.supplierCnpj.replace(/\D/g, '').slice(0, 8) === root).length;
+        return res.json({
+          found: true,
+          exactMatch: false,
+          matchedByRoot: true,
+          parentSupplierName: rootMatch.name,
+          parentSupplierCnpj: rootMatch.cnpj,
+          supplier: {
+            cnpj: rawCnpj,
+            name: rootMatch.name,
+            tradeName: rootMatch.tradeName,
+            appointmentCount: count,
+            isNewFilial: true
+          }
+        });
       }
-    });
+    }
+
+    res.status(404).json({ message: 'Fornecedor ainda não cadastrado.', found: false });
   });
 
   // Supplier Login & Auto-Registration (Persistent in ./data/suppliers.json)

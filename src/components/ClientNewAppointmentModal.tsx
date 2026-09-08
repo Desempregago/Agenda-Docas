@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { X, Calendar, Clock, Truck, FileText, CheckCircle2, Copy, AlertCircle, Lock, Unlock, RotateCcw, MapPin, Building2, Info, Sparkles, KeyRound, Plus, Trash2, DollarSign, User, ShieldCheck, AlertTriangle } from 'lucide-react';
 import { Appointment, Dock, DestinationBranch } from '../types';
 import { SupplierSession } from './SupplierLoginModal';
-import { formatCpf, formatCnpj, formatPhone, formatCurrencyBRL, parseCurrencyInput, formatNfeAccessKey, cleanNfeAccessKey, extractNfeKeysFromText, extractInvoiceNumberFromNfeKey } from '../utils/formatters';
+import { formatCpf, formatCnpj, formatPhone, formatCurrencyBRL, parseCurrencyInput, formatNfeAccessKey, cleanNfeAccessKey, extractNfeKeysFromText, extractInvoiceNumberFromNfeKey, extractUniqueCnpjsFromNfeKeys } from '../utils/formatters';
 import {
   getDayOfWeekFromDate,
   getDayName,
@@ -70,21 +70,101 @@ export const ClientNewAppointmentModal: React.FC<ClientNewAppointmentModalProps>
   const nfeInputRefs = useRef<(HTMLInputElement | null)[]>([]);
   const [isInvoiceManualEdit, setIsInvoiceManualEdit] = useState<boolean>(false);
 
-  // Sincronização automática do número da NF quando chaves de acesso são informadas
-  useEffect(() => {
-    if (isInvoiceManualEdit) return;
-    const derived = nfeAccessKeys
-      .map(k => extractInvoiceNumberFromNfeKey(cleanNfeAccessKey(k)))
-      .filter(Boolean);
+  // Estados para extração e identificação de CNPJ e fornecedor
+  const [multipleCnpjsFromKeys, setMultipleCnpjsFromKeys] = useState<string[]>([]);
+  const [isCnpjFromKey, setIsCnpjFromKey] = useState<boolean>(false);
+  const [isSearchingSupplier, setIsSearchingSupplier] = useState<boolean>(false);
+  const [isSupplierRecognized, setIsSupplierRecognized] = useState<boolean>(false);
+  const [recognizedSupplier, setRecognizedSupplier] = useState<{ name: string; tradeName?: string; appointmentCount?: number; isNewFilial?: boolean } | null>(null);
+  const [matchedParentSupplier, setMatchedParentSupplier] = useState<{ name: string; cnpj: string } | null>(null);
 
-    // Se houver chaves válidas informadas, atualiza automaticamente o número da NF
-    if (derived.length > 0) {
+  // Sincronização automática do número da NF e do CNPJ quando chaves de acesso são informadas
+  useEffect(() => {
+    if (!isInvoiceManualEdit) {
+      const derived = nfeAccessKeys
+        .map(k => extractInvoiceNumberFromNfeKey(cleanNfeAccessKey(k)))
+        .filter(Boolean);
+
+      if (derived.length > 0) {
+        setFormData(prev => ({
+          ...prev,
+          invoiceNumber: derived.join(', '),
+        }));
+      }
+    }
+
+    // Extração automática do CNPJ do emitente das chaves bipadas
+    const uniqueCnpjs = extractUniqueCnpjsFromNfeKeys(nfeAccessKeys);
+    setMultipleCnpjsFromKeys(uniqueCnpjs);
+
+    if (uniqueCnpjs.length === 1 && !currentSupplierSession) {
       setFormData(prev => ({
         ...prev,
-        invoiceNumber: derived.join(', '),
+        supplierCnpj: uniqueCnpjs[0],
       }));
+      setIsCnpjFromKey(true);
+    } else if (uniqueCnpjs.length === 0 && !currentSupplierSession) {
+      setIsCnpjFromKey(false);
     }
-  }, [nfeAccessKeys, isInvoiceManualEdit]);
+  }, [nfeAccessKeys, isInvoiceManualEdit, currentSupplierSession]);
+
+  // Consulta CNPJ no banco de fornecedores (suppliers.json) em tempo real quando não há sessão fixa
+  useEffect(() => {
+    if (currentSupplierSession) return;
+    const cleanDigits = formData.supplierCnpj.replace(/\D/g, '');
+    if (cleanDigits.length >= 11) {
+      let isMounted = true;
+      setIsSearchingSupplier(true);
+
+      const timer = setTimeout(async () => {
+        try {
+          const res = await fetch(`/api/suppliers/lookup/${cleanDigits}`);
+          if (res.ok && isMounted) {
+            const data = await res.json();
+            if (data.found && data.supplier) {
+              setFormData(prev => ({
+                ...prev,
+                supplierName: data.supplier.name || data.supplier.tradeName || prev.supplierName,
+              }));
+              setIsSupplierRecognized(true);
+              setRecognizedSupplier(data.supplier);
+              if (data.matchedByRoot && data.parentSupplierName) {
+                setMatchedParentSupplier({ name: data.parentSupplierName, cnpj: data.parentSupplierCnpj });
+              } else {
+                setMatchedParentSupplier(null);
+              }
+            } else if (isMounted) {
+              setIsSupplierRecognized(false);
+              setRecognizedSupplier(null);
+              setMatchedParentSupplier(null);
+            }
+          } else if (isMounted) {
+            setIsSupplierRecognized(false);
+            setRecognizedSupplier(null);
+            setMatchedParentSupplier(null);
+          }
+        } catch (_) {
+          if (isMounted) {
+            setIsSupplierRecognized(false);
+            setRecognizedSupplier(null);
+            setMatchedParentSupplier(null);
+          }
+        } finally {
+          if (isMounted) setIsSearchingSupplier(false);
+        }
+      }, 250);
+
+      return () => {
+        isMounted = false;
+        clearTimeout(timer);
+      };
+    } else {
+      setIsSupplierRecognized(false);
+      setIsSearchingSupplier(false);
+      setRecognizedSupplier(null);
+      setMatchedParentSupplier(null);
+    }
+  }, [formData.supplierCnpj, currentSupplierSession]);
 
   const handleAddNfeKey = () => {
     if (nfeAccessKeys.length < 20) {
@@ -853,30 +933,142 @@ export const ClientNewAppointmentModal: React.FC<ClientNewAppointmentModalProps>
                     />
                   </div>
 
+                  {/* Alerta de múltiplos CNPJs se detectados nas chaves */}
+                  {multipleCnpjsFromKeys.length > 1 && !currentSupplierSession && (
+                    <div className="sm:col-span-2 p-2.5 bg-blue-50 border border-blue-200 rounded-lg text-xs animate-in fade-in duration-200">
+                      <div className="flex items-center gap-1 font-bold text-blue-900 mb-1">
+                        <AlertTriangle className="w-3.5 h-3.5 text-blue-600" />
+                        <span>Identificados {multipleCnpjsFromKeys.length} CNPJs diferentes nas chaves informadas:</span>
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {multipleCnpjsFromKeys.map(cnpj => (
+                          <button
+                            key={cnpj}
+                            type="button"
+                            onClick={() => setFormData(prev => ({ ...prev, supplierCnpj: cnpj }))}
+                            className={`px-2 py-0.5 rounded text-[11px] font-mono font-bold transition-all cursor-pointer ${
+                              formData.supplierCnpj === cnpj
+                                ? 'bg-blue-600 text-white shadow-xs'
+                                : 'bg-white text-slate-700 border border-slate-300 hover:bg-blue-100/70'
+                            }`}
+                          >
+                            {cnpj} {formData.supplierCnpj === cnpj && '✓'}
+                          </button>
+                        ))}
+                      </div>
+                      <p className="text-[10px] text-blue-800 mt-1">
+                        Clique no CNPJ principal emissor para vincular a esta solicitação.
+                      </p>
+                    </div>
+                  )}
+
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">
-                      Razão Social / Fornecedor <span className="text-rose-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="Ex: Eurofarma Laboratórios"
-                      value={formData.supplierName}
-                      onChange={e => setFormData({ ...formData, supplierName: e.target.value })}
-                      className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    />
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-xs font-semibold text-slate-700 flex items-center gap-1">
+                        <span>Razão Social / Fornecedor</span>
+                        <span className="text-rose-500">*</span>
+                      </label>
+                      {isSupplierRecognized && (
+                        <span className="text-[10px] text-emerald-700 flex items-center gap-0.5 font-medium">
+                          <Sparkles className="w-3 h-3 text-emerald-600" /> Auto-preenchido
+                        </span>
+                      )}
+                    </div>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        required
+                        placeholder="Ex: Eurofarma Laboratórios"
+                        value={formData.supplierName}
+                        onChange={e => setFormData({ ...formData, supplierName: e.target.value })}
+                        className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 transition-colors ${
+                          isSupplierRecognized
+                            ? 'border-emerald-400 bg-emerald-50/20 text-slate-900 font-semibold pr-8'
+                            : 'border-slate-300 text-slate-900'
+                        }`}
+                      />
+                      {isSupplierRecognized && (
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                      )}
+                    </div>
+                    {isSupplierRecognized && recognizedSupplier?.appointmentCount !== undefined && (
+                      <p className="text-[10px] text-emerald-700 mt-1">
+                        ✨ Fornecedor recorrente ({recognizedSupplier.appointmentCount} agendamento(s) no histórico)
+                      </p>
+                    )}
                   </div>
 
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">CNPJ do Fornecedor</label>
-                    <input
-                      type="text"
-                      placeholder="00.000.000/0001-00"
-                      maxLength={18}
-                      value={formData.supplierCnpj}
-                      onChange={e => setFormData({ ...formData, supplierCnpj: formatCnpj(e.target.value) })}
-                      className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono"
-                    />
+                    <div className="flex items-center justify-between mb-1 flex-wrap gap-1">
+                      <div className="flex items-center gap-1.5">
+                        <label className="block text-xs font-semibold text-slate-700 flex items-center gap-1">
+                          <Building2 className="w-3.5 h-3.5 text-blue-600" />
+                          <span>CNPJ do Fornecedor</span>
+                        </label>
+                        {isCnpjFromKey && !currentSupplierSession && (
+                          <span className="text-[9px] font-bold bg-slate-100 text-slate-700 border border-slate-300 px-1.5 py-0.2 rounded-full flex items-center gap-0.5">
+                            <Lock className="w-2.5 h-2.5 text-slate-500" /> Extraído da Chave de Acesso
+                          </span>
+                        )}
+                      </div>
+                      {isSearchingSupplier && (
+                        <span className="text-[10px] text-blue-700 flex items-center gap-1 animate-pulse font-medium">
+                          Verificando base...
+                        </span>
+                      )}
+                      {!isSearchingSupplier && isSupplierRecognized && (
+                        matchedParentSupplier ? (
+                          <span className="text-[10px] font-bold text-blue-700 bg-blue-100 border border-blue-300 px-1.5 py-0.5 rounded-md flex items-center gap-1" title={`Grupo: ${matchedParentSupplier.name}`}>
+                            <Building2 className="w-3 h-3 text-blue-600" /> Filial de {matchedParentSupplier.name.slice(0, 15)}...
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 border border-emerald-300 px-1.5 py-0.5 rounded-md flex items-center gap-1">
+                            <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Cadastrado
+                          </span>
+                        )
+                      )}
+                    </div>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        placeholder="00.000.000/0001-00"
+                        maxLength={18}
+                        disabled={!!currentSupplierSession}
+                        value={formData.supplierCnpj}
+                        onChange={e => {
+                          setIsCnpjFromKey(false);
+                          setFormData({ ...formData, supplierCnpj: formatCnpj(e.target.value) });
+                        }}
+                        className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 font-mono transition-colors ${
+                          currentSupplierSession
+                            ? 'bg-slate-100 border-slate-300 text-slate-600 cursor-not-allowed'
+                            : isSupplierRecognized
+                            ? 'border-emerald-400 bg-emerald-50/20 text-slate-900 font-semibold'
+                            : 'border-slate-300 bg-white text-slate-900'
+                        }`}
+                      />
+                    </div>
+                    {!currentSupplierSession && (
+                      <p className="text-[10px] text-slate-500 mt-1">
+                        {isSupplierRecognized ? (
+                          matchedParentSupplier ? (
+                            <span className="text-blue-700 font-medium">
+                              🏢 Filial identificada pela raiz da Matriz (<span className="font-semibold">{matchedParentSupplier.name}</span>). Será registrada no sistema automaticamente.
+                            </span>
+                          ) : (
+                            <span className="text-emerald-700 font-medium">
+                              ✅ Fornecedor cadastrado e verificado na base.
+                            </span>
+                          )
+                        ) : formData.supplierCnpj.replace(/\D/g, '').length >= 14 ? (
+                          <span className="text-blue-800 font-medium">
+                            ✨ Novo fornecedor: será cadastrado automaticamente no sistema ao salvar a solicitação.
+                          </span>
+                        ) : (
+                          <span>Preenchido automaticamente pela chave de acesso ou digite manualmente.</span>
+                        )}
+                      </p>
+                    )}
                   </div>
                 </div>
               </div>

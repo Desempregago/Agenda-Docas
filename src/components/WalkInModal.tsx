@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, ShieldCheck, Truck, FileText, CheckCircle2, AlertTriangle, Zap, MapPin, KeyRound, Plus, Trash2, DollarSign, User, Building2, Sparkles, Loader2, Lock, Unlock, RotateCcw } from 'lucide-react';
 import { Appointment, Dock, DestinationBranch } from '../types';
-import { formatCpf, formatCnpj, formatPhone, parseCurrencyInput, cleanNfeAccessKey, extractNfeKeysFromText, extractInvoiceNumberFromNfeKey } from '../utils/formatters';
+import { formatCpf, formatCnpj, formatPhone, parseCurrencyInput, cleanNfeAccessKey, extractNfeKeysFromText, extractInvoiceNumberFromNfeKey, extractUniqueCnpjsFromNfeKeys } from '../utils/formatters';
 
 interface WalkInModalProps {
   isOpen: boolean;
@@ -46,23 +46,43 @@ export const WalkInModal: React.FC<WalkInModalProps> = ({
   const nfeInputRefs = useRef<(HTMLInputElement | null)[]>([]);
   const [isInvoiceManualEdit, setIsInvoiceManualEdit] = useState<boolean>(false);
 
-  // Auto-sincronização do número da Nota Fiscal a partir das Chaves de Acesso da SEFAZ
-  useEffect(() => {
-    if (isInvoiceManualEdit) return;
-    const derived = nfeAccessKeys
-      .map(k => extractInvoiceNumberFromNfeKey(cleanNfeAccessKey(k)))
-      .filter(Boolean);
+  // CNPJs extraídos das chaves bipadas
+  const [multipleCnpjsFromKeys, setMultipleCnpjsFromKeys] = useState<string[]>([]);
+  const [isCnpjFromKey, setIsCnpjFromKey] = useState<boolean>(false);
+  const [matchedParentSupplier, setMatchedParentSupplier] = useState<{ name: string; cnpj: string } | null>(null);
 
-    setFormData(prev => ({
-      ...prev,
-      invoiceNumber: derived.length > 0 ? derived.join(', ') : '',
-    }));
+  // Auto-sincronização do número da Nota Fiscal e CNPJ a partir das Chaves de Acesso da SEFAZ
+  useEffect(() => {
+    if (!isInvoiceManualEdit) {
+      const derived = nfeAccessKeys
+        .map(k => extractInvoiceNumberFromNfeKey(cleanNfeAccessKey(k)))
+        .filter(Boolean);
+
+      setFormData(prev => ({
+        ...prev,
+        invoiceNumber: derived.length > 0 ? derived.join(', ') : '',
+      }));
+    }
+
+    // Extração automática do CNPJ do emissor
+    const uniqueCnpjs = extractUniqueCnpjsFromNfeKeys(nfeAccessKeys);
+    setMultipleCnpjsFromKeys(uniqueCnpjs);
+
+    if (uniqueCnpjs.length === 1) {
+      setFormData(prev => ({
+        ...prev,
+        supplierCnpj: uniqueCnpjs[0],
+      }));
+      setIsCnpjFromKey(true);
+    } else if (uniqueCnpjs.length === 0) {
+      setIsCnpjFromKey(false);
+    }
   }, [nfeAccessKeys, isInvoiceManualEdit]);
 
   // Estados para validação automática de CNPJ contra o banco de fornecedores (suppliers.json)
   const [isSearchingSupplier, setIsSearchingSupplier] = useState<boolean>(false);
   const [isSupplierRecognized, setIsSupplierRecognized] = useState<boolean>(false);
-  const [recognizedSupplier, setRecognizedSupplier] = useState<{ name: string; tradeName?: string; appointmentCount?: number } | null>(null);
+  const [recognizedSupplier, setRecognizedSupplier] = useState<{ name: string; tradeName?: string; appointmentCount?: number; isNewFilial?: boolean } | null>(null);
 
   // Consulta CNPJ no banco de fornecedores em tempo real (como no login)
   useEffect(() => {
@@ -83,18 +103,26 @@ export const WalkInModal: React.FC<WalkInModalProps> = ({
               }));
               setIsSupplierRecognized(true);
               setRecognizedSupplier(data.supplier);
+              if (data.matchedByRoot && data.parentSupplierName) {
+                setMatchedParentSupplier({ name: data.parentSupplierName, cnpj: data.parentSupplierCnpj });
+              } else {
+                setMatchedParentSupplier(null);
+              }
             } else if (isMounted) {
               setIsSupplierRecognized(false);
               setRecognizedSupplier(null);
+              setMatchedParentSupplier(null);
             }
           } else if (isMounted) {
             setIsSupplierRecognized(false);
             setRecognizedSupplier(null);
+            setMatchedParentSupplier(null);
           }
         } catch (_) {
           if (isMounted) {
             setIsSupplierRecognized(false);
             setRecognizedSupplier(null);
+            setMatchedParentSupplier(null);
           }
         } finally {
           if (isMounted) setIsSearchingSupplier(false);
@@ -109,6 +137,7 @@ export const WalkInModal: React.FC<WalkInModalProps> = ({
       setIsSupplierRecognized(false);
       setIsSearchingSupplier(false);
       setRecognizedSupplier(null);
+      setMatchedParentSupplier(null);
     }
   }, [formData.supplierCnpj]);
 
@@ -581,20 +610,62 @@ export const WalkInModal: React.FC<WalkInModalProps> = ({
             </div>
 
             <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="block text-xs font-bold text-slate-700 flex items-center gap-1">
-                  <Building2 className="w-3.5 h-3.5 text-amber-700" />
-                  <span>CNPJ do Fornecedor</span>
-                </label>
+              {/* Alerta de múltiplos CNPJs se detectados nas chaves */}
+              {multipleCnpjsFromKeys.length > 1 && (
+                <div className="mb-2 p-2 bg-amber-50 border border-amber-200 rounded-lg text-xs animate-in fade-in duration-200">
+                  <div className="flex items-center gap-1 font-bold text-amber-900 mb-1">
+                    <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
+                    <span>Identificados {multipleCnpjsFromKeys.length} CNPJs diferentes nas chaves bipadas:</span>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {multipleCnpjsFromKeys.map(cnpj => (
+                      <button
+                        key={cnpj}
+                        type="button"
+                        onClick={() => setFormData(prev => ({ ...prev, supplierCnpj: cnpj }))}
+                        className={`px-2 py-0.5 rounded text-[11px] font-mono font-bold transition-all cursor-pointer ${
+                          formData.supplierCnpj === cnpj
+                            ? 'bg-amber-600 text-white shadow-xs'
+                            : 'bg-white text-slate-700 border border-slate-300 hover:bg-amber-100/70'
+                        }`}
+                      >
+                        {cnpj} {formData.supplierCnpj === cnpj && '✓'}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-[10px] text-amber-800 mt-1">
+                    Clique no CNPJ principal emissor desta entrega para vincular ao encaixe.
+                  </p>
+                </div>
+              )}
+
+              <div className="flex items-center justify-between mb-1 flex-wrap gap-1">
+                <div className="flex items-center gap-1.5">
+                  <label className="block text-xs font-bold text-slate-700 flex items-center gap-1">
+                    <Building2 className="w-3.5 h-3.5 text-amber-700" />
+                    <span>CNPJ do Fornecedor</span>
+                  </label>
+                  {isCnpjFromKey && (
+                    <span className="text-[9px] font-bold bg-slate-100 text-slate-700 border border-slate-300 px-1.5 py-0.2 rounded-full flex items-center gap-0.5">
+                      <Lock className="w-2.5 h-2.5 text-slate-500" /> Extraído da Chave de Acesso
+                    </span>
+                  )}
+                </div>
                 {isSearchingSupplier && (
                   <span className="text-[10px] text-amber-700 flex items-center gap-1 animate-pulse font-medium">
                     <Loader2 className="w-3 h-3 animate-spin" /> Verificando base...
                   </span>
                 )}
                 {!isSearchingSupplier && isSupplierRecognized && (
-                  <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 border border-emerald-300 px-1.5 py-0.5 rounded-md flex items-center gap-1">
-                    <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Cadastrado
-                  </span>
+                  matchedParentSupplier ? (
+                    <span className="text-[10px] font-bold text-blue-700 bg-blue-100 border border-blue-300 px-1.5 py-0.5 rounded-md flex items-center gap-1" title={`Grupo: ${matchedParentSupplier.name}`}>
+                      <Building2 className="w-3 h-3 text-blue-600" /> Filial de {matchedParentSupplier.name.slice(0, 15)}...
+                    </span>
+                  ) : (
+                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 border border-emerald-300 px-1.5 py-0.5 rounded-md flex items-center gap-1">
+                      <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Cadastrado
+                    </span>
+                  )
                 )}
               </div>
               <div className="relative">
@@ -603,7 +674,10 @@ export const WalkInModal: React.FC<WalkInModalProps> = ({
                   placeholder="00.000.000/0001-00"
                   maxLength={18}
                   value={formData.supplierCnpj}
-                  onChange={e => setFormData({ ...formData, supplierCnpj: formatCnpj(e.target.value) })}
+                  onChange={e => {
+                    setIsCnpjFromKey(false);
+                    setFormData({ ...formData, supplierCnpj: formatCnpj(e.target.value) });
+                  }}
                   className={`w-full px-3 py-2 text-sm border rounded-xl focus:ring-2 focus:ring-amber-500 font-mono transition-colors ${
                     isSupplierRecognized
                       ? 'border-emerald-400 bg-emerald-50/30 text-slate-900 font-semibold'
@@ -611,6 +685,25 @@ export const WalkInModal: React.FC<WalkInModalProps> = ({
                   }`}
                 />
               </div>
+              <p className="text-[10px] text-slate-500 mt-1">
+                {isSupplierRecognized ? (
+                  matchedParentSupplier ? (
+                    <span className="text-blue-700 font-medium">
+                      🏢 Filial identificada pela raiz do CNPJ da Matriz (<span className="font-semibold">{matchedParentSupplier.name}</span>). Será vinculada automaticamente.
+                    </span>
+                  ) : (
+                    <span className="text-emerald-700 font-medium">
+                      ✅ Fornecedor cadastrado e verificado na base.
+                    </span>
+                  )
+                ) : formData.supplierCnpj.replace(/\D/g, '').length >= 14 ? (
+                  <span className="text-amber-800 font-medium">
+                    ✨ Novo fornecedor: será cadastrado automaticamente no sistema ao salvar este encaixe.
+                  </span>
+                ) : (
+                  <span>Preenchido automaticamente pela chave de acesso ou digite manualmente.</span>
+                )}
+              </p>
             </div>
           </div>
 
