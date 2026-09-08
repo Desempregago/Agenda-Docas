@@ -147,19 +147,19 @@ export const AdminAuthModal: React.FC<AdminAuthModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/80 backdrop-blur-xs p-4 animate-in fade-in duration-150">
-      <div className="bg-white rounded-3xl max-w-md w-full shadow-2xl border border-slate-200 overflow-hidden">
+    <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center bg-slate-900/80 backdrop-blur-xs p-3 sm:p-4 animate-in fade-in duration-150">
+      <div className="bg-white rounded-3xl max-w-md w-full shadow-2xl border border-slate-200 overflow-hidden max-h-[92vh] flex flex-col my-auto">
         
         {/* Header */}
-        <div className="bg-slate-900 text-white p-6 relative border-b border-slate-800">
+        <div className="bg-slate-900 text-white p-5 sm:p-6 relative border-b border-slate-800 shrink-0">
           <button
             onClick={onClose}
-            className="absolute top-4 right-4 text-slate-400 hover:text-white p-1 rounded-full hover:bg-white/10 transition-colors"
+            className="absolute top-4 right-4 text-slate-400 hover:text-white p-1 rounded-full hover:bg-white/10 transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
           <div className="flex items-center gap-3">
-            <div className="p-3 bg-indigo-500/20 text-indigo-400 rounded-2xl border border-indigo-500/30">
+            <div className="p-3 bg-indigo-500/20 text-indigo-400 rounded-2xl border border-indigo-500/30 shrink-0">
               {isSetupMode ? <Sparkles className="w-6 h-6" /> : <ShieldCheck className="w-6 h-6" />}
             </div>
             <div>
@@ -175,13 +175,15 @@ export const AdminAuthModal: React.FC<AdminAuthModalProps> = ({
           </div>
         </div>
 
-        {/* Error Alert */}
-        {errorMessage && (
-          <div className="mx-6 mt-4 p-3.5 bg-rose-50 border border-rose-200 text-rose-800 text-xs rounded-xl font-medium flex items-center gap-2">
-            <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
-            <span>{errorMessage}</span>
-          </div>
-        )}
+        {/* Scrollable Body Container */}
+        <div className="overflow-y-auto flex-1">
+          {/* Error Alert */}
+          {errorMessage && (
+            <div className="mx-5 sm:mx-6 mt-4 p-3.5 bg-rose-50 border border-rose-200 text-rose-800 text-xs rounded-xl font-medium flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+              <span>{errorMessage}</span>
+            </div>
+          )}
 
         {/* Form Body: Login OR Setup */}
         {!isSetupMode ? (
@@ -342,6 +344,7 @@ export const AdminAuthModal: React.FC<AdminAuthModalProps> = ({
             </div>
           </form>
         )}
+        </div>
 
       </div>
     </div>

@@ -256,10 +256,10 @@ export const WalkInModal: React.FC<WalkInModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/80 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-xl w-full overflow-hidden border border-slate-200 animate-in fade-in zoom-in-95 my-6">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-xl w-full max-h-[92vh] flex flex-col overflow-hidden border border-slate-200 animate-in fade-in zoom-in-95 my-auto">
         
         {/* Header */}
-        <div className="bg-gradient-to-r from-amber-600 via-amber-700 to-slate-900 text-white px-6 py-4 flex items-center justify-between">
+        <div className="bg-gradient-to-r from-amber-600 via-amber-700 to-slate-900 text-white px-6 py-4 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-amber-500/30 border border-amber-300/40 rounded-xl text-amber-200">
               <Zap className="w-6 h-6" />
@@ -290,7 +290,7 @@ export const WalkInModal: React.FC<WalkInModalProps> = ({
               e.preventDefault();
             }
           }}
-          className="p-6 space-y-4"
+          className="p-6 space-y-4 overflow-y-auto flex-1"
         >
           {error && (
             <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700 flex items-center gap-2">

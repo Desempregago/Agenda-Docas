@@ -255,10 +255,10 @@ ${appointment.notes || 'Nenhuma observação informada.'}
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/75 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 print:p-0 print:bg-white print:static">
-      <div className="bg-white rounded-3xl shadow-2xl max-w-2xl w-full overflow-hidden border border-slate-200 animate-in fade-in zoom-in-95 duration-200 my-4 print:border-none print:shadow-none print:max-w-none print:w-full">
+      <div className="bg-white rounded-3xl shadow-2xl max-w-2xl w-full max-h-[92vh] flex flex-col overflow-hidden border border-slate-200 animate-in fade-in zoom-in-95 duration-200 my-auto print:border-none print:shadow-none print:max-w-none print:w-full print:max-h-none">
         
         {/* Modal Top Header (Hidden on Print and Captured Image) */}
-        <div className="bg-slate-900 text-white px-6 py-4 flex items-center justify-between print:hidden" data-no-image="true">
+        <div className="bg-slate-900 text-white px-6 py-4 flex items-center justify-between shrink-0 print:hidden" data-no-image="true">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-emerald-600 rounded-xl">
               <FileText className="w-5 h-5 text-white" />
@@ -278,7 +278,7 @@ ${appointment.notes || 'Nenhuma observação informada.'}
         </div>
 
         {/* Scrollable Container for Modal View */}
-        <div className="overflow-y-auto max-h-[78vh] p-2 sm:p-5 bg-slate-100/60 print:max-h-none print:overflow-visible print:p-0 print:bg-white">
+        <div className="overflow-y-auto flex-1 p-2 sm:p-5 bg-slate-100/60 print:max-h-none print:overflow-visible print:p-0 print:bg-white">
           {/* Printable / Image Captured Card (Ref Container) */}
           <div
             ref={receiptCardRef}

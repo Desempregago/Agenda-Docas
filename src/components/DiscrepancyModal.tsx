@@ -137,10 +137,10 @@ export const DiscrepancyModal: React.FC<DiscrepancyModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden border border-slate-200 animate-in fade-in zoom-in-95 duration-200 my-6">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full max-h-[92vh] flex flex-col overflow-hidden border border-slate-200 animate-in fade-in zoom-in-95 duration-200 my-auto">
         
         {/* Header */}
-        <div className="bg-orange-600 text-white px-6 py-4 flex items-center justify-between">
+        <div className="bg-orange-600 text-white px-6 py-4 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-orange-700 rounded-lg">
               <AlertTriangle className="w-5 h-5 text-white" />
@@ -164,7 +164,7 @@ export const DiscrepancyModal: React.FC<DiscrepancyModalProps> = ({
         </div>
 
         {/* Form Body */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-4 text-xs sm:text-sm">
+        <form onSubmit={handleSubmit} className="p-6 space-y-4 text-xs sm:text-sm overflow-y-auto flex-1">
           
           {/* Category Selectors */}
           <div>

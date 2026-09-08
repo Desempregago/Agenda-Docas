@@ -76,10 +76,10 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden border border-slate-200 animate-in fade-in zoom-in-95 duration-200">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full max-h-[92vh] flex flex-col overflow-hidden border border-slate-200 animate-in fade-in zoom-in-95 duration-200 my-auto">
         
         {/* Header */}
-        <div className="bg-slate-900 text-white px-5 py-4 flex items-center justify-between">
+        <div className="bg-slate-900 text-white px-5 py-4 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2.5">
             <div className="p-2 bg-amber-500/20 text-amber-400 rounded-xl border border-amber-500/30">
               <Bell className="w-5 h-5" />
@@ -105,7 +105,7 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
         </div>
 
         {/* Quick Filter Tabs */}
-        <div className="bg-slate-100/90 px-4 py-2 border-b border-slate-200 flex items-center justify-between gap-2">
+        <div className="bg-slate-100/90 px-4 py-2 border-b border-slate-200 flex items-center justify-between gap-2 shrink-0">
           <div className="flex items-center gap-1.5 overflow-x-auto py-0.5">
             <button
               onClick={() => setFilterType('ALL')}
@@ -143,7 +143,7 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
         </div>
 
         {/* Actions bar */}
-        <div className="bg-slate-50 px-5 py-2.5 border-b border-slate-200 flex items-center justify-between text-xs text-slate-600">
+        <div className="bg-slate-50 px-5 py-2.5 border-b border-slate-200 flex items-center justify-between text-xs text-slate-600 shrink-0">
           <button
             onClick={onMarkAllAsRead}
             disabled={unreadCount === 0}
@@ -162,7 +162,7 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
         </div>
 
         {/* List of Notifications */}
-        <div className="max-h-96 overflow-y-auto divide-y divide-slate-100">
+        <div className="overflow-y-auto flex-1 divide-y divide-slate-100">
           {filteredNotifications.length === 0 ? (
             <div className="text-center py-12 px-4">
               <Bell className="w-10 h-10 text-slate-300 mx-auto mb-2 opacity-50" />

@@ -305,10 +305,10 @@ export const DoubleCheckUnloadModal: React.FC<DoubleCheckUnloadModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/80 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full overflow-hidden border border-slate-200 animate-in fade-in zoom-in-95 duration-200 my-4">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[92vh] flex flex-col overflow-hidden border border-slate-200 animate-in fade-in zoom-in-95 duration-200 my-auto">
         
         {/* Header */}
-        <div className="bg-gradient-to-r from-purple-900 via-indigo-900 to-slate-900 px-5 py-4 text-white flex items-center justify-between">
+        <div className="bg-gradient-to-r from-purple-900 via-indigo-900 to-slate-900 px-5 py-4 text-white flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
             <div className="p-2.5 bg-purple-500/20 border border-purple-400/30 rounded-xl text-purple-300">
               <ShieldCheck className="w-6 h-6" />
@@ -337,7 +337,7 @@ export const DoubleCheckUnloadModal: React.FC<DoubleCheckUnloadModalProps> = ({
         </div>
 
         {/* Resumo do Veículo & Fornecedor */}
-        <div className="bg-slate-50 border-b border-slate-200 px-5 py-3 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+        <div className="bg-slate-50 border-b border-slate-200 px-5 py-3 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs shrink-0">
           <div>
             <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 block">Fornecedor</span>
             <span className="font-bold text-slate-900 truncate block" title={appointment.supplierName}>
@@ -383,7 +383,7 @@ export const DoubleCheckUnloadModal: React.FC<DoubleCheckUnloadModalProps> = ({
               e.preventDefault();
             }
           }}
-          className="p-5 space-y-4 max-h-[75vh] overflow-y-auto"
+          className="p-5 space-y-4 overflow-y-auto flex-1"
         >
           {error && (
             <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700 flex items-start gap-2">
