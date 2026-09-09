@@ -16,6 +16,7 @@ import { UsersManagementModal } from './components/UsersManagementModal';
 import { ResetDatabaseModal } from './components/ResetDatabaseModal';
 import { AppointmentReceiptModal } from './components/AppointmentReceiptModal';
 import { DestinationsManagementModal } from './components/DestinationsManagementModal';
+import { LogisticsReportModal } from './components/LogisticsReportModal';
 import { Appointment, AppointmentStatus, DiscrepancyReport, Dock, SystemUser, DestinationBranch } from './types';
 import { Bell, CheckCircle2, AlertCircle, ShieldAlert, X } from 'lucide-react';
 import { authFetch, getAuthToken, setAuthToken } from './services/api';
@@ -211,6 +212,7 @@ export default function App() {
   const [isSupplierLoginOpen, setIsSupplierLoginOpen] = useState(false);
   const [isTimeSlotConfigOpen, setIsTimeSlotConfigOpen] = useState(false);
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);
+  const [isReportsModalOpen, setIsReportsModalOpen] = useState(false);
   const [rescheduleAppointment, setRescheduleAppointment] = useState<Appointment | null>(null);
   const [selectedApptForReceipt, setSelectedApptForReceipt] = useState<Appointment | null>(null);
 
@@ -748,6 +750,7 @@ export default function App() {
         onOpenBrandingModal={isUserAdmin ? handleOpenBrandingModal : undefined}
         onOpenUsersModal={isUserAdmin ? handleOpenUsersModal : undefined}
         onOpenDestinationsModal={isUserAdmin ? handleOpenDestinationsModal : undefined}
+        onOpenReportsModal={isStaff ? () => setIsReportsModalOpen(true) : undefined}
       />
 
       {/* Main Container */}
@@ -1003,6 +1006,15 @@ export default function App() {
         destinations={destinations}
         onClose={() => setIsDestinationsModalOpen(false)}
         onSave={handleSaveDestinations}
+      />
+
+      {/* Logistics & Dock Performance Reports Modal */}
+      <LogisticsReportModal
+        isOpen={isReportsModalOpen}
+        onClose={() => setIsReportsModalOpen(false)}
+        appointments={appointments}
+        destinations={destinations}
+        docks={docks}
       />
 
     </div>

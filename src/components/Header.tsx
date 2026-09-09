@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Calendar, Search, LayoutDashboard, Server, Plus, UserCheck, ShieldAlert, ChevronRight, Settings, Bell, Lock, LogOut, Users, User, Menu, X, Database, MapPin } from 'lucide-react';
+import { Calendar, Search, LayoutDashboard, Server, Plus, UserCheck, ShieldAlert, ChevronRight, Settings, Bell, Lock, LogOut, Users, User, Menu, X, Database, MapPin, FileSpreadsheet } from 'lucide-react';
 import { BrandSettings, getBrandTheme } from './BrandingSettingsModal';
 import { SystemUser } from '../types';
 
@@ -22,6 +22,7 @@ interface HeaderProps {
   onOpenBrandingModal: () => void;
   onOpenUsersModal?: () => void;
   onOpenDestinationsModal?: () => void;
+  onOpenReportsModal?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -40,6 +41,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenBrandingModal,
   onOpenUsersModal,
   onOpenDestinationsModal,
+  onOpenReportsModal,
 }) => {
   const brandTheme = getBrandTheme(brandSettings.primaryColor);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -166,6 +168,18 @@ export const Header: React.FC<HeaderProps> = ({
                     {unreadNotificationsCount > 9 ? '9+' : unreadNotificationsCount}
                   </span>
                 )}
+              </button>
+            )}
+
+            {/* Desktop Admin Options (Exibido EXCLUSIVAMENTE para Administradores) */}
+            {isStaff && onOpenReportsModal && (
+              <button
+                onClick={onOpenReportsModal}
+                className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white text-xs font-semibold px-2.5 py-1.5 rounded-xl border border-slate-700 transition-all shadow-xs cursor-pointer"
+                title="Relatório de Performance de Portaria, Ocupação e Exportação Excel"
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                <span className="hidden sm:inline">Relatórios</span>
               </button>
             )}
 
@@ -369,6 +383,29 @@ export const Header: React.FC<HeaderProps> = ({
                 </>
               )}
             </div>
+
+            {/* Tools & Integrations (Exclusivo Administradores) */}
+            {isStaff && (
+              <div className="space-y-1.5 pt-2 border-t border-slate-800">
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-1">Relatórios & Auditoria</p>
+
+                {onOpenReportsModal && (
+                  <button
+                    onClick={() => {
+                      setIsMobileMenuOpen(false);
+                      onOpenReportsModal();
+                    }}
+                    className="w-full flex items-center justify-between p-2.5 rounded-xl bg-slate-800/80 hover:bg-slate-800 text-slate-200 text-xs font-medium border border-slate-700/80 transition-all"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <FileSpreadsheet className="w-4 h-4 text-emerald-400 shrink-0" />
+                      <span>Relatórios de Performance & Exportação Excel</span>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-slate-500 shrink-0" />
+                  </button>
+                )}
+              </div>
+            )}
 
             {/* Tools & Integrations (Exclusivo Administradores) */}
             {isUserAdmin && (

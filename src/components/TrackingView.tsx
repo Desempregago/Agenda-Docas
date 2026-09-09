@@ -296,14 +296,6 @@ export const TrackingView: React.FC<TrackingViewProps> = ({
                     <p className="text-[11px] text-slate-500 max-w-xs mx-auto">
                       Não há agendamentos registrados no momento. Novos agendamentos criados por fornecedores ou equipe operacional aparecerão aqui.
                     </p>
-                    {onOpenNewModal && (
-                      <button
-                        onClick={onOpenNewModal}
-                        className="inline-flex items-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold px-3 py-1.5 rounded-xl transition-all shadow-2xs cursor-pointer mt-1"
-                      >
-                        + Novo Agendamento
-                      </button>
-                    )}
                   </>
                 ) : isSupplierLoggedIn ? (
                   <>

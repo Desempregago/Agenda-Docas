@@ -574,13 +574,17 @@ export const ClientAppointmentsList: React.FC<ClientAppointmentsListProps> = ({
                               : 'Ainda não há agendamentos cadastrados na base de dados.'}
                           </p>
                         </div>
-                        <button
-                          onClick={onOpenNewModal}
-                          className="inline-flex items-center gap-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2 rounded-xl transition-all cursor-pointer shadow-xs"
-                        >
-                          <Plus className="w-4 h-4" />
-                          Cadastrar Agendamento
-                        </button>
+                        {(searchTerm || statusFilter !== 'ALL') && (
+                          <button
+                            onClick={() => {
+                              setSearchTerm('');
+                              setStatusFilter('ALL');
+                            }}
+                            className="inline-flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-800 font-semibold px-3 py-1.5 rounded-lg hover:bg-blue-50 transition-colors cursor-pointer"
+                          >
+                            Limpar filtros de busca
+                          </button>
+                        )}
                       </div>
                     )}
                   </td>
