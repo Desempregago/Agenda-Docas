@@ -58,11 +58,12 @@ export interface DestinationBranch {
   active: boolean;
   isDefault?: boolean;
   
-  // Configurações Específicas por Filial (Janelas, Limites e Dias de Operação)
-  timeSlots?: string[]; // Janelas personalizadas desta filial
-  slotSupplierLimits?: Record<string, number>; // Limite de veículos por janela nesta filial
+  // Configurações Específicas por Filial (Janelas, Limites, Dias de Operação e Docas Físicas)
+  timeSlots?: string[]; // Janelas configuradas manualmente nesta filial/loja
+  slotSupplierLimits?: Record<string, number>; // Limite de veículos por janela nesta filial/loja
   allowedDaysOfWeek?: number[]; // Dias de operação (0=Dom, 1=Seg... 6=Sáb)
   blockedDates?: string[]; // Datas específicas bloqueadas (feriados locais, etc.)
+  docks?: Dock[]; // Docas físicas exclusivas desta loja/filial
 }
 
 export interface Appointment {
@@ -130,6 +131,7 @@ export interface Dock {
   isOperational: boolean;
   dailyLimit?: number; // Limite diário máximo (ex: 140, 40, 200, 50)
   limitUnit?: 'pallets' | 'volumes'; // Unidade do limite ('pallets' ou 'volumes')
+  destinationBranchId?: string; // ID da filial/loja à qual a doca física pertence
 }
 
 export interface TimeSlot {

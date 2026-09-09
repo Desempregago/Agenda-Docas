@@ -290,13 +290,13 @@ export const ClientNewAppointmentModal: React.FC<ClientNewAppointmentModalProps>
   const isSelectedDateAllowed = isDateAllowed(formData.scheduledDate, branchAllowedDays, selectedBranch?.blockedDates);
   const selectedDayOfWeek = getDayOfWeekFromDate(formData.scheduledDate);
 
-  // Janelas disponíveis para a filial selecionada
+  // Janelas disponíveis para a filial/loja selecionada
   const branchAvailableSlots = React.useMemo(() => {
     if (selectedBranch?.timeSlots && selectedBranch.timeSlots.length > 0) {
       return selectedBranch.timeSlots;
     }
-    return availableSlots.length > 0 ? availableSlots : ['07:00 - 08:30', '08:30 - 10:00', '10:00 - 11:30', '13:00 - 14:30', '14:30 - 16:00', '16:00 - 17:30'];
-  }, [selectedBranch, availableSlots]);
+    return ['07:00 - 08:30', '08:30 - 10:00', '10:00 - 11:30', '13:00 - 14:30', '14:30 - 16:00', '16:00 - 17:30'];
+  }, [selectedBranch]);
 
   // Se a janela selecionada não existir na filial atual, reajustar para a primeira válida
   useEffect(() => {
@@ -305,26 +305,13 @@ export const ClientNewAppointmentModal: React.FC<ClientNewAppointmentModalProps>
     }
   }, [branchAvailableSlots, formData.timeSlot]);
 
-  const [slotLimits, setSlotLimits] = useState<Record<string, number>>(() => propSlotLimits);
-
-  useEffect(() => {
-    if (propSlotLimits && Object.keys(propSlotLimits).length > 0) {
-      setSlotLimits(propSlotLimits);
+  // Helper para obter limite máximo de uma janela na filial selecionada
+  const getSlotMaxSuppliers = (slot: string) => {
+    if (selectedBranch?.slotSupplierLimits?.[slot] !== undefined) {
+      return selectedBranch.slotSupplierLimits[slot];
     }
-  }, [propSlotLimits]);
-
-  useEffect(() => {
-    if (isOpen) {
-      fetch('/api/slot-limits')
-        .then(res => res.json())
-        .then(data => {
-          if (data && typeof data === 'object') {
-            setSlotLimits(data);
-          }
-        })
-        .catch(() => {});
-    }
-  }, [isOpen]);
+    return 3;
+  };
 
   useEffect(() => {
     if (currentSupplierSession) {
@@ -340,14 +327,6 @@ export const ClientNewAppointmentModal: React.FC<ClientNewAppointmentModalProps>
   const [error, setError] = useState<string | null>(null);
   const [createdAppointment, setCreatedAppointment] = useState<Appointment | null>(null);
   const [copied, setCopied] = useState(false);
-
-  // Helper para obter limite máximo de uma janela na filial selecionada
-  const getSlotMaxSuppliers = (slot: string) => {
-    if (selectedBranch?.slotSupplierLimits?.[slot] !== undefined) {
-      return selectedBranch.slotSupplierLimits[slot];
-    }
-    return slotLimits[slot] ?? 3;
-  };
 
   // Calculate supplier count per slot for selected date AND selected branch
   const slotOccupancy = React.useMemo(() => {

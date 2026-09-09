@@ -211,6 +211,7 @@ export default function App() {
   const [isBrandingModalOpen, setIsBrandingModalOpen] = useState(false);
   const [isSupplierLoginOpen, setIsSupplierLoginOpen] = useState(false);
   const [isTimeSlotConfigOpen, setIsTimeSlotConfigOpen] = useState(false);
+  const [timeSlotConfigBranchId, setTimeSlotConfigBranchId] = useState<string | undefined>(undefined);
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);
   const [isReportsModalOpen, setIsReportsModalOpen] = useState(false);
   const [rescheduleAppointment, setRescheduleAppointment] = useState<Appointment | null>(null);
@@ -692,11 +693,12 @@ export default function App() {
     setIsResetModalOpen(true);
   };
 
-  const handleOpenTimeSlotConfig = () => {
+  const handleOpenTimeSlotConfig = (branchId?: string) => {
     if (!isUserAdmin) {
       showToast('Acesso Restrito', 'Apenas Administradores têm permissão para configurar capacidade de docas e janelas de horário.', 'warning');
       return;
     }
+    setTimeSlotConfigBranchId(branchId);
     setIsTimeSlotConfigOpen(true);
   };
 
@@ -930,7 +932,11 @@ export default function App() {
         timeSlots={timeSlots}
         slotLimits={slotSupplierLimits}
         destinations={destinations}
-        onClose={() => setIsTimeSlotConfigOpen(false)}
+        initialBranchId={timeSlotConfigBranchId}
+        onClose={() => {
+          setIsTimeSlotConfigOpen(false);
+          setTimeSlotConfigBranchId(undefined);
+        }}
         onSaveSlots={handleSaveSlots}
         onSaveSlotLimits={handleSaveSlotLimits}
         onSaveDocks={handleSaveDocks}
@@ -1006,6 +1012,10 @@ export default function App() {
         destinations={destinations}
         onClose={() => setIsDestinationsModalOpen(false)}
         onSave={handleSaveDestinations}
+        onConfigureBranch={(branchId) => {
+          setIsDestinationsModalOpen(false);
+          handleOpenTimeSlotConfig(branchId);
+        }}
       />
 
       {/* Logistics & Dock Performance Reports Modal */}

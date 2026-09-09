@@ -32,6 +32,11 @@ export const DEFAULT_DESTINATIONS: DestinationBranch[] = [
       '16:00 - 17:30': 2,
     },
     allowedDaysOfWeek: [1, 2, 3, 4, 5],
+    docks: [
+      { id: 'DOCA-01', name: 'Doca 01 - Cargas Paletizadas', type: 'PALETIZADA', capacityPerSlot: 2, isOperational: true, dailyLimit: 140, limitUnit: 'pallets', destinationBranchId: 'DEST-01-MATRIZ' },
+      { id: 'DOCA-02', name: 'Doca 02 - Cargas Batidas', type: 'BATIDA', capacityPerSlot: 2, isOperational: true, dailyLimit: 200, limitUnit: 'volumes', destinationBranchId: 'DEST-01-MATRIZ' },
+      { id: 'DOCA-03', name: 'Doca 03 - Cargas Fracionadas', type: 'FRACIONADA', capacityPerSlot: 1, isOperational: true, dailyLimit: 50, limitUnit: 'volumes', destinationBranchId: 'DEST-01-MATRIZ' },
+    ],
   },
   {
     id: 'DEST-02-FILIAL-SUL',
@@ -56,6 +61,10 @@ export const DEFAULT_DESTINATIONS: DestinationBranch[] = [
       '15:30 - 17:30': 2,
     },
     allowedDaysOfWeek: [1, 2, 3, 4, 5],
+    docks: [
+      { id: 'DOCA-01-SUL', name: 'Doca 01 - Cargas Paletizadas', type: 'PALETIZADA', capacityPerSlot: 2, isOperational: true, dailyLimit: 120, limitUnit: 'pallets', destinationBranchId: 'DEST-02-FILIAL-SUL' },
+      { id: 'DOCA-02-SUL', name: 'Doca 02 - Cargas Refrigeradas', type: 'REFRIGERADA', capacityPerSlot: 1, isOperational: true, dailyLimit: 40, limitUnit: 'pallets', destinationBranchId: 'DEST-02-FILIAL-SUL' },
+    ],
   }
 ];
 
@@ -268,6 +277,7 @@ export const StorageService = {
       slotSupplierLimits: (b.slotSupplierLimits && typeof b.slotSupplierLimits === 'object') ? b.slotSupplierLimits : undefined,
       allowedDaysOfWeek: Array.isArray(b.allowedDaysOfWeek) ? b.allowedDaysOfWeek : undefined,
       blockedDates: Array.isArray(b.blockedDates) ? b.blockedDates : undefined,
+      docks: Array.isArray(b.docks) ? b.docks : undefined,
     }));
   },
 
@@ -291,6 +301,7 @@ export const StorageService = {
       slotSupplierLimits: (b.slotSupplierLimits && typeof b.slotSupplierLimits === 'object') ? b.slotSupplierLimits : undefined,
       allowedDaysOfWeek: Array.isArray(b.allowedDaysOfWeek) ? b.allowedDaysOfWeek : undefined,
       blockedDates: Array.isArray(b.blockedDates) ? b.blockedDates : undefined,
+      docks: Array.isArray(b.docks) ? b.docks : undefined,
     }));
     return writeJsonFile<DestinationBranch[]>('destinations.json', cleanList);
   },

@@ -54,7 +54,7 @@ interface AdminDockDashboardProps {
   ) => void | Promise<void>;
   onOpenNewModal: () => void;
   onOpenReceipt?: (appt: Appointment) => void;
-  onOpenTimeSlotConfig?: () => void;
+  onOpenTimeSlotConfig?: (branchId?: string) => void;
 }
 
 // Helper to get today's local date in YYYY-MM-DD format
@@ -403,12 +403,12 @@ export const AdminDockDashboard: React.FC<AdminDockDashboardProps> = ({
 
               {onOpenTimeSlotConfig && effectiveIsAdmin && (
                 <button
-                  onClick={onOpenTimeSlotConfig}
+                  onClick={() => onOpenTimeSlotConfig(selectedBranchFilter !== 'ALL' ? selectedBranchFilter : undefined)}
                   className="inline-flex items-center gap-1.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold px-3 py-1.5 rounded-xl border border-slate-700 shadow-xs transition-colors cursor-pointer shrink-0"
-                  title="Cadastrar e gerenciar janelas de horário e capacidade de docas (Exclusivo Administrador)"
+                  title="Cadastrar e gerenciar janelas de horário e capacidade de docas desta loja"
                 >
                   <Clock className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                  <span className="hidden sm:inline">Gerenciar Pátio</span>
+                  <span className="hidden sm:inline">Configurar Loja</span>
                 </button>
               )}
             </div>
@@ -805,11 +805,11 @@ export const AdminDockDashboard: React.FC<AdminDockDashboardProps> = ({
           {onOpenTimeSlotConfig && (
             <button
               type="button"
-              onClick={onOpenTimeSlotConfig}
+              onClick={() => onOpenTimeSlotConfig(selectedBranchFilter !== 'ALL' ? selectedBranchFilter : undefined)}
               className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-700 hover:text-blue-900 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-3 py-1.5 rounded-xl transition-all cursor-pointer shadow-2xs self-start sm:self-auto"
             >
               <Sliders className="w-3.5 h-3.5" />
-              <span>Configurar Limites & Janelas</span>
+              <span>Configurar Janelas & Docas da Loja</span>
             </button>
           )}
         </div>
