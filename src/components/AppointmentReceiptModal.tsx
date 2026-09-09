@@ -306,49 +306,52 @@ ${appointment.notes || 'Nenhuma observação informada.'}
 
           {/* Highlighted Protocol Box */}
           <div className="bg-gradient-to-br from-blue-50 via-slate-50 to-indigo-50 border-2 border-blue-300/80 rounded-2xl p-4 sm:p-5 shadow-xs relative overflow-hidden">
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-              <div className="text-center sm:text-left space-y-1">
-                <span className="text-[10px] font-extrabold uppercase tracking-widest text-blue-700 block">
-                  Código de Protocolo do Agendamento
-                </span>
-                <div className="flex items-center justify-center sm:justify-start gap-2">
-                  <span className="text-2xl sm:text-3xl font-mono font-black text-blue-800 tracking-tight">
-                    {appointment.protocol}
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="text-left space-y-1">
+                  <span className="text-[10px] font-extrabold uppercase tracking-widest text-blue-700 block">
+                    Código de Protocolo do Agendamento
                   </span>
-                  <button
-                    onClick={handleCopyProtocol}
-                    data-no-image="true"
-                    className="p-2 text-blue-700 hover:text-blue-900 hover:bg-blue-200/60 rounded-xl transition-colors print:hidden cursor-pointer hide-in-receipt-image"
-                    title="Copiar código do protocolo"
-                  >
-                    <Copy className="w-4 h-4" />
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <span className="text-2xl sm:text-3xl font-mono font-black text-blue-800 tracking-tight break-all">
+                      {appointment.protocol}
+                    </span>
+                    <button
+                      onClick={handleCopyProtocol}
+                      data-no-image="true"
+                      className="p-2 text-blue-700 hover:text-blue-900 hover:bg-blue-200/60 rounded-xl transition-colors print:hidden cursor-pointer hide-in-receipt-image shrink-0"
+                      title="Copiar código do protocolo"
+                    >
+                      <Copy className="w-4 h-4" />
+                    </button>
+                  </div>
+                  {copied && (
+                    <p data-no-image="true" className="text-xs text-emerald-600 font-bold hide-in-receipt-image">✓ Protocolo copiado!</p>
+                  )}
                 </div>
-                {copied && (
-                  <p data-no-image="true" className="text-xs text-emerald-600 font-bold hide-in-receipt-image">✓ Protocolo copiado!</p>
-                )}
+
+                {/* Status and Dock Info Badge */}
+                <div className="flex flex-col items-start sm:items-end gap-1.5">
+                  <StatusBadge status={appointment.status} size="lg" isPreApprovedContract={appointment.isPreApprovedContract} isWalkIn={appointment.isWalkIn} />
+                  <div className="text-[11px] font-semibold text-slate-600 bg-white border border-slate-200 px-2.5 py-1 rounded-lg shadow-2xs break-all">
+                    Doca: <strong className="text-blue-700">{appointment.dockId || 'A definir na chegada'}</strong>
+                  </div>
+                </div>
               </div>
 
-              {/* Status and Dock Info Badge */}
-              <div className="flex flex-col items-center sm:items-end gap-1.5">
-                <StatusBadge status={appointment.status} size="lg" isPreApprovedContract={appointment.isPreApprovedContract} isWalkIn={appointment.isWalkIn} />
-                <div className="text-[11px] font-semibold text-slate-600 bg-white border border-slate-200 px-2.5 py-1 rounded-lg shadow-2xs">
-                  Doca: <strong className="text-blue-700">{appointment.dockId || 'A definir na chegada'}</strong>
+              {/* Visual Simulated Barcode Pattern */}
+              <div className="mt-3 pt-3 border-t border-blue-200/60 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-[10px] text-slate-400 font-mono">
+                <div className="flex items-center gap-1">
+                  <div className="h-5 flex items-center gap-0.5 opacity-60">
+                    {[4, 2, 6, 1, 3, 5, 2, 4, 1, 7, 3, 2, 5, 1, 4, 2, 6, 3, 1, 5].map((w, i) => (
+                      <span key={i} className="bg-slate-700 h-full inline-block shrink-0" style={{ width: `${w}px` }} />
+                    ))}
+                  </div>
+                  <span className="ml-2 break-all">{appointment.protocol}</span>
                 </div>
+                <span className="sm:hidden block">AUTENTICAÇÃO SISTEMA AGENDA-DOCAS</span>
+                <span className="hidden sm:inline">AUTENTICAÇÃO SISTEMA AGENDA-DOCAS</span>
               </div>
-            </div>
-
-            {/* Visual Simulated Barcode Pattern */}
-            <div className="mt-4 pt-3 border-t border-blue-200/60 flex items-center justify-between text-[10px] text-slate-400 font-mono">
-              <div className="flex items-center gap-1">
-                <div className="h-6 flex items-center gap-0.5 opacity-60">
-                  {[4, 2, 6, 1, 3, 5, 2, 4, 1, 7, 3, 2, 5, 1, 4, 2, 6, 3, 1, 5].map((w, i) => (
-                    <span key={i} className="bg-slate-700 h-full inline-block" style={{ width: `${w}px` }} />
-                  ))}
-                </div>
-                <span className="ml-2">{appointment.protocol}</span>
-              </div>
-              <span className="hidden sm:inline">AUTENTICAÇÃO SISTEMA AGENDA-DOCAS</span>
             </div>
           </div>
 
