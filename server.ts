@@ -6,7 +6,7 @@ import { createServer as createViteServer } from 'vite';
 import { Appointment, AppointmentStatus, DiscrepancyReport, Dock, RescheduleHistory, SystemUser, SystemUserRole, RegisteredSupplier, DestinationBranch } from './src/types';
 import { StorageService, BrandSettings } from './src/server/storage';
 import { businessToday, dayOfWeekForDate, isAppointmentStatus, isValidDateOnly, normalizeNfeKeys, extractInvoiceNumberFromNfeKey } from './src/server/validation';
-import { clearSessionCookie, getSession, hashSecret, needsSecretMigration, requireAuth, requireSystemRole, setSessionCookie, verifySecret } from './src/server/security';
+import { clearSessionCookie, getSession, hashSecret, needsSecretMigration, requireAuth, requireSystemRole, sessionSecretSource, setSessionCookie, verifySecret } from './src/server/security';
 
 async function startServer() {
   const app = express();
@@ -34,6 +34,7 @@ async function startServer() {
   console.log(`[Storage] Armazenamento persistente carregado com sucesso.`);
   console.log(`[Storage] Diretório de dados: ${StorageService.getDataDir()}`);
   console.log(`[Storage] Agendamentos: ${appointments.length} | Destinos: ${destinations.length} | Docas: ${docks.length} | Janelas: ${timeSlots.length} | Usuários: ${users.length} | Fornecedores: ${suppliers.length}`);
+  console.log(`[Auth] Session secret source: ${sessionSecretSource} (env | file | memory)`);
 
   // API Routes
   app.get('/api/health', (_req, res) => {

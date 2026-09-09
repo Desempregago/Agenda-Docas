@@ -20,9 +20,11 @@ const SESSION_TTL_SECONDS = 8 * 60 * 60;
  * 2. Or a locally generated file-based secret (data/.session_secret) so it never hardcodes
  *    a shared secret into git while maintaining session persistence across server restarts.
  */
-function resolveSessionSecret(): string {
+export type SessionSecretSource = 'env' | 'file' | 'memory';
+
+function resolveSessionSecret(): { secret: string; source: SessionSecretSource } {
   if (process.env.SESSION_SECRET && process.env.SESSION_SECRET.trim().length > 0) {
-    return process.env.SESSION_SECRET.trim();
+    return { secret: process.env.SESSION_SECRET.trim(), source: 'env' };
   }
 
   const dataDir = process.env.DATA_DIR || path.join(process.cwd(), 'data');
@@ -35,19 +37,27 @@ function resolveSessionSecret(): string {
     if (fs.existsSync(secretPath)) {
       const savedSecret = fs.readFileSync(secretPath, 'utf8').trim();
       if (savedSecret.length >= 32) {
-        return savedSecret;
+        return { secret: savedSecret, source: 'file' };
       }
     }
     const newSecret = randomBytes(48).toString('hex');
     fs.writeFileSync(secretPath, newSecret, { encoding: 'utf8', mode: 0o600 });
-    return newSecret;
+    return { secret: newSecret, source: 'file' };
   } catch (err) {
     // If filesystem is somehow read-only, use an in-memory random secret for this process lifetime
-    return randomBytes(48).toString('hex');
+    return { secret: randomBytes(48).toString('hex'), source: 'memory' };
   }
 }
 
-const SESSION_SECRET = resolveSessionSecret();
+const { secret: resolvedSecret, source: resolvedSecretSource } = resolveSessionSecret();
+const SESSION_SECRET = resolvedSecret;
+
+/**
+ * Where the active session signing secret came from: 'env' (SESSION_SECRET),
+ * 'file' (persistent data/.session_secret) or 'memory' (volatile fallback).
+ * Exposed so the server can log it at boot for instant environment diagnosis.
+ */
+export const sessionSecretSource: SessionSecretSource = resolvedSecretSource;
 
 function base64UrlEncode(value: string): string {
   return Buffer.from(value, 'utf8').toString('base64url');
