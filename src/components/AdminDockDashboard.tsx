@@ -606,16 +606,6 @@ export const AdminDockDashboard: React.FC<AdminDockDashboardProps> = ({
             <span>Filtrar por Unidade / Filial:</span>
           </div>
           <div className="flex items-center gap-1.5 shrink-0">
-            <button
-              onClick={() => setSelectedBranchFilter('ALL')}
-              className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all ${
-                selectedBranchFilter === 'ALL'
-                  ? 'bg-slate-900 text-white shadow-2xs'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-              }`}
-            >
-              Todas as Unidades ({appointments.filter(a => a.scheduledDate === selectedDate).length})
-            </button>
             {activeDestinations.map((branch, bIdx) => {
               const count = appointments.filter(a => {
                 if (a.scheduledDate !== selectedDate) return false;
@@ -623,21 +613,24 @@ export const AdminDockDashboard: React.FC<AdminDockDashboardProps> = ({
                 const def = activeDestinations.find(d => d.isDefault) || activeDestinations[0];
                 return def && def.id === branch.id;
               }).length;
+              const isActive = selectedBranchFilter === branch.id;
               return (
                 <button
                   key={`dest-filter-${branch.id || ''}-${bIdx}`}
-                  onClick={() => setSelectedBranchFilter(branch.id)}
+                  onClick={() => setSelectedBranchFilter(isActive ? 'ALL' : branch.id)}
+                  title={isActive ? 'Mostrando apenas esta unidade — clique novamente para ver todas' : 'Filtrar agendamentos desta unidade'}
                   className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all flex items-center gap-1 ${
-                    selectedBranchFilter === branch.id
+                    isActive
                       ? 'bg-emerald-600 text-white shadow-2xs'
                       : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                   }`}
                 >
                   <span>{branch.name}</span>
                   {branch.code && <span className="text-[10px] opacity-80">({branch.code})</span>}
-                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${selectedBranchFilter === branch.id ? 'bg-emerald-800 text-white' : 'bg-white text-slate-700'}`}>
+                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${isActive ? 'bg-emerald-800 text-white' : 'bg-white text-slate-700'}`}>
                     {count}
                   </span>
+                  {isActive && <X className="w-3 h-3 opacity-80" />}
                 </button>
               );
             })}
