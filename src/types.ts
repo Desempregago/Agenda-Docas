@@ -42,7 +42,10 @@ export interface RescheduleHistory {
   requestedBy: string;
 }
 
-export interface DestinationBranch {
+/**
+ * Identidade pura de uma unidade — é o que persiste em destinations.json.
+ */
+export interface DestinationBranchIdentity {
   id: string;
   name: string; // Ex: "Matriz - CD Central", "Filial Sul - Curitiba"
   code?: string; // Ex: "CD01", "FILIAL-02"
@@ -57,14 +60,29 @@ export interface DestinationBranch {
   receptionInstructions?: string; // Instruções de acesso e portaria específicas
   active: boolean;
   isDefault?: boolean;
-  
-  // Configurações Específicas por Filial (Janelas, Limites, Dias de Operação e Docas Físicas)
+}
+
+/**
+ * Configuração operacional de uma unidade — descentralizada em
+ * data/destinations/<branchId>.config.json (uma por unidade, no padrão dos
+ * demais arquivos de config). Complementada pelo fallback global na leitura.
+ */
+export interface BranchOperationalConfig {
+  branchId: string;
   timeSlots?: string[]; // Janelas configuradas manualmente nesta filial/loja
   slotSupplierLimits?: Record<string, number>; // Limite de veículos por janela nesta filial/loja
   allowedDaysOfWeek?: number[]; // Dias de operação (0=Dom, 1=Seg... 6=Sáb)
   blockedDates?: string[]; // Datas específicas bloqueadas (feriados locais, etc.)
   docks?: Dock[]; // Docas físicas exclusivas desta loja/filial
 }
+
+/**
+ * Forma mesclada usada em memória e na API (identidade + config da unidade).
+ * A separação física em arquivos acontece na camada de storage.
+ */
+export type DestinationBranch = Omit<DestinationBranchIdentity, 'id'> & Omit<BranchOperationalConfig, 'branchId'> & {
+  id: string;
+};
 
 export interface Appointment {
   id: string;

@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { Appointment, Dock, SystemUser, RegisteredSupplier, DestinationBranch } from '../types';
+import { Appointment, Dock, SystemUser, RegisteredSupplier, DestinationBranch, DestinationBranchIdentity, BranchOperationalConfig } from '../types';
 
 export const SAMPLE_SUPPLIERS: RegisteredSupplier[] = [];
 
@@ -45,6 +45,26 @@ export const DEFAULT_BRAND_SETTINGS: BrandSettings = {
 
 // Target directory for persistent storage (local container / filesystem)
 const DATA_DIR = process.env.DATA_DIR || path.join(process.cwd(), 'data');
+// Sub-diretório das configurações operacionais descentralizadas por unidade
+const DEST_CONFIG_DIR_NAME = 'destinations';
+
+function destConfigDir(): string {
+  return path.join(DATA_DIR, DEST_CONFIG_DIR_NAME);
+}
+
+function ensureDestConfigDir(): string {
+  const dir = destConfigDir();
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+  return dir;
+}
+
+/** Nome seguro de arquivo para o config de uma unidade (id sanitizado). */
+function branchConfigFileName(branchId: string): string {
+  const safe = (branchId || 'UNKNOWN').replace(/[^a-zA-Z0-9_-]/g, '_');
+  return `${safe}.config.json`;
+}
 
 // Ensure data folder exists
 function ensureDataDir(): string {
@@ -200,30 +220,53 @@ export const StorageService = {
       list = [];
       writeJsonFile<DestinationBranch[]>('destinations.json', list);
     }
-    return list.map(b => ({
-      id: String(b.id || `DEST-${Date.now()}`),
-      name: String(b.name || ''),
-      code: b.code || '',
-      cnpj: b.cnpj || '',
-      address: b.address || '',
-      neighborhood: b.neighborhood || '',
-      city: b.city || '',
-      state: b.state || 'SP',
-      zipCode: b.zipCode || '',
-      contactPhone: b.contactPhone || '',
-      contactEmail: b.contactEmail || '',
-      receptionInstructions: b.receptionInstructions || '',
-      active: b.active ?? true,
-      isDefault: Boolean(b.isDefault),
-      timeSlots: Array.isArray(b.timeSlots) ? b.timeSlots : undefined,
-      slotSupplierLimits: (b.slotSupplierLimits && typeof b.slotSupplierLimits === 'object') ? b.slotSupplierLimits : undefined,
-      allowedDaysOfWeek: Array.isArray(b.allowedDaysOfWeek) ? b.allowedDaysOfWeek : undefined,
-      blockedDates: Array.isArray(b.blockedDates) ? b.blockedDates : undefined,
-      docks: Array.isArray(b.docks) ? b.docks : undefined,
-    }));
+    // Migração automática: extrai config operacional embutida (modelo antigo) para
+    // data/destinations/<id>.config.json e persiste destinations.json apenas com identidade.
+    let needsIdentityRewrite = false;
+    const migrated = list.map((b: any) => {
+      const identity: DestinationBranchIdentity = {
+        id: String(b.id || `DEST-${Date.now()}`),
+        name: String(b.name || ''),
+        code: b.code || '',
+        cnpj: b.cnpj || '',
+        address: b.address || '',
+        neighborhood: b.neighborhood || '',
+        city: b.city || '',
+        state: b.state || 'SP',
+        zipCode: b.zipCode || '',
+        contactPhone: b.contactPhone || '',
+        contactEmail: b.contactEmail || '',
+        receptionInstructions: b.receptionInstructions || '',
+        active: b.active ?? true,
+        isDefault: Boolean(b.isDefault),
+      };
+      const embedded: BranchOperationalConfig | null =
+        Array.isArray(b.timeSlots) || (b.slotSupplierLimits && typeof b.slotSupplierLimits === 'object')
+        || Array.isArray(b.allowedDaysOfWeek) || Array.isArray(b.blockedDates) || Array.isArray(b.docks)
+          ? {
+              branchId: identity.id,
+              timeSlots: Array.isArray(b.timeSlots) ? b.timeSlots : undefined,
+              slotSupplierLimits: (b.slotSupplierLimits && typeof b.slotSupplierLimits === 'object') ? b.slotSupplierLimits : undefined,
+              allowedDaysOfWeek: Array.isArray(b.allowedDaysOfWeek) ? b.allowedDaysOfWeek : undefined,
+              blockedDates: Array.isArray(b.blockedDates) ? b.blockedDates : undefined,
+              docks: Array.isArray(b.docks) ? b.docks : undefined,
+            }
+          : null;
+      if (embedded) {
+        StorageService.saveBranchConfig(embedded);
+        needsIdentityRewrite = true;
+      }
+      return identity;
+    });
+    if (needsIdentityRewrite) {
+      console.log('[Storage] Config operacional de unidades migrada para data/destinations/<id>.config.json');
+      writeJsonFile<DestinationBranchIdentity[]>('destinations.json', migrated);
+    }
+    return migrated;
   },
 
   saveDestinations: (destinations: DestinationBranch[]): boolean => {
+    // Persiste APENAS identidade; a config operacional é gerida por saveBranchConfig.
     const cleanList = destinations.map(b => ({
       id: b.id,
       name: b.name,
@@ -239,13 +282,63 @@ export const StorageService = {
       receptionInstructions: b.receptionInstructions || '',
       active: b.active ?? true,
       isDefault: Boolean(b.isDefault),
-      timeSlots: Array.isArray(b.timeSlots) ? b.timeSlots : undefined,
-      slotSupplierLimits: (b.slotSupplierLimits && typeof b.slotSupplierLimits === 'object') ? b.slotSupplierLimits : undefined,
-      allowedDaysOfWeek: Array.isArray(b.allowedDaysOfWeek) ? b.allowedDaysOfWeek : undefined,
-      blockedDates: Array.isArray(b.blockedDates) ? b.blockedDates : undefined,
-      docks: Array.isArray(b.docks) ? b.docks : undefined,
     }));
     return writeJsonFile<DestinationBranch[]>('destinations.json', cleanList);
+  },
+
+  /** Lê o config operacional descentralizado de uma unidade (sem fallback global). */
+  loadBranchConfig: (branchId: string): BranchOperationalConfig => {
+    const raw = readJsonFile<Partial<BranchOperationalConfig> | null>(
+      path.join(DEST_CONFIG_DIR_NAME, branchConfigFileName(branchId)),
+      null
+    );
+    if (!raw) return { branchId };
+    return {
+      branchId,
+      timeSlots: Array.isArray(raw.timeSlots) ? raw.timeSlots : undefined,
+      slotSupplierLimits: (raw.slotSupplierLimits && typeof raw.slotSupplierLimits === 'object') ? raw.slotSupplierLimits : undefined,
+      allowedDaysOfWeek: Array.isArray(raw.allowedDaysOfWeek) ? raw.allowedDaysOfWeek : undefined,
+      blockedDates: Array.isArray(raw.blockedDates) ? raw.blockedDates : undefined,
+      docks: Array.isArray(raw.docks) ? raw.docks : undefined,
+    };
+  },
+
+  /** Remove o arquivo de config operacional de uma unidade excluída. */
+  deleteBranchConfig: (branchId: string): boolean => {
+    try {
+      const filePath = path.join(destConfigDir(), branchConfigFileName(branchId));
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
+      return true;
+    } catch (e) {
+      console.error('[Storage] Erro ao remover config da unidade:', e);
+      return false;
+    }
+  },
+
+  /** Grava o config operacional de uma unidade em seu próprio arquivo. */
+  saveBranchConfig: (config: BranchOperationalConfig): boolean => {
+    try {
+      ensureDestConfigDir();
+      const clean: BranchOperationalConfig = {
+        branchId: config.branchId,
+        timeSlots: Array.isArray(config.timeSlots) ? config.timeSlots : undefined,
+        slotSupplierLimits: (config.slotSupplierLimits && typeof config.slotSupplierLimits === 'object') ? config.slotSupplierLimits : undefined,
+        allowedDaysOfWeek: Array.isArray(config.allowedDaysOfWeek) ? config.allowedDaysOfWeek : undefined,
+        blockedDates: Array.isArray(config.blockedDates) ? config.blockedDates : undefined,
+        docks: Array.isArray(config.docks) ? config.docks : undefined,
+      };
+      const tempName = `${branchConfigFileName(config.branchId)}.tmp-${Date.now()}`;
+      const dir = destConfigDir();
+      const tempPath = path.join(dir, tempName);
+      fs.writeFileSync(tempPath, JSON.stringify(clean, null, 2), 'utf-8');
+      fs.renameSync(tempPath, path.join(dir, branchConfigFileName(config.branchId)));
+      return true;
+    } catch (e) {
+      console.error('[Storage] Erro ao salvar config da unidade:', e);
+      return false;
+    }
   },
 
   loadOperatingDays: (): number[] => {

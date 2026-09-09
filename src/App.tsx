@@ -274,7 +274,7 @@ export default function App() {
 
   const handleSaveDestinations = async (newDestinations: DestinationBranch[], skipRemote: boolean = false) => {
     setDestinations(newDestinations);
-    const aggregatedDocks = newDestinations.flatMap(d => Array.isArray(d.docks) ? d.docks : []);
+    const aggregatedDocks = newDestinations.flatMap(d => (d as any).docks && Array.isArray((d as any).docks) ? (d as any).docks : []);
     if (aggregatedDocks.length > 0) {
       setDocks(aggregatedDocks);
     }

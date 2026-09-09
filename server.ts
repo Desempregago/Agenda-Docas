@@ -22,8 +22,20 @@ async function startServer() {
 
   // Load state directly from persistent files in container / server filesystem
   let appointments: Appointment[] = StorageService.loadAppointments();
-  let destinations: DestinationBranch[] = StorageService.loadDestinations();
+  // Unidades (identidade) + config operacional descentralizada por unidade.
+  // Em memória usamos o formato mesclado (identidade + config re-anexada) para
+  // manter os handlers e o payload da API compatíveis com o frontend.
+  let destinations: DestinationBranch[] = StorageService.loadDestinations().map(b => ({
+    ...b,
+    ...StorageService.loadBranchConfig(b.id),
+  }));
   let docks: Dock[] = StorageService.loadDocks();
+  // Reagrega as docas das unidades (fonte: arquivos de config por unidade) para a
+  // lista global em memória, mantendo /api/docks consistente após restart/migração.
+  const bootDocks = destinations.flatMap(b => StorageService.loadBranchConfig(b.id).docks || []);
+  if (bootDocks.length > 0) {
+    docks = bootDocks;
+  }
   let timeSlots: string[] = StorageService.loadTimeSlots();
   let slotSupplierLimits: Record<string, number> = StorageService.loadSlotSupplierLimits();
   let operatingDays: number[] = StorageService.loadOperatingDays();
@@ -671,6 +683,33 @@ async function startServer() {
       if (!Array.isArray(updated)) {
         return res.status(400).json({ error: 'Formato inválido. Esperava-se uma lista de lojas/filiais.' });
       }
+      // Persiste a config operacional de cada unidade no seu próprio arquivo
+      // (data/destinations/<id>.config.json) antes de gravar a identidade.
+      for (const branch of updated) {
+        if (!branch || typeof branch !== 'object' || !branch.id) continue;
+        const hasConfig = Array.isArray(branch.timeSlots)
+          || (branch.slotSupplierLimits && typeof branch.slotSupplierLimits === 'object')
+          || Array.isArray(branch.allowedDaysOfWeek)
+          || Array.isArray(branch.blockedDates)
+          || Array.isArray(branch.docks);
+        if (hasConfig) {
+          StorageService.saveBranchConfig({
+            branchId: branch.id,
+            timeSlots: branch.timeSlots,
+            slotSupplierLimits: branch.slotSupplierLimits,
+            allowedDaysOfWeek: branch.allowedDaysOfWeek,
+            blockedDates: branch.blockedDates,
+            docks: branch.docks,
+          });
+        }
+      }
+      // Remove arquivos de config de unidades excluídas
+      const incomingIds = new Set(updated.map((b: any) => b?.id).filter(Boolean));
+      for (const existing of destinations) {
+        if (!incomingIds.has(existing.id)) {
+          StorageService.deleteBranchConfig(existing.id);
+        }
+      }
       destinations = updated;
       const ok = StorageService.saveDestinations(destinations);
       if (!ok) {
@@ -678,7 +717,8 @@ async function startServer() {
       }
 
       // Sincroniza a lista agregada de docas no servidor com as docas configuradas nas lojas
-      const aggregatedDocks = destinations.flatMap(d => Array.isArray(d.docks) ? d.docks : []);
+      // (config operacional descentralizada: docas vivem em destinations/<id>.config.json)
+      const aggregatedDocks = destinations.flatMap(d => StorageService.loadBranchConfig(d.id).docks || []);
       if (aggregatedDocks.length > 0) {
         docks = aggregatedDocks;
         StorageService.saveDocks(docks);
