@@ -41,6 +41,7 @@ interface TimeSlotConfigModalProps {
   onSaveDocks: (updatedDocks: Dock[]) => void;
   onSaveDestinations?: (updatedDestinations: DestinationBranch[]) => Promise<void> | void;
   onRequestAdminAuth?: () => void;
+  currentSystemUser?: { username: string } | null;
 }
 
 export const TimeSlotConfigModal: React.FC<TimeSlotConfigModalProps> = ({
@@ -56,6 +57,7 @@ export const TimeSlotConfigModal: React.FC<TimeSlotConfigModalProps> = ({
   onSaveDocks,
   onSaveDestinations,
   onRequestAdminAuth,
+  currentSystemUser,
 }) => {
   const [activeTab, setActiveTab] = useState<'slots' | 'days' | 'docks'>('slots');
 
@@ -313,7 +315,11 @@ export const TimeSlotConfigModal: React.FC<TimeSlotConfigModalProps> = ({
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: authPinOrPassword.trim(), pin: authPinOrPassword.trim() }),
+        body: JSON.stringify({
+          username: currentSystemUser?.username,
+          password: authPinOrPassword.trim(),
+          pin: authPinOrPassword.trim(),
+        }),
       });
       const data = await res.json();
       if (res.ok && data.token) {

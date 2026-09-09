@@ -1017,9 +1017,12 @@ async function startServer() {
           u.active !== false
       );
     } else {
-      // If only PIN was provided (quick PIN station mode)
+      // If only password/PIN was provided (quick PIN station / inline re-auth mode).
+      // Stored secrets are scrypt-hashed, so compare via verifySecret — never ===.
       user = users.find(
-        u => (u.pin === inputSecret || u.password === inputSecret) && u.active !== false
+        u =>
+          u.active !== false &&
+          (verifySecret(u.password, inputSecret) || verifySecret(u.pin, inputSecret))
       );
     }
 

@@ -959,6 +959,7 @@ export default function App() {
         slotLimits={slotSupplierLimits}
         destinations={destinations}
         initialBranchId={timeSlotConfigBranchId}
+        currentSystemUser={currentSystemUser}
         onClose={() => {
           setIsTimeSlotConfigOpen(false);
           setTimeSlotConfigBranchId(undefined);
