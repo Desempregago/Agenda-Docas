@@ -38,7 +38,8 @@ export const ClientNewAppointmentModal: React.FC<ClientNewAppointmentModalProps>
   tomorrow.setDate(tomorrow.getDate() + 1);
   const minDateStr = tomorrow.toISOString().split('T')[0];
 
-  const availableSlots = timeSlots.length > 0 ? timeSlots : ['08:00 - 09:30', '10:00 - 11:30', '13:30 - 15:00', '15:30 - 17:00'];
+  // Baseline vazio: nenhuma janela padrão inventada — janelas devem ser configuradas pelo administrador.
+  const availableSlots = timeSlots;
   const activeDestinations = destinations.filter(d => d.active);
   const defaultDestination = activeDestinations.find(d => d.isDefault) || activeDestinations[0];
 
@@ -290,12 +291,12 @@ export const ClientNewAppointmentModal: React.FC<ClientNewAppointmentModalProps>
   const isSelectedDateAllowed = isDateAllowed(formData.scheduledDate, branchAllowedDays, selectedBranch?.blockedDates);
   const selectedDayOfWeek = getDayOfWeekFromDate(formData.scheduledDate);
 
-  // Janelas disponíveis para a filial/loja selecionada
+  // Janelas disponíveis para a filial/loja selecionada (apenas as configuradas — sem fallback)
   const branchAvailableSlots = React.useMemo(() => {
     if (selectedBranch?.timeSlots && selectedBranch.timeSlots.length > 0) {
       return selectedBranch.timeSlots;
     }
-    return ['07:00 - 08:30', '08:30 - 10:00', '10:00 - 11:30', '13:00 - 14:30', '14:30 - 16:00', '16:00 - 17:30'];
+    return [];
   }, [selectedBranch]);
 
   // Se a janela selecionada não existir na filial atual, reajustar para a primeira válida
@@ -358,6 +359,20 @@ export const ClientNewAppointmentModal: React.FC<ClientNewAppointmentModalProps>
 
     if (!formData.supplierName.trim()) {
       setError('Informe a Razão Social do fornecedor/remetente.');
+      return;
+    }
+
+    // Baseline vazio: bloquear agendamento enquanto unidade/janelas não forem configuradas pelo admin
+    if (!selectedBranch) {
+      setError('Nenhuma unidade de destino configurada. Solicite ao administrador que cadastre as unidades no painel de gestão.');
+      return;
+    }
+    if (branchAvailableSlots.length === 0) {
+      setError(`Nenhuma janela de horário configurada para a unidade "${selectedBranch.name}". Solicite ao administrador que configure as janelas de atendimento.`);
+      return;
+    }
+    if (!branchAvailableSlots.includes(formData.timeSlot)) {
+      setError('Selecione uma janela de horário válida.');
       return;
     }
 
@@ -450,7 +465,7 @@ export const ClientNewAppointmentModal: React.FC<ClientNewAppointmentModalProps>
       weightKg: 2500,
       totalVolumes: 20,
       scheduledDate: minDateStr,
-      timeSlot: availableSlots[0] || '08:00 - 09:30',
+      timeSlot: availableSlots[0] || '',
       isPreApprovedContract: false,
       notes: '',
     });
@@ -1262,9 +1277,16 @@ export const ClientNewAppointmentModal: React.FC<ClientNewAppointmentModalProps>
                         );
                       })}
                     </select>
-                    <p className="text-[10px] text-slate-500 mt-1">
-                      Horários de atendimento para a unidade selecionada.
-                    </p>
+                    {branchAvailableSlots.length === 0 ? (
+                      <p className="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1 mt-1 flex items-center gap-1">
+                        <AlertTriangle className="w-3 h-3 shrink-0" />
+                        Nenhuma janela de horário configurada para esta unidade. Contate o administrador.
+                      </p>
+                    ) : (
+                      <p className="text-[10px] text-slate-500 mt-1">
+                        Horários de atendimento para a unidade selecionada.
+                      </p>
+                    )}
                   </div>
                 </div>
               </div>

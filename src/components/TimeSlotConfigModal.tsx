@@ -84,26 +84,25 @@ export const TimeSlotConfigModal: React.FC<TimeSlotConfigModalProps> = ({
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
+  // Estado de controle de erros de salvamento e re-autenticação em caso de sessão expirada
+  // IMPORTANTE: declarado ANTES do early-return de isOpen (ordem de hooks do React não pode mudar entre renders)
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [needsAuth, setNeedsAuth] = useState(false);
+  const [authPinOrPassword, setAuthPinOrPassword] = useState('');
+  const [isReauthenticating, setIsReauthenticating] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
+
   // Inicialização e sincronização ao abrir o modal
   useEffect(() => {
     if (isOpen) {
+      // Baseline vazio: usar somente o que o administrador configurou (sem janelas/docas de demonstração)
       const clonedBranches = destinations && destinations.length > 0
         ? destinations.map(d => ({
             ...d,
-            timeSlots: d.timeSlots ? [...d.timeSlots] : ['07:00 - 08:30', '08:30 - 10:00', '10:00 - 11:30', '13:00 - 14:30', '14:30 - 16:00', '16:00 - 17:30'],
-            slotSupplierLimits: d.slotSupplierLimits ? { ...d.slotSupplierLimits } : {
-              '07:00 - 08:30': 3,
-              '08:30 - 10:00': 3,
-              '10:00 - 11:30': 3,
-              '13:00 - 14:30': 3,
-              '14:30 - 16:00': 3,
-              '16:00 - 17:30': 3,
-            },
+            timeSlots: d.timeSlots ? [...d.timeSlots] : [],
+            slotSupplierLimits: d.slotSupplierLimits ? { ...d.slotSupplierLimits } : {},
             allowedDaysOfWeek: d.allowedDaysOfWeek && d.allowedDaysOfWeek.length > 0 ? [...d.allowedDaysOfWeek] : [1, 2, 3, 4, 5],
-            docks: d.docks ? d.docks.map(dock => ({ ...dock })) : [
-              { id: `DOCA-01-${d.code || d.id}`, name: 'Doca 01 - Cargas Paletizadas', type: 'PALETIZADA', capacityPerSlot: 2, isOperational: true, dailyLimit: 140, limitUnit: 'pallets', destinationBranchId: d.id },
-              { id: `DOCA-02-${d.code || d.id}`, name: 'Doca 02 - Cargas Batidas', type: 'BATIDA', capacityPerSlot: 2, isOperational: true, dailyLimit: 200, limitUnit: 'volumes', destinationBranchId: d.id }
-            ],
+            docks: d.docks ? d.docks.map(dock => ({ ...dock })) : [],
           }))
         : [];
 
@@ -303,13 +302,6 @@ export const TimeSlotConfigModal: React.FC<TimeSlotConfigModalProps> = ({
     setCopyFeedback(`Configurações de janelas, limites e docas copiadas com sucesso de "${source.name}"!`);
     setTimeout(() => setCopyFeedback(null), 4000);
   };
-
-  // Estado de controle de erros de salvamento e re-autenticação em caso de sessão expirada
-  const [saveError, setSaveError] = useState<string | null>(null);
-  const [needsAuth, setNeedsAuth] = useState(false);
-  const [authPinOrPassword, setAuthPinOrPassword] = useState('');
-  const [isReauthenticating, setIsReauthenticating] = useState(false);
-  const [authError, setAuthError] = useState<string | null>(null);
 
   // --- RE-AUTENTICAÇÃO INLINE (SEM PERDER ALTERAÇÕES) ---
   const handleInlineAuthenticate = async (e?: React.FormEvent) => {
@@ -567,6 +559,17 @@ export const TimeSlotConfigModal: React.FC<TimeSlotConfigModalProps> = ({
 
         {/* Body do Modal com scroll */}
         <div className="p-5 sm:p-6 overflow-y-auto flex-1 space-y-6">
+          {branchesState.length === 0 ? (
+            <div className="p-8 text-center bg-slate-50 border border-dashed border-slate-300 rounded-2xl">
+              <Building2 className="w-8 h-8 text-slate-400 mx-auto mb-2" />
+              <p className="text-sm font-semibold text-slate-700">Nenhuma unidade/filial cadastrada</p>
+              <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
+                Este painel configura janelas, limites e docas de cada unidade individualmente.
+                Primeiro cadastre uma unidade em "Configurar Unidades de Destino & Filiais".
+              </p>
+            </div>
+          ) : (
+          <>
 
           {/* ABA 1: JANELAS DE HORÁRIO E LIMITES DE FORNECEDORES */}
           {activeTab === 'slots' && (
@@ -1017,6 +1020,9 @@ export const TimeSlotConfigModal: React.FC<TimeSlotConfigModalProps> = ({
                 )}
               </div>
             </div>
+          )}
+
+          </>
           )}
 
         </div>

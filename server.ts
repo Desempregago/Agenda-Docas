@@ -149,11 +149,27 @@ async function startServer() {
       });
     }
 
-    // Identificar a Filial / Unidade de Entrega de Destino
-    const targetDest = destinations.find(d => d.id === body.destinationBranchId) 
-      || destinations.find(d => d.isDefault) 
-      || destinations[0];
+    // Identificar a Filial / Unidade de Entrega de Destino (sem fallback implícito; deve ser configurada pelo admin)
+    const targetDest = destinations.find(d => d.id === body.destinationBranchId);
     const targetDestId = targetDest?.id;
+
+    // Baseline vazio: exigir unidade de destino e janelas configuradas pelo administrador antes de receber agendamentos
+    if (!targetDest) {
+      return res.status(400).json({
+        error: 'Nenhuma unidade de destino configurada no sistema. O administrador deve cadastrar as unidades antes de receber agendamentos.'
+      });
+    }
+    const branchSlots = (targetDest.timeSlots && targetDest.timeSlots.length > 0)
+      ? targetDest.timeSlots
+      : timeSlots;
+    if (branchSlots.length === 0) {
+      return res.status(400).json({
+        error: `Nenhuma janela de horário configurada para a unidade "${targetDest.name}". O administrador deve configurar as janelas de atendimento.`
+      });
+    }
+    if (!branchSlots.includes(body.timeSlot)) {
+      return res.status(400).json({ error: 'Janela de horário inválida para a unidade selecionada.' });
+    }
 
     // Validação de Dias de Funcionamento e Atendimento (Bloqueio de Fins de Semana ou Dias Não Autorizados)
     if (!isWalkIn) {
@@ -389,11 +405,22 @@ async function startServer() {
       });
     }
 
-    // Identificar a Filial do Agendamento
-    const targetDest = destinations.find(d => d.id === current.destinationBranchId) 
-      || destinations.find(d => d.isDefault) 
-      || destinations[0];
+    // Identificar a Filial do Agendamento (sem fallback implícito; deve ser configurada pelo admin)
+    const targetDest = destinations.find(d => d.id === current.destinationBranchId);
     const targetDestId = targetDest?.id;
+
+    // Baseline vazio: reagendamento exige janelas configuradas (da unidade ou globais)
+    const branchSlots = (targetDest?.timeSlots && targetDest.timeSlots.length > 0)
+      ? targetDest.timeSlots
+      : timeSlots;
+    if (branchSlots.length === 0) {
+      return res.status(400).json({
+        error: `Nenhuma janela de horário configurada${targetDest?.name ? ` para a unidade "${targetDest.name}"` : ''}. O administrador deve configurar as janelas de atendimento.`
+      });
+    }
+    if (!branchSlots.includes(newSlot)) {
+      return res.status(400).json({ error: 'Janela de horário inválida para a unidade selecionada.' });
+    }
 
     // Validação de Dias de Funcionamento no Reagendamento
     const allowedDays = (targetDest?.allowedDaysOfWeek && targetDest.allowedDaysOfWeek.length > 0)

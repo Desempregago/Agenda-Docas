@@ -40,16 +40,16 @@ export const RescheduleModal: React.FC<RescheduleModalProps> = ({
   docks = [],
   onOpenSupplierLogin,
 }) => {
-  if (!isOpen || !appointment) return null;
+  const apptDest = appointment
+    ? destinations.find(d => d.id === appointment.destinationBranchId)
+      || destinations.find(d => d.isDefault)
+      || destinations[0]
+    : undefined;
 
-  const apptDest = destinations.find(d => d.id === appointment.destinationBranchId) 
-    || destinations.find(d => d.isDefault) 
-    || destinations[0];
-
-  const defaultSlots = timeSlots.length > 0 ? timeSlots : ['08:00 - 09:30', '10:00 - 11:30', '13:30 - 15:00', '15:30 - 17:00'];
+  // Apenas janelas configuradas (global ou da unidade) — sem fallback inventado.
   const branchAvailableSlots = (apptDest?.timeSlots && apptDest.timeSlots.length > 0)
     ? apptDest.timeSlots
-    : defaultSlots;
+    : timeSlots;
 
   const branchAllowedDays = useMemo(() => {
     return (apptDest?.allowedDaysOfWeek && apptDest.allowedDaysOfWeek.length > 0)
@@ -63,7 +63,7 @@ export const RescheduleModal: React.FC<RescheduleModalProps> = ({
   const initialValidDate = getNextAllowedDate(defaultNextDate, branchAllowedDays);
 
   const [newDate, setNewDate] = useState(initialValidDate);
-  const [newSlot, setNewSlot] = useState(branchAvailableSlots[0] || '08:00 - 09:30');
+  const [newSlot, setNewSlot] = useState(branchAvailableSlots[0] || '');
   const [reason, setReason] = useState('');
 
   const isSelectedDateAllowed = isDateAllowed(newDate, branchAllowedDays, apptDest?.blockedDates);
@@ -87,6 +87,26 @@ export const RescheduleModal: React.FC<RescheduleModalProps> = ({
       setAdditionalInvoices(derived.join(', '));
     }
   }, [extraNfeKeys, isExtraInvoiceManualEdit, addExtraInvoices]);
+
+  // O modal permanece montado no App (padrão isOpen): re-sincroniza o formulário
+  // a cada abertura/troca de agendamento, para não vazar estado entre usos.
+  const openApptId = appointment?.id;
+  useEffect(() => {
+    if (!isOpen || !openApptId) return;
+    setNewDate(initialValidDate);
+    setNewSlot(branchAvailableSlots[0] || '');
+    setReason('');
+    setAddExtraInvoices(false);
+    setAdditionalInvoices('');
+    setExtraNfeKeys(['']);
+    setIsExtraInvoiceManualEdit(false);
+    setUpdatedVolumes(appointment?.totalVolumes || 10);
+    setUpdatedWeightKg(appointment?.weightKg || 1000);
+    setLoading(false);
+    setError(null);
+    setSuccess(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openApptId, isOpen]);
 
   const handleExtraNfeKeyChange = (index: number, val: string) => {
     const extracted = extractNfeKeysFromText(val);
@@ -125,8 +145,8 @@ export const RescheduleModal: React.FC<RescheduleModalProps> = ({
     });
   };
 
-  const [updatedVolumes, setUpdatedVolumes] = useState(appointment.totalVolumes || 10);
-  const [updatedWeightKg, setUpdatedWeightKg] = useState(appointment.weightKg || 1000);
+  const [updatedVolumes, setUpdatedVolumes] = useState(appointment?.totalVolumes || 10);
+  const [updatedWeightKg, setUpdatedWeightKg] = useState(appointment?.weightKg || 1000);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -134,12 +154,12 @@ export const RescheduleModal: React.FC<RescheduleModalProps> = ({
 
   // Authentication check
   const isSupplierLoggedIn = !!currentSupplierSession;
-  const cleanApptCnpj = (appointment.supplierCnpj || '').replace(/\D/g, '');
+  const cleanApptCnpj = (appointment?.supplierCnpj || '').replace(/\D/g, '');
   const cleanSessionCnpj = (currentSupplierSession?.cnpj || '').replace(/\D/g, '');
 
   const isMatchingSupplier = isSupplierLoggedIn && (
     (cleanApptCnpj && cleanSessionCnpj && cleanApptCnpj === cleanSessionCnpj) ||
-    (currentSupplierSession?.name && appointment.supplierName &&
+    (currentSupplierSession?.name && appointment?.supplierName &&
       appointment.supplierName.toLowerCase().includes(currentSupplierSession.name.toLowerCase()))
   );
 
@@ -154,6 +174,7 @@ export const RescheduleModal: React.FC<RescheduleModalProps> = ({
 
   // Calculate supplier count per slot for the newDate and this specific branch
   const slotOccupancy = useMemo(() => {
+    if (!appointment) return {} as Record<string, number>;
     const map: Record<string, number> = {};
     branchAvailableSlots.forEach(slot => {
       map[slot] = existingAppointments.filter(
@@ -167,10 +188,11 @@ export const RescheduleModal: React.FC<RescheduleModalProps> = ({
       ).length;
     });
     return map;
-  }, [existingAppointments, newDate, branchAvailableSlots, appointment.id, apptDest]);
+  }, [existingAppointments, newDate, branchAvailableSlots, appointment?.id, apptDest]);
 
   // Calculate Dock Capacity for the newly selected date
   const targetDockInfo = useMemo(() => {
+    if (!appointment) return { limit: 0, unit: 'volumes' as const, name: '', id: '' };
     const defaultDocksMap: Record<string, { limit: number; unit: string; name: string; id: string }> = {
       PALETIZADA: { limit: 140, unit: 'pallets', name: 'Doca 01 (Paletizada Geral)', id: 'DOCA-01' },
       REFRIGERADA: { limit: 40, unit: 'pallets', name: 'Doca 02 (Congelados/Refrigerado)', id: 'DOCA-02' },
@@ -195,9 +217,10 @@ export const RescheduleModal: React.FC<RescheduleModalProps> = ({
       }
     }
     return defaultDocksMap[appointment.cargoType] || defaultDocksMap['PALETIZADA'];
-  }, [docks, apptDest, appointment.cargoType, appointment.dockId]);
+  }, [docks, apptDest, appointment?.cargoType, appointment?.dockId]);
 
   const scheduledDateTotal = useMemo(() => {
+    if (!appointment) return 0;
     if (!existingAppointments || existingAppointments.length === 0) return 0;
     return existingAppointments
       .filter(
@@ -210,7 +233,11 @@ export const RescheduleModal: React.FC<RescheduleModalProps> = ({
           (a.dockId === targetDockInfo.id || (!a.dockId && a.cargoType === appointment.cargoType))
       )
       .reduce((sum, a) => sum + (Number(a.totalVolumes) || 0), 0);
-  }, [existingAppointments, newDate, targetDockInfo, appointment.cargoType, appointment.id, apptDest]);
+  }, [existingAppointments, newDate, targetDockInfo, appointment?.cargoType, appointment?.id, apptDest]);
+
+  // Early return DEPOIS de todos os hooks — mover para cima quebra a ordem dos hooks
+  // e derruba a árvore React ("Rendered more hooks than during the previous render").
+  if (!isOpen || !appointment) return null;
 
   const projectedTotal = scheduledDateTotal + (addExtraInvoices ? Number(updatedVolumes || 0) : Number(appointment.totalVolumes || 0));
   const isOverLimit = projectedTotal > targetDockInfo.limit;
@@ -226,6 +253,16 @@ export const RescheduleModal: React.FC<RescheduleModalProps> = ({
 
     if (!reason.trim()) {
       setError('Por favor, descreva o motivo da solicitação de reagendamento.');
+      return;
+    }
+
+    // Baseline vazio: reagendamento exige janelas configuradas
+    if (branchAvailableSlots.length === 0) {
+      setError(`Nenhuma janela de horário configurada para reagendamento${apptDest?.name ? ` na unidade "${apptDest.name}"` : ''}. Solicite ao administrador que configure as janelas de atendimento.`);
+      return;
+    }
+    if (!branchAvailableSlots.includes(newSlot)) {
+      setError('Selecione uma janela de horário válida.');
       return;
     }
 
