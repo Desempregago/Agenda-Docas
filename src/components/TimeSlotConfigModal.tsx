@@ -15,6 +15,10 @@ import {
   Truck,
   Copy,
   MapPin,
+  AlertTriangle,
+  KeyRound,
+  Lock,
+  RefreshCw,
 } from 'lucide-react';
 import { DestinationBranch, Dock } from '../types';
 import {
@@ -22,7 +26,7 @@ import {
   DAY_SHORT_NAMES_PT,
   formatAllowedDaysSummary,
 } from '../utils/dateUtils';
-import { authFetch } from '../services/api';
+import { authFetch, setAuthToken } from '../services/api';
 
 interface TimeSlotConfigModalProps {
   isOpen: boolean;
@@ -36,6 +40,7 @@ interface TimeSlotConfigModalProps {
   onSaveSlotLimits?: (newLimits: Record<string, number>) => void;
   onSaveDocks: (updatedDocks: Dock[]) => void;
   onSaveDestinations?: (updatedDestinations: DestinationBranch[]) => Promise<void> | void;
+  onRequestAdminAuth?: () => void;
 }
 
 export const TimeSlotConfigModal: React.FC<TimeSlotConfigModalProps> = ({
@@ -50,6 +55,7 @@ export const TimeSlotConfigModal: React.FC<TimeSlotConfigModalProps> = ({
   onSaveSlotLimits,
   onSaveDocks,
   onSaveDestinations,
+  onRequestAdminAuth,
 }) => {
   const [activeTab, setActiveTab] = useState<'slots' | 'days' | 'docks'>('slots');
 
@@ -298,20 +304,72 @@ export const TimeSlotConfigModal: React.FC<TimeSlotConfigModalProps> = ({
     setTimeout(() => setCopyFeedback(null), 4000);
   };
 
-  // --- SALVAR ALTERAÇÕES NO SERVIDOR ---
-  const handleSaveAll = async () => {
-    setIsSaving(true);
+  // Estado de controle de erros de salvamento e re-autenticação em caso de sessão expirada
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [needsAuth, setNeedsAuth] = useState(false);
+  const [authPinOrPassword, setAuthPinOrPassword] = useState('');
+  const [isReauthenticating, setIsReauthenticating] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
+
+  // --- RE-AUTENTICAÇÃO INLINE (SEM PERDER ALTERAÇÕES) ---
+  const handleInlineAuthenticate = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!authPinOrPassword.trim()) return;
+    setIsReauthenticating(true);
+    setAuthError(null);
     try {
-      // 1. Salvar lista completa de destinos atualizados
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: authPinOrPassword.trim(), pin: authPinOrPassword.trim() }),
+      });
+      const data = await res.json();
+      if (res.ok && data.token) {
+        setAuthToken(data.token);
+        if (data.user) {
+          try {
+            localStorage.setItem('agendadocas_system_user', JSON.stringify(data.user));
+          } catch (_) {}
+        }
+        setNeedsAuth(false);
+        setAuthPinOrPassword('');
+        setSaveError(null);
+        // Tenta salvar novamente com o novo token
+        await handleSaveAll(data.token);
+      } else {
+        setAuthError(data.error || 'Credenciais inválidas. Digite sua senha ou PIN.');
+      }
+    } catch (err) {
+      setAuthError('Falha ao conectar com o servidor para autenticação.');
+    } finally {
+      setIsReauthenticating(false);
+    }
+  };
+
+  // --- SALVAR ALTERAÇÕES NO SERVIDOR ---
+  const handleSaveAll = async (overrideToken?: string) => {
+    setIsSaving(true);
+    setSaveError(null);
+    try {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (overrideToken) {
+        headers['Authorization'] = `Bearer ${overrideToken}`;
+      }
+
+      // 1. Salvar lista completa de destinos atualizados no backend
       const res = await authFetch('/api/destinations', {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify(branchesState),
       });
 
       if (res.ok) {
+        setNeedsAuth(false);
+        setSaveError(null);
+
         if (typeof onSaveDestinations === 'function') {
-          await onSaveDestinations(branchesState);
+          // Passa skipRemote=true se a função aceitar para evitar requisição PUT duplicada
+          await (onSaveDestinations as any)(branchesState, true);
         }
 
         // Sincroniza callbacks de compatibilidade
@@ -322,17 +380,33 @@ export const TimeSlotConfigModal: React.FC<TimeSlotConfigModalProps> = ({
           onSaveSlotLimits?.(selectedBranch.slotSupplierLimits);
         }
         if (selectedBranch?.docks) {
-          onSaveDocks(selectedBranch.docks);
+          const allDocks = branchesState.flatMap(b => Array.isArray(b.docks) ? b.docks : []);
+          onSaveDocks(allDocks.length > 0 ? allDocks : selectedBranch.docks);
         }
 
         setSavedSuccess(true);
         setTimeout(() => setSavedSuccess(false), 3500);
       } else {
-        alert('Erro ao persistir as configurações no servidor.');
+        const errorData = await res.json().catch(() => null);
+        if (res.status === 401) {
+          setNeedsAuth(true);
+          const msg = 'Sua sessão expirou ou não está autenticada. Autentique-se como Administrador ou Operador para salvar.';
+          setSaveError(msg);
+        } else if (res.status === 403) {
+          const msg = 'Você não possui permissão para alterar as configurações desta loja.';
+          setSaveError(msg);
+          alert(msg);
+        } else {
+          const msg = errorData?.error || 'Erro ao persistir as configurações no servidor.';
+          setSaveError(msg);
+          alert(msg);
+        }
       }
     } catch (err) {
       console.error('Erro ao salvar configurações:', err);
-      alert('Falha na comunicação com o servidor.');
+      const msg = 'Falha na comunicação com o servidor. Verifique sua conexão.';
+      setSaveError(msg);
+      alert(msg);
     } finally {
       setIsSaving(false);
     }
@@ -946,6 +1020,64 @@ export const TimeSlotConfigModal: React.FC<TimeSlotConfigModalProps> = ({
           )}
 
         </div>
+
+        {/* Alerta de erro ou requisição de autenticação sem perda de dados */}
+        {saveError && (
+          <div className="bg-rose-50 border-t border-rose-200 px-6 py-3 shrink-0">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+              <div className="flex-1 text-xs text-rose-800">
+                <p className="font-bold">{saveError}</p>
+                {needsAuth && (
+                  <form onSubmit={handleInlineAuthenticate} className="mt-2.5 flex flex-wrap items-center gap-2">
+                    <div className="relative">
+                      <Lock className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="password"
+                        placeholder="Sua senha ou PIN..."
+                        value={authPinOrPassword}
+                        onChange={e => setAuthPinOrPassword(e.target.value)}
+                        className="pl-8 pr-3 py-1.5 bg-white border border-rose-300 rounded-lg text-xs text-slate-800 focus:outline-blue-500 w-44 font-medium"
+                        autoFocus
+                      />
+                    </div>
+                    <button
+                      type="submit"
+                      disabled={isReauthenticating || !authPinOrPassword.trim()}
+                      className="px-3 py-1.5 bg-rose-700 hover:bg-rose-800 disabled:opacity-50 text-white font-semibold rounded-lg text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+                    >
+                      {isReauthenticating ? (
+                        <>
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                          <span>Autenticando...</span>
+                        </>
+                      ) : (
+                        <>
+                          <KeyRound className="w-3.5 h-3.5" />
+                          <span>Autenticar & Salvar</span>
+                        </>
+                      )}
+                    </button>
+                    {onRequestAdminAuth && (
+                      <button
+                        type="button"
+                        onClick={onRequestAdminAuth}
+                        className="text-xs text-blue-700 hover:underline font-semibold ml-1 cursor-pointer"
+                      >
+                        Abrir tela de login completa
+                      </button>
+                    )}
+                    {authError && (
+                      <span className="text-xs text-rose-600 font-semibold block w-full mt-1">
+                        {authError}
+                      </span>
+                    )}
+                  </form>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Rodapé / Ações */}
         <div className="bg-slate-100/90 border-t border-slate-200 px-6 py-4 flex items-center justify-between shrink-0">

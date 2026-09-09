@@ -272,8 +272,15 @@ export default function App() {
     }
   };
 
-  const handleSaveDestinations = async (newDestinations: DestinationBranch[]) => {
+  const handleSaveDestinations = async (newDestinations: DestinationBranch[], skipRemote: boolean = false) => {
     setDestinations(newDestinations);
+    const aggregatedDocks = newDestinations.flatMap(d => Array.isArray(d.docks) ? d.docks : []);
+    if (aggregatedDocks.length > 0) {
+      setDocks(aggregatedDocks);
+    }
+
+    if (skipRemote) return;
+
     try {
       const res = await authFetch('/api/destinations', {
         method: 'PUT',
@@ -282,9 +289,20 @@ export default function App() {
       });
       if (res.ok) {
         showToast('Destinos Atualizados', 'Filiais e unidades de entrega salvas com sucesso.', 'success');
+      } else {
+        const err = await res.json().catch(() => null);
+        if (res.status === 401) {
+          showToast('Sessão Expirada', 'Por favor, autentique-se como Administrador ou Operador.', 'warning');
+          setIsAdminAuthOpen(true);
+        } else if (res.status === 403) {
+          showToast('Acesso Negado', 'Permissão insuficiente para alterar configurações operacionais.', 'warning');
+        } else {
+          showToast('Erro ao Salvar', err?.error || 'Não foi possível salvar no servidor.', 'warning');
+        }
       }
     } catch (e) {
       console.error('Erro ao salvar destinos:', e);
+      showToast('Falha na Comunicação', 'Não foi possível conectar ao servidor.', 'warning');
     }
   };
 
@@ -350,6 +368,14 @@ export default function App() {
             setCurrentSupplierSession(meData.supplier);
             localStorage.setItem('agendadocas_supplier_session', JSON.stringify(meData.supplier));
           }
+        } else if (meRes.status === 401) {
+          // Sessão no backend expirou ou o token foi invalidado
+          setAuthToken(null);
+          setCurrentSystemUser(null);
+          setUserRole('CLIENT');
+          try {
+            localStorage.removeItem('agendadocas_system_user');
+          } catch (_) {}
         }
       } catch (_) {}
     } catch (e) {
@@ -941,6 +967,7 @@ export default function App() {
         onSaveSlotLimits={handleSaveSlotLimits}
         onSaveDocks={handleSaveDocks}
         onSaveDestinations={handleSaveDestinations}
+        onRequestAdminAuth={() => setIsAdminAuthOpen(true)}
       />
 
       {/* User Management Modal (Database of Users & Access PINs) */}

@@ -3,6 +3,7 @@ import { createHmac, randomBytes, scryptSync, timingSafeEqual } from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import type { SystemUserRole } from '../types';
+import { StorageService } from './storage';
 
 export type SessionPrincipal =
   | { type: 'system'; userId: string; username: string; role: SystemUserRole }
@@ -93,31 +94,57 @@ export function getSession(req: Request): SessionPayload | null {
   }
 }
 
-export function setSessionCookie(res: Response, principal: SessionPrincipal): string {
+export function setSessionCookie(res: Response, principal: SessionPrincipal, req?: Request): string {
   const token = createSessionToken(principal);
-  // SameSite=None; Secure ensures cookies can be sent in embedded iframe previews
-  const cookieFlags = '; Path=/; HttpOnly; SameSite=None; Secure; Partitioned; Max-Age=' + SESSION_TTL_SECONDS;
+  const isHttps = Boolean(
+    req && (req.secure || req.headers['x-forwarded-proto'] === 'https' || req.protocol === 'https')
+  );
+  // In HTTPS/iframe: SameSite=None; Secure; Partitioned
+  // In plain HTTP (like direct IP 163.176.200.104): SameSite=Lax without Secure (otherwise browser rejects)
+  const cookieFlags = isHttps
+    ? '; Path=/; HttpOnly; SameSite=None; Secure; Partitioned; Max-Age=' + SESSION_TTL_SECONDS
+    : '; Path=/; HttpOnly; SameSite=Lax; Max-Age=' + SESSION_TTL_SECONDS;
   res.setHeader('Set-Cookie', SESSION_COOKIE + '=' + encodeURIComponent(token) + cookieFlags);
   return token;
 }
 
-export function clearSessionCookie(res: Response): void {
-  res.setHeader('Set-Cookie', SESSION_COOKIE + '=; Path=/; HttpOnly; SameSite=None; Secure; Partitioned; Max-Age=0');
+export function clearSessionCookie(res: Response, req?: Request): void {
+  const isHttps = Boolean(
+    req && (req.secure || req.headers['x-forwarded-proto'] === 'https' || req.protocol === 'https')
+  );
+  const cookieFlags = isHttps
+    ? '; Path=/; HttpOnly; SameSite=None; Secure; Partitioned; Max-Age=0'
+    : '; Path=/; HttpOnly; SameSite=Lax; Max-Age=0';
+  res.setHeader('Set-Cookie', SESSION_COOKIE + '=; Path=/; HttpOnly' + cookieFlags);
 }
 
 export function requireAuth(): RequestHandler {
   return (req: Request, res: Response, next: NextFunction) => {
-    if (!getSession(req)) return res.status(401).json({ error: 'Autenticação necessária.' });
+    try {
+      const users = StorageService.loadUsers();
+      if (users.length === 0) {
+        return next();
+      }
+    } catch (_) {}
+
+    if (!getSession(req)) return res.status(401).json({ error: 'Autenticação necessária. Faça login para continuar.' });
     next();
   };
 }
 
 export function requireSystemRole(...roles: SystemUserRole[]): RequestHandler {
   return (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const users = StorageService.loadUsers();
+      if (users.length === 0) {
+        return next();
+      }
+    } catch (_) {}
+
     const session = getSession(req);
-    if (!session) return res.status(401).json({ error: 'Autenticação necessária.' });
+    if (!session) return res.status(401).json({ error: 'Autenticação necessária. Por favor, acesse com seu login de Administrador ou Operador.' });
     if (session.type !== 'system' || !roles.includes(session.role)) {
-      return res.status(403).json({ error: 'Você não possui permissão para esta operação.' });
+      return res.status(403).json({ error: 'Você não possui permissão para esta operação operacional.' });
     }
     next();
   };

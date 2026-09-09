@@ -623,7 +623,7 @@ async function startServer() {
   });
 
   // Save Slot Supplier Limits
-  app.put('/api/slot-limits', requireSystemRole('ADMIN'), (req, res) => {
+  app.put('/api/slot-limits', requireSystemRole('ADMIN', 'SUPERVISOR', 'OPERATOR'), (req, res) => {
     if (req.body && typeof req.body === 'object') {
       slotSupplierLimits = req.body;
       StorageService.saveSlotSupplierLimits(slotSupplierLimits);
@@ -637,13 +637,30 @@ async function startServer() {
   });
 
   // Save / Update Destinations List (Persistent)
-  app.put('/api/destinations', requireSystemRole('ADMIN'), (req, res) => {
-    const updated = req.body;
-    if (Array.isArray(updated)) {
+  app.put('/api/destinations', requireSystemRole('ADMIN', 'SUPERVISOR', 'OPERATOR'), (req, res) => {
+    try {
+      const updated = req.body;
+      if (!Array.isArray(updated)) {
+        return res.status(400).json({ error: 'Formato inválido. Esperava-se uma lista de lojas/filiais.' });
+      }
       destinations = updated;
-      StorageService.saveDestinations(destinations);
+      const ok = StorageService.saveDestinations(destinations);
+      if (!ok) {
+        return res.status(500).json({ error: 'Falha ao salvar lojas no armazenamento do servidor.' });
+      }
+
+      // Sincroniza a lista agregada de docas no servidor com as docas configuradas nas lojas
+      const aggregatedDocks = destinations.flatMap(d => Array.isArray(d.docks) ? d.docks : []);
+      if (aggregatedDocks.length > 0) {
+        docks = aggregatedDocks;
+        StorageService.saveDocks(docks);
+      }
+
+      res.json(destinations);
+    } catch (err: any) {
+      console.error('[Server] Erro ao salvar destinos:', err);
+      res.status(500).json({ error: err?.message || 'Erro interno ao salvar configurações de lojas.' });
     }
-    res.json(destinations);
   });
 
   // Get Docks (Persistent)
@@ -652,7 +669,7 @@ async function startServer() {
   });
 
   // Save / Update Docks List (Persistent)
-  app.put('/api/docks', requireSystemRole('ADMIN'), (req, res) => {
+  app.put('/api/docks', requireSystemRole('ADMIN', 'SUPERVISOR', 'OPERATOR'), (req, res) => {
     const updated = req.body;
     if (Array.isArray(updated)) {
       docks = updated;
@@ -667,7 +684,7 @@ async function startServer() {
   });
 
   // Save / Update Time Slots List (Persistent)
-  app.put('/api/timeslots', requireSystemRole('ADMIN'), (req, res) => {
+  app.put('/api/timeslots', requireSystemRole('ADMIN', 'SUPERVISOR', 'OPERATOR'), (req, res) => {
     const updated = req.body;
     if (Array.isArray(updated)) {
       timeSlots = updated;
@@ -682,7 +699,7 @@ async function startServer() {
   });
 
   // Save / Update Operating Days (Persistent)
-  app.put('/api/operating-days', requireSystemRole('ADMIN'), (req, res) => {
+  app.put('/api/operating-days', requireSystemRole('ADMIN', 'SUPERVISOR', 'OPERATOR'), (req, res) => {
     const updated = req.body;
     if (Array.isArray(updated)) {
       operatingDays = updated;
@@ -909,7 +926,7 @@ async function startServer() {
 
     users.push(newAdmin);
     StorageService.saveUsers(users);
-    const token = setSessionCookie(res, { type: 'system', userId: newAdmin.id, username: newAdmin.username, role: newAdmin.role });
+    const token = setSessionCookie(res, { type: 'system', userId: newAdmin.id, username: newAdmin.username, role: newAdmin.role }, req);
 
     const { password: _, pin: __, ...sanitized } = newAdmin;
     res.status(201).json({
@@ -995,7 +1012,7 @@ async function startServer() {
     if (matchesPin && needsSecretMigration(user.pin)) user.pin = hashSecret(inputSecret);
     user.lastLogin = new Date().toISOString();
     StorageService.saveUsers(users);
-    const token = setSessionCookie(res, { type: 'system', userId: user.id, username: user.username, role: user.role });
+    const token = setSessionCookie(res, { type: 'system', userId: user.id, username: user.username, role: user.role }, req);
 
     const { password: _, pin: __, ...sanitized } = user;
     res.json({
@@ -1005,8 +1022,8 @@ async function startServer() {
     });
   });
 
-  app.post('/api/auth/logout', (_req, res) => {
-    clearSessionCookie(res);
+  app.post('/api/auth/logout', (req, res) => {
+    clearSessionCookie(res, req);
     res.json({ success: true });
   });
 
@@ -1195,7 +1212,7 @@ async function startServer() {
     }
 
     StorageService.saveSuppliers(suppliers);
-    const token = setSessionCookie(res, { type: 'supplier', supplierCnpj: supplierRecord.cnpj, supplierName: supplierRecord.name });
+    const token = setSessionCookie(res, { type: 'supplier', supplierCnpj: supplierRecord.cnpj, supplierName: supplierRecord.name }, req);
 
     const apptCount = appointments.filter(a => a.supplierCnpj.replace(/\D/g, '') === cleanDigits).length;
 
