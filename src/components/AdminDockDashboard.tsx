@@ -194,10 +194,18 @@ export const AdminDockDashboard: React.FC<AdminDockDashboardProps> = ({
   });
 
   // Branch-specific docks or fallback
-  const selectedBranchObj = activeDestinations.find(d => d.id === selectedBranchFilter) || activeDestinations[0];
-  const activeDocksToDisplay = (selectedBranchObj?.docks && selectedBranchObj.docks.length > 0)
+  const selectedBranchObj = activeDestinations.find(d => d.id === selectedBranchFilter);
+  // Filtro "Todas as Unidades": exibe as docas de TODAS as unidades (config descentralizada).
+  // Filtro por unidade: apenas as docas daquela unidade, com fallback para a lista global.
+  const allBranchDocks = activeDestinations.flatMap(d => (d.docks && d.docks.length > 0 ? d.docks : []));
+  const activeDocksToDisplay = !selectedBranchObj
+    ? (allBranchDocks.length > 0 ? allBranchDocks : docks)
+    : (selectedBranchObj.docks && selectedBranchObj.docks.length > 0)
     ? selectedBranchObj.docks
     : docks;
+  // Nome da unidade por doca, para identificar docas de unidades diferentes no modo "Todas"
+  const branchNameByDockId = new Map<string, string>();
+  activeDestinations.forEach(d => (d.docks || []).forEach(dk => branchNameByDockId.set(dk.id, d.name)));
 
   // Helper to determine if an appointment belongs to a dock
   const isAppointmentAssignedToDock = (appt: Appointment, dock: Dock) => {
@@ -867,6 +875,9 @@ export const AdminDockDashboard: React.FC<AdminDockDashboardProps> = ({
                   <div className="min-w-0 pr-2">
                     <h3 className="font-bold text-slate-900 text-sm truncate notranslate" translate="no">{dock.name}</h3>
                     <span className="text-[10px] text-slate-500 font-medium">TIPO: {dock.type}</span>
+                    {!selectedBranchObj && branchNameByDockId.get(dock.id) && (
+                      <span className="block text-[10px] text-blue-700 font-semibold truncate">📍 {branchNameByDockId.get(dock.id)}</span>
+                    )}
                   </div>
                   {activeAtDock ? (
                     <span className="text-[10px] font-bold bg-emerald-600 text-white px-2 py-0.5 rounded-full animate-pulse shrink-0">
