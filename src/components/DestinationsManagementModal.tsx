@@ -215,7 +215,7 @@ export const DestinationsManagementModal: React.FC<DestinationsManagementModalPr
     setIsCreatingNew(false);
     setEditingBranch(null);
     setSaveSuccess(true);
-    setTimeout(() => setSaveSuccess(false), 2500);
+    setTimeout(() => setSaveSuccess(false), 800);
   };
 
   const handleToggleActive = (id: string) => {
@@ -537,10 +537,20 @@ export const DestinationsManagementModal: React.FC<DestinationsManagementModalPr
                   </button>
                   <button
                     type="submit"
-                    className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-md transition-all active:scale-95 flex items-center gap-1.5"
+                    disabled={saveSuccess}
+                    className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-bold rounded-xl shadow-md transition-all active:scale-95 flex items-center gap-1.5"
                   >
-                    <Check className="w-3.5 h-3.5" />
-                    <span>{isCreatingNew ? 'Cadastrar Destino' : 'Salvar Alterações'}</span>
+                    {saveSuccess ? (
+                      <>
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-300" />
+                        <span>Alterações Aplicadas!</span>
+                      </>
+                    ) : (
+                      <>
+                        <Check className="w-3.5 h-3.5" />
+                        <span>{isCreatingNew ? 'Cadastrar Destino' : 'Salvar Alterações'}</span>
+                      </>
+                    )}
                   </button>
                 </div>
               </form>

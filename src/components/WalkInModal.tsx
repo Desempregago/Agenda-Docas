@@ -242,6 +242,7 @@ export const WalkInModal: React.FC<WalkInModalProps> = ({
   }, [defaultDestination, formData.destinationBranchId]);
 
   const [loading, setLoading] = useState(false);
+  const [savedSuccess, setSavedSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   if (!isOpen) return null;
@@ -308,8 +309,11 @@ export const WalkInModal: React.FC<WalkInModalProps> = ({
       }
 
       const created: Appointment = await res.json();
-      onSuccess(created);
-      onClose();
+      setSavedSuccess(true);
+      setTimeout(() => {
+        onSuccess(created);
+        onClose();
+      }, 800);
     } catch (err: any) {
       setError(err.message || 'Falha ao registrar veículo não agendado.');
     } finally {
@@ -837,10 +841,10 @@ export const WalkInModal: React.FC<WalkInModalProps> = ({
             </button>
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || savedSuccess}
               className="bg-amber-600 hover:bg-amber-700 text-white font-bold px-5 py-2.5 rounded-xl text-xs transition-all shadow-md flex items-center gap-2"
             >
-              {loading ? 'Registrando...' : '⚡ Confirmar Encaixe na Portaria'}
+              {savedSuccess ? '✓ Encaixe Registrado!' : loading ? 'Registrando...' : '⚡ Confirmar Encaixe na Portaria'}
             </button>
           </div>
         </form>

@@ -54,6 +54,7 @@ export const UsersManagementModal: React.FC<UsersManagementModalProps> = ({
   const [pin, setPin] = useState('');
   const [active, setActive] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
 
   const fetchUsers = async () => {
     setLoading(true);
@@ -141,9 +142,13 @@ export const UsersManagementModal: React.FC<UsersManagementModalProps> = ({
 
         if (res.ok) {
           onShowToast?.('Usuário Cadastrado', `O operador ${name} foi cadastrado com sucesso.`, 'success');
-          resetForm();
-          setMode('LIST');
-          fetchUsers();
+          setSaveSuccess(true);
+          setTimeout(() => {
+            setSaveSuccess(false);
+            resetForm();
+            setMode('LIST');
+            fetchUsers();
+          }, 800);
         } else {
           const errData = await res.json();
           setError(errData.error || 'Erro ao cadastrar usuário.');
@@ -170,9 +175,13 @@ export const UsersManagementModal: React.FC<UsersManagementModalProps> = ({
           if (currentUser && (editingUserId === currentUser.id || currentUser.username === username)) {
             onUserUpdated?.(updatedUserData);
           }
-          resetForm();
-          setMode('LIST');
-          fetchUsers();
+          setSaveSuccess(true);
+          setTimeout(() => {
+            setSaveSuccess(false);
+            resetForm();
+            setMode('LIST');
+            fetchUsers();
+          }, 800);
         } else {
           const errData = await res.json();
           setError(errData.error || 'Erro ao atualizar usuário.');
@@ -533,10 +542,15 @@ export const UsersManagementModal: React.FC<UsersManagementModalProps> = ({
                 </button>
                 <button
                   type="submit"
-                  disabled={submitting}
+                  disabled={submitting || saveSuccess}
                   className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center gap-1.5 disabled:opacity-50"
                 >
-                  {submitting ? 'Salvando...' : mode === 'CREATE' ? 'Cadastrar Usuário' : 'Salvar Alterações'}
+                  {saveSuccess ? (
+                    <>
+                      <ShieldCheck className="w-4 h-4 text-emerald-300" />
+                      Alterações Aplicadas!
+                    </>
+                  ) : submitting ? 'Salvando...' : mode === 'CREATE' ? 'Cadastrar Usuário' : 'Salvar Alterações'}
                 </button>
               </div>
             </form>

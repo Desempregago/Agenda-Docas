@@ -399,7 +399,10 @@ export const TimeSlotConfigModal: React.FC<TimeSlotConfigModalProps> = ({
         }
 
         setSavedSuccess(true);
-        setTimeout(() => setSavedSuccess(false), 3500);
+        setTimeout(() => {
+          setSavedSuccess(false);
+          onClose();
+        }, 800);
       } else {
         const errorData = await res.json().catch(() => null);
         if (res.status === 401) {
@@ -1137,11 +1140,20 @@ export const TimeSlotConfigModal: React.FC<TimeSlotConfigModalProps> = ({
             </button>
             <button
               onClick={handleSaveAll}
-              disabled={isSaving}
+              disabled={isSaving || savedSuccess}
               className="px-5 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-bold rounded-xl shadow-md transition-all active:scale-95 flex items-center gap-1.5 cursor-pointer"
             >
-              <Check className="w-4 h-4" />
-              <span>{isSaving ? 'Salvando...' : 'Salvar Configurações da Loja'}</span>
+              {savedSuccess ? (
+                <>
+                  <CheckCircle2 className="w-4 h-4 text-emerald-300" />
+                  <span>Configurações Aplicadas!</span>
+                </>
+              ) : (
+                <>
+                  <Check className="w-4 h-4" />
+                  <span>{isSaving ? 'Salvando...' : 'Salvar Configurações da Loja'}</span>
+                </>
+              )}
             </button>
           </div>
         </div>
