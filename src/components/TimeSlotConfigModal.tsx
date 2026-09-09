@@ -272,6 +272,22 @@ export const TimeSlotConfigModal: React.FC<TimeSlotConfigModalProps> = ({
   };
 
   const handleUpdateDockField = (dockId: string, field: keyof Dock, value: any) => {
+    if (field === 'id') {
+      // Edição do ID da doca: normaliza e garante unicidade dentro da unidade.
+      const sanitized = String(value).trim().toUpperCase().replace(/\s+/g, '-');
+      if (!sanitized) return;
+      updateSelectedBranch(b => {
+        const duplicate = (b.docks || []).some(d => d.id === sanitized && d.id !== dockId);
+        if (duplicate) return b;
+        return {
+          ...b,
+          docks: (b.docks || []).map(dock => (dock.id === dockId ? { ...dock, id: sanitized } : dock)),
+        };
+      });
+      // Mantém a linha de edição aberta: o estado acompanha o novo ID.
+      if (editingDockId === dockId) setEditingDockId(sanitized);
+      return;
+    }
     updateSelectedBranch(b => ({
       ...b,
       docks: (b.docks || []).map(dock =>
@@ -924,6 +940,13 @@ export const TimeSlotConfigModal: React.FC<TimeSlotConfigModalProps> = ({
                                   onChange={e => handleUpdateDockField(dock.id, 'name', e.target.value)}
                                   className="px-2 py-1 bg-white border border-blue-400 rounded-lg text-xs font-bold"
                                 />
+                                <input
+                                  type="text"
+                                  value={dock.id}
+                                  onChange={e => handleUpdateDockField(dock.id, 'id', e.target.value)}
+                                  className="px-2 py-1 bg-white border border-indigo-400 rounded-lg text-xs font-mono font-bold w-28"
+                                  title="ID único da doca — usado na alocação de agendamentos"
+                                />
                                 <select
                                   value={dock.type}
                                   onChange={e => handleUpdateDockField(dock.id, 'type', e.target.value)}
@@ -955,7 +978,7 @@ export const TimeSlotConfigModal: React.FC<TimeSlotConfigModalProps> = ({
                                 <button
                                   onClick={() => setEditingDockId(dock.id)}
                                   className="text-slate-400 hover:text-blue-600 p-0.5 rounded transition-colors cursor-pointer"
-                                  title="Editar nome/tipo"
+                                  title="Editar nome, ID e tipo"
                                 >
                                   <Edit2 className="w-3.5 h-3.5" />
                                 </button>
