@@ -9,16 +9,15 @@ import {
   Info,
   Sliders,
   Check,
-  Users,
-  ShieldAlert,
   Zap,
   Calendar,
   Edit2,
   Layers,
-  Package,
   Truck,
+  RotateCcw,
+  Sparkles,
 } from 'lucide-react';
-import { Dock } from '../types';
+import { DestinationBranch, Dock } from '../types';
 import {
   DAY_NAMES_PT,
   DAY_SHORT_NAMES_PT,
@@ -32,10 +31,13 @@ interface TimeSlotConfigModalProps {
   docks: Dock[];
   timeSlots: string[];
   slotLimits?: Record<string, number>;
+  destinations?: DestinationBranch[];
+  initialBranchId?: string;
   onClose: () => void;
   onSaveSlots: (newSlots: string[]) => void;
   onSaveSlotLimits?: (newLimits: Record<string, number>) => void;
   onSaveDocks: (updatedDocks: Dock[]) => void;
+  onSaveDestinations?: (updatedDestinations: DestinationBranch[]) => Promise<void> | void;
 }
 
 export const TimeSlotConfigModal: React.FC<TimeSlotConfigModalProps> = ({
@@ -43,12 +45,19 @@ export const TimeSlotConfigModal: React.FC<TimeSlotConfigModalProps> = ({
   docks,
   timeSlots,
   slotLimits = {},
+  destinations = [],
+  initialBranchId,
   onClose,
   onSaveSlots,
   onSaveSlotLimits,
   onSaveDocks,
+  onSaveDestinations,
 }) => {
-  const [activeTab, setActiveTab] = useState<'docks' | 'slots' | 'days'>('docks');
+  const [activeTab, setActiveTab] = useState<'docks' | 'slots' | 'days'>('slots');
+
+  // Filial selection state: 'GLOBAL' or branch ID
+  const [selectedBranchId, setSelectedBranchId] = useState<string | 'GLOBAL'>('GLOBAL');
+  const [branchesState, setBranchesState] = useState<DestinationBranch[]>([]);
 
   const [activeDocks, setActiveDocks] = useState<Dock[]>([]);
   const [activeSlots, setActiveSlots] = useState<string[]>([]);
@@ -78,6 +87,12 @@ export const TimeSlotConfigModal: React.FC<TimeSlotConfigModalProps> = ({
       setActiveDocks(docks ? docks.map(d => ({ ...d })) : []);
       setActiveSlots(timeSlots ? [...timeSlots] : []);
       setActiveLimits(slotLimits ? { ...slotLimits } : {});
+      setBranchesState(destinations ? destinations.map(d => ({ ...d })) : []);
+      if (initialBranchId) {
+        setSelectedBranchId(initialBranchId);
+      } else {
+        setSelectedBranchId('GLOBAL');
+      }
       setSavedSuccess(false);
       setEditingDockId(null);
 
@@ -91,9 +106,26 @@ export const TimeSlotConfigModal: React.FC<TimeSlotConfigModalProps> = ({
         })
         .catch(() => {});
     }
-  }, [isOpen, docks, timeSlots, slotLimits]);
+  }, [isOpen, docks, timeSlots, slotLimits, destinations, initialBranchId]);
 
   if (!isOpen) return null;
+
+  const isGlobal = selectedBranchId === 'GLOBAL';
+  const selectedBranch = branchesState.find(b => b.id === selectedBranchId);
+
+  const hasBranchCustomSlots = Boolean(selectedBranch?.timeSlots && selectedBranch.timeSlots.length > 0);
+  const currentSlots = isGlobal
+    ? activeSlots
+    : (hasBranchCustomSlots ? selectedBranch!.timeSlots! : activeSlots);
+
+  const currentLimits = isGlobal
+    ? activeLimits
+    : (hasBranchCustomSlots ? (selectedBranch!.slotSupplierLimits || {}) : activeLimits);
+
+  const hasBranchCustomDays = Boolean(selectedBranch?.allowedDaysOfWeek && selectedBranch.allowedDaysOfWeek.length > 0);
+  const currentOperatingDays = isGlobal
+    ? activeOperatingDays
+    : (hasBranchCustomDays ? selectedBranch!.allowedDaysOfWeek! : activeOperatingDays);
 
   const handleTypeChange = (type: string) => {
     setNewDockType(type);
@@ -106,22 +138,77 @@ export const TimeSlotConfigModal: React.FC<TimeSlotConfigModalProps> = ({
     }
   };
 
+  // Personalizar slots da filial (copia do padrão global se ainda não tiver)
+  const handleEnableBranchCustomSlots = () => {
+    if (isGlobal || !selectedBranch) return;
+    setBranchesState(prev => prev.map(b => {
+      if (b.id !== selectedBranchId) return b;
+      return {
+        ...b,
+        timeSlots: [...activeSlots],
+        slotSupplierLimits: { ...activeLimits },
+      };
+    }));
+  };
+
+  // Restaurar janelas da filial para o padrão global
+  const handleResetBranchSlotsToGlobal = () => {
+    if (isGlobal || !selectedBranch) return;
+    if (window.confirm(`Deseja remover as janelas personalizadas de "${selectedBranch.name}" e voltar a usar as janelas do Padrão Geral?`)) {
+      setBranchesState(prev => prev.map(b => {
+        if (b.id !== selectedBranchId) return b;
+        const copy = { ...b };
+        delete copy.timeSlots;
+        delete copy.slotSupplierLimits;
+        return copy;
+      }));
+    }
+  };
+
+  // Restaurar dias da filial para o padrão global
+  const handleResetBranchDaysToGlobal = () => {
+    if (isGlobal || !selectedBranch) return;
+    setBranchesState(prev => prev.map(b => {
+      if (b.id !== selectedBranchId) return b;
+      const copy = { ...b };
+      delete copy.allowedDaysOfWeek;
+      return copy;
+    }));
+  };
+
   // Add slot
   const handleAddSlot = () => {
     if (!newSlotTime.trim()) return;
     const trimmed = newSlotTime.trim();
-    if (activeSlots.includes(trimmed)) {
+    if (currentSlots.includes(trimmed)) {
       alert(`A janela "${trimmed}" já está cadastrada.`);
       return;
     }
-    const updatedSlots = [...activeSlots, trimmed].sort();
-    const updatedLimits = {
-      ...activeLimits,
-      [trimmed]: Number(newSlotLimit) > 0 ? Number(newSlotLimit) : 3,
-    };
+    const limitNum = Number(newSlotLimit) > 0 ? Number(newSlotLimit) : 3;
 
-    setActiveSlots(updatedSlots);
-    setActiveLimits(updatedLimits);
+    if (isGlobal) {
+      const updatedSlots = [...activeSlots, trimmed].sort();
+      const updatedLimits = {
+        ...activeLimits,
+        [trimmed]: limitNum,
+      };
+      setActiveSlots(updatedSlots);
+      setActiveLimits(updatedLimits);
+    } else {
+      setBranchesState(prev => prev.map(b => {
+        if (b.id !== selectedBranchId) return b;
+        const baseSlots = (b.timeSlots && b.timeSlots.length > 0) ? b.timeSlots : activeSlots;
+        const baseLimits = b.slotSupplierLimits || activeLimits;
+        return {
+          ...b,
+          timeSlots: [...baseSlots, trimmed].sort(),
+          slotSupplierLimits: {
+            ...baseLimits,
+            [trimmed]: limitNum,
+          },
+        };
+      }));
+    }
     setNewSlotTime('');
     setNewSlotLimit(3);
   };
@@ -129,36 +216,82 @@ export const TimeSlotConfigModal: React.FC<TimeSlotConfigModalProps> = ({
   // Update slot limit
   const handleUpdateSlotLimit = (slot: string, limitVal: number) => {
     const safeLimit = Math.max(1, Math.min(100, Number(limitVal) || 1));
-    setActiveLimits(prev => ({
-      ...prev,
-      [slot]: safeLimit,
-    }));
+    if (isGlobal) {
+      setActiveLimits(prev => ({
+        ...prev,
+        [slot]: safeLimit,
+      }));
+    } else {
+      setBranchesState(prev => prev.map(b => {
+        if (b.id !== selectedBranchId) return b;
+        const baseSlots = (b.timeSlots && b.timeSlots.length > 0) ? b.timeSlots : activeSlots;
+        const baseLimits = b.slotSupplierLimits || activeLimits;
+        return {
+          ...b,
+          timeSlots: [...baseSlots],
+          slotSupplierLimits: {
+            ...baseLimits,
+            [slot]: safeLimit,
+          },
+        };
+      }));
+    }
   };
 
   // Remove slot
   const handleRemoveSlot = (slotToRemove: string) => {
-    if (activeSlots.length <= 1) {
+    if (currentSlots.length <= 1) {
       alert('É necessário manter ao menos 1 janela de horário ativa para receber agendamentos.');
       return;
     }
 
     if (window.confirm(`Deseja remover a janela "${slotToRemove}"?`)) {
-      const nextSlots = activeSlots.filter(s => s !== slotToRemove);
-      const nextLimits = { ...activeLimits };
-      delete nextLimits[slotToRemove];
-      setActiveSlots(nextSlots);
-      setActiveLimits(nextLimits);
+      if (isGlobal) {
+        const nextSlots = activeSlots.filter(s => s !== slotToRemove);
+        const nextLimits = { ...activeLimits };
+        delete nextLimits[slotToRemove];
+        setActiveSlots(nextSlots);
+        setActiveLimits(nextLimits);
+      } else {
+        setBranchesState(prev => prev.map(b => {
+          if (b.id !== selectedBranchId) return b;
+          const baseSlots = (b.timeSlots && b.timeSlots.length > 0) ? b.timeSlots : activeSlots;
+          const baseLimits = { ...(b.slotSupplierLimits || activeLimits) };
+          delete baseLimits[slotToRemove];
+          return {
+            ...b,
+            timeSlots: baseSlots.filter(s => s !== slotToRemove),
+            slotSupplierLimits: baseLimits,
+          };
+        }));
+      }
     }
   };
 
   // Apply bulk limit to all slots
   const handleApplyBulkLimit = () => {
     const safe = Math.max(1, Math.min(100, Number(bulkLimit) || 1));
-    const updated: Record<string, number> = {};
-    activeSlots.forEach(s => {
-      updated[s] = safe;
-    });
-    setActiveLimits(updated);
+    if (isGlobal) {
+      const updated: Record<string, number> = {};
+      activeSlots.forEach(s => {
+        updated[s] = safe;
+      });
+      setActiveLimits(updated);
+    } else {
+      setBranchesState(prev => prev.map(b => {
+        if (b.id !== selectedBranchId) return b;
+        const baseSlots = (b.timeSlots && b.timeSlots.length > 0) ? b.timeSlots : activeSlots;
+        const updated: Record<string, number> = {};
+        baseSlots.forEach(s => {
+          updated[s] = safe;
+        });
+        return {
+          ...b,
+          timeSlots: [...baseSlots],
+          slotSupplierLimits: updated,
+        };
+      }));
+    }
   };
 
   // Next suggested sequential dock number (starting from 1)
@@ -241,22 +374,55 @@ export const TimeSlotConfigModal: React.FC<TimeSlotConfigModalProps> = ({
 
   // Toggle day of week
   const handleToggleDayOfWeek = (dayIndex: number) => {
-    let newAllowed: number[];
-    if (activeOperatingDays.includes(dayIndex)) {
-      if (activeOperatingDays.length <= 1) {
-        alert('É necessário ter pelo menos 1 dia da semana habilitado para recebimento.');
-        return;
+    if (isGlobal) {
+      let newAllowed: number[];
+      if (activeOperatingDays.includes(dayIndex)) {
+        if (activeOperatingDays.length <= 1) {
+          alert('É necessário ter pelo menos 1 dia da semana habilitado para recebimento.');
+          return;
+        }
+        newAllowed = activeOperatingDays.filter(d => d !== dayIndex);
+      } else {
+        newAllowed = [...activeOperatingDays, dayIndex].sort((a, b) => a - b);
       }
-      newAllowed = activeOperatingDays.filter(d => d !== dayIndex);
+      setActiveOperatingDays(newAllowed);
     } else {
-      newAllowed = [...activeOperatingDays, dayIndex].sort((a, b) => a - b);
+      setBranchesState(prev => prev.map(b => {
+        if (b.id !== selectedBranchId) return b;
+        const baseDays = (b.allowedDaysOfWeek && b.allowedDaysOfWeek.length > 0)
+          ? b.allowedDaysOfWeek
+          : activeOperatingDays;
+        let nextDays: number[];
+        if (baseDays.includes(dayIndex)) {
+          if (baseDays.length <= 1) {
+            alert('É necessário ter pelo menos 1 dia da semana habilitado para recebimento nesta filial.');
+            return b;
+          }
+          nextDays = baseDays.filter(d => d !== dayIndex);
+        } else {
+          nextDays = [...baseDays, dayIndex].sort((a, b) => a - b);
+        }
+        return {
+          ...b,
+          allowedDaysOfWeek: nextDays,
+        };
+      }));
     }
-    setActiveOperatingDays(newAllowed);
   };
 
   // Set day preset (e.g. Seg-Sex, Seg-Sáb, Todos)
   const handleSetDayPreset = (preset: number[]) => {
-    setActiveOperatingDays([...preset]);
+    if (isGlobal) {
+      setActiveOperatingDays([...preset]);
+    } else {
+      setBranchesState(prev => prev.map(b => {
+        if (b.id !== selectedBranchId) return b;
+        return {
+          ...b,
+          allowedDaysOfWeek: [...preset],
+        };
+      }));
+    }
   };
 
   // Save all centralized settings
@@ -265,6 +431,9 @@ export const TimeSlotConfigModal: React.FC<TimeSlotConfigModalProps> = ({
     onSaveSlots(activeSlots);
     if (onSaveSlotLimits) {
       onSaveSlotLimits(activeLimits);
+    }
+    if (onSaveDestinations) {
+      onSaveDestinations(branchesState);
     }
 
     try {
@@ -289,6 +458,11 @@ export const TimeSlotConfigModal: React.FC<TimeSlotConfigModalProps> = ({
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(activeOperatingDays),
         }),
+        authFetch('/api/destinations', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(branchesState),
+        }),
       ]);
     } catch (_) {}
 
@@ -310,9 +484,9 @@ export const TimeSlotConfigModal: React.FC<TimeSlotConfigModalProps> = ({
               <Sliders className="w-6 h-6" />
             </div>
             <div>
-              <h2 className="text-base sm:text-lg font-bold">Configuração Operacional: Docas, Janelas & Dias</h2>
+              <h2 className="text-base sm:text-lg font-bold">Configuração Operacional: Janelas, Limites & Docas</h2>
               <p className="text-xs text-slate-300">
-                Gerencie as docas físicas, limites diários de carga, capacidades e escala semanal
+                Gerencie limites de fornecedores por filial, janelas de horário personalizadas e escala semanal
               </p>
             </div>
           </div>
@@ -324,20 +498,45 @@ export const TimeSlotConfigModal: React.FC<TimeSlotConfigModalProps> = ({
           </button>
         </div>
 
+        {/* Branch / Filial Selection Bar */}
+        {branchesState.length > 0 && (
+          <div className="bg-slate-100/90 border-b border-slate-200 px-5 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3 shrink-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <Building2 className="w-4 h-4 text-blue-600 shrink-0" />
+              <span className="text-xs font-bold text-slate-700">Configurando:</span>
+              <select
+                value={selectedBranchId}
+                onChange={e => setSelectedBranchId(e.target.value)}
+                className="bg-white border border-slate-300 text-xs font-bold text-slate-800 rounded-xl px-3 py-1.5 focus:ring-2 focus:ring-blue-500 focus:outline-none shadow-2xs"
+              >
+                <option value="GLOBAL">🌐 Configuração Padrão Geral (Todas as Filiais)</option>
+                {branchesState.map(branch => (
+                  <option key={`opt-branch-${branch.id}`} value={branch.id}>
+                    🏢 {branch.name} {branch.code ? `(${branch.code})` : ''} {branch.isDefault ? '— Matriz Padrão' : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {!isGlobal && (
+              <div className="flex items-center gap-2">
+                {hasBranchCustomSlots ? (
+                  <span className="text-[11px] font-bold bg-blue-100 text-blue-800 border border-blue-300 px-2.5 py-1 rounded-full flex items-center gap-1">
+                    <Sparkles className="w-3 h-3 text-blue-600" />
+                    Janelas Exclusivas Desta Filial ({currentSlots.length})
+                  </span>
+                ) : (
+                  <span className="text-[11px] font-semibold bg-slate-200 text-slate-700 border border-slate-300 px-2.5 py-1 rounded-full">
+                    Herdando Janelas do Padrão Geral
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Tab Navigation */}
         <div className="bg-slate-50 border-b border-slate-200 px-6 pt-3 flex items-center gap-2 shrink-0">
-          <button
-            onClick={() => setActiveTab('docks')}
-            className={`px-4 py-2.5 text-xs sm:text-sm font-bold rounded-t-xl transition-all border-b-2 cursor-pointer flex items-center gap-2 ${
-              activeTab === 'docks'
-                ? 'bg-white text-blue-600 border-blue-600 shadow-xs'
-                : 'text-slate-500 border-transparent hover:text-slate-800'
-            }`}
-          >
-            <Building2 className="w-4 h-4" />
-            <span>Docas Físicas & Limites ({activeDocks.length})</span>
-          </button>
-
           <button
             onClick={() => setActiveTab('slots')}
             className={`px-4 py-2.5 text-xs sm:text-sm font-bold rounded-t-xl transition-all border-b-2 cursor-pointer flex items-center gap-2 ${
@@ -347,7 +546,7 @@ export const TimeSlotConfigModal: React.FC<TimeSlotConfigModalProps> = ({
             }`}
           >
             <Clock className="w-4 h-4" />
-            <span>Janelas & Veículos ({activeSlots.length})</span>
+            <span>Janelas & Limites ({currentSlots.length})</span>
           </button>
 
           <button
@@ -359,14 +558,308 @@ export const TimeSlotConfigModal: React.FC<TimeSlotConfigModalProps> = ({
             }`}
           >
             <Calendar className="w-4 h-4" />
-            <span>Dias de Atendimento ({activeOperatingDays.length} dias)</span>
+            <span>Dias de Atendimento ({currentOperatingDays.length} dias)</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('docks')}
+            className={`px-4 py-2.5 text-xs sm:text-sm font-bold rounded-t-xl transition-all border-b-2 cursor-pointer flex items-center gap-2 ${
+              activeTab === 'docks'
+                ? 'bg-white text-blue-600 border-blue-600 shadow-xs'
+                : 'text-slate-500 border-transparent hover:text-slate-800'
+            }`}
+          >
+            <Building2 className="w-4 h-4" />
+            <span>Docas Físicas ({activeDocks.length})</span>
           </button>
         </div>
 
         {/* Content Body */}
         <div className="p-6 overflow-y-auto flex-1 space-y-6">
           
-          {/* TAB 1: DOCAS E LIMITES DE CARGA */}
+          {/* TAB 1: JANELAS & CAPACIDADE DE FORNECEDORES */}
+          {activeTab === 'slots' && (
+            <div className="space-y-6">
+              
+              {/* Context notification when configuring a specific branch */}
+              {!isGlobal && selectedBranch && (
+                <div className={`p-4 rounded-2xl border flex flex-wrap items-center justify-between gap-3 ${
+                  hasBranchCustomSlots 
+                    ? 'bg-blue-50/70 border-blue-200 text-blue-900'
+                    : 'bg-amber-50/70 border-amber-200 text-amber-900'
+                }`}>
+                  <div className="flex items-center gap-3">
+                    <Building2 className="w-5 h-5 text-blue-600 shrink-0" />
+                    <div>
+                      <h4 className="text-xs sm:text-sm font-bold">
+                        Janelas e Limites de Fornecedores: {selectedBranch.name}
+                      </h4>
+                      <p className="text-xs opacity-80">
+                        {hasBranchCustomSlots
+                          ? 'Esta filial está com janelas de horário e limites específicos cadastrados.'
+                          : 'Esta filial está utilizando as janelas e limites globais. Clique para personalizar.'}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    {!hasBranchCustomSlots ? (
+                      <button
+                        onClick={handleEnableBranchCustomSlots}
+                        className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
+                      >
+                        <Sparkles className="w-3.5 h-3.5" />
+                        <span>Personalizar Janelas para esta Filial</span>
+                      </button>
+                    ) : (
+                      <button
+                        onClick={handleResetBranchSlotsToGlobal}
+                        className="px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 text-xs font-semibold rounded-xl transition-all cursor-pointer flex items-center gap-1.5"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5 text-slate-500" />
+                        <span>Restaurar Padrão Geral</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Add Slot and Bulk Limit */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {/* Form Add */}
+                <div className="md:col-span-2 bg-blue-50/50 border border-blue-200 rounded-2xl p-4 sm:p-5">
+                  <h3 className="text-xs sm:text-sm font-bold text-slate-800 mb-3 flex items-center gap-2">
+                    <Plus className="w-4 h-4 text-blue-600" />
+                    <span>Adicionar Nova Janela de Horário {!isGlobal && selectedBranch ? `(${selectedBranch.name})` : ''}</span>
+                  </h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="sm:col-span-2">
+                      <label className="block text-xs font-semibold text-slate-600 mb-1">Horário (Início - Fim)</label>
+                      <input
+                        type="text"
+                        placeholder="Ex: 08:00 - 09:30"
+                        value={newSlotTime}
+                        onChange={e => setNewSlotTime(e.target.value)}
+                        className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs sm:text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-600 mb-1">Limite Fornecedores</label>
+                      <div className="flex gap-2">
+                        <input
+                          type="number"
+                          min={1}
+                          max={50}
+                          value={newSlotLimit}
+                          onChange={e => setNewSlotLimit(Math.max(1, parseInt(e.target.value) || 1))}
+                          className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs sm:text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                        />
+                        <button
+                          onClick={handleAddSlot}
+                          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-md transition-all active:scale-95 shrink-0 cursor-pointer"
+                        >
+                          Adicionar
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Bulk Limit */}
+                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 sm:p-5 flex flex-col justify-between">
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-800 mb-1 flex items-center gap-1.5">
+                      <Zap className="w-3.5 h-3.5 text-amber-500" />
+                      <span>Limite em Massa</span>
+                    </h4>
+                    <p className="text-[11px] text-slate-500 mb-3">Defina a mesma capacidade para todas as janelas {!isGlobal ? 'desta filial' : 'do sistema'}.</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      min={1}
+                      max={50}
+                      value={bulkLimit}
+                      onChange={e => setBulkLimit(Math.max(1, parseInt(e.target.value) || 1))}
+                      className="w-20 px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-center focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    />
+                    <button
+                      onClick={handleApplyBulkLimit}
+                      className="flex-1 py-2 bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded-xl transition-all cursor-pointer"
+                    >
+                      Aplicar a Todas
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Slots List */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between text-xs font-bold text-slate-500 px-1">
+                  <span>Janelas Ativas ({currentSlots.length}) {!isGlobal && selectedBranch ? `- ${selectedBranch.name}` : '- Padrão Geral'}</span>
+                  <span>Capacidade de Fornecedores por Janela</span>
+                </div>
+
+                {currentSlots.length === 0 ? (
+                  <div className="p-8 text-center bg-slate-50 border border-dashed border-slate-300 rounded-2xl">
+                    <Clock className="w-8 h-8 text-slate-400 mx-auto mb-2" />
+                    <p className="text-sm font-semibold text-slate-600">Nenhuma janela cadastrada</p>
+                    <p className="text-xs text-slate-500">Utilize o formulário acima para adicionar uma janela.</p>
+                  </div>
+                ) : (
+                  currentSlots.map((slot, sIdx) => (
+                    <div
+                      key={`slot-card-${slot}-${sIdx}`}
+                      className="p-3.5 bg-white border border-slate-200 rounded-2xl flex items-center justify-between gap-4 shadow-xs hover:border-slate-300 transition-all"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-blue-50 text-blue-600 rounded-xl border border-blue-200">
+                          <Clock className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <span className="font-bold text-slate-800 text-sm">{slot}</span>
+                          {!isGlobal && hasBranchCustomSlots && (
+                            <span className="ml-2 text-[10px] font-semibold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-100">
+                              Filial: {selectedBranch?.code || 'Específico'}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-slate-500 font-medium">Limite Fornecedores:</span>
+                          <input
+                            type="number"
+                            min={1}
+                            max={50}
+                            value={currentLimits[slot] ?? 3}
+                            onChange={e => handleUpdateSlotLimit(slot, parseInt(e.target.value) || 1)}
+                            className="w-16 px-2 py-1 bg-slate-50 border border-slate-300 rounded-lg text-xs font-bold text-center focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                          />
+                          <span className="text-xs text-slate-500">vagas</span>
+                        </div>
+
+                        <button
+                          onClick={() => handleRemoveSlot(slot)}
+                          className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer"
+                          title="Excluir Janela"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* TAB 2: DIAS DE ATENDIMENTO */}
+          {activeTab === 'days' && (
+            <div className="space-y-6">
+              
+              {/* Context notification when configuring branch days */}
+              {!isGlobal && selectedBranch && (
+                <div className={`p-4 rounded-2xl border flex flex-wrap items-center justify-between gap-3 ${
+                  hasBranchCustomDays 
+                    ? 'bg-blue-50/70 border-blue-200 text-blue-900'
+                    : 'bg-amber-50/70 border-amber-200 text-amber-900'
+                }`}>
+                  <div className="flex items-center gap-3">
+                    <Building2 className="w-5 h-5 text-blue-600 shrink-0" />
+                    <div>
+                      <h4 className="text-xs sm:text-sm font-bold">
+                        Escala Semanal da Filial: {selectedBranch.name}
+                      </h4>
+                      <p className="text-xs opacity-80">
+                        {hasBranchCustomDays
+                          ? 'Esta filial está com dias de funcionamento personalizados.'
+                          : 'Esta filial está utilizando a escala semanal do Padrão Geral.'}
+                      </p>
+                    </div>
+                  </div>
+
+                  {hasBranchCustomDays && (
+                    <button
+                      onClick={handleResetBranchDaysToGlobal}
+                      className="px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 text-xs font-semibold rounded-xl transition-all cursor-pointer flex items-center gap-1.5"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5 text-slate-500" />
+                      <span>Restaurar Escala Geral</span>
+                    </button>
+                  )}
+                </div>
+              )}
+
+              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5">
+                <h3 className="text-sm font-bold text-slate-800 mb-1 flex items-center gap-2">
+                  <Calendar className="w-4 h-4 text-blue-600" />
+                  <span>Dias da Semana Habilitados para Recebimento {!isGlobal && selectedBranch ? `(${selectedBranch.name})` : ''}</span>
+                </h3>
+                <p className="text-xs text-slate-500 mb-4">
+                  Fornecedores não poderão agendar entregas em dias desmarcados. O calendário bloqueará automaticamente essas datas.
+                </p>
+
+                {/* Presets */}
+                <div className="flex items-center gap-2 mb-4 flex-wrap">
+                  <span className="text-xs font-semibold text-slate-500">Atalhos rápidos:</span>
+                  <button
+                    onClick={() => handleSetDayPreset(DEFAULT_ALLOWED_DAYS)}
+                    className="px-2.5 py-1 bg-white hover:bg-blue-50 hover:text-blue-700 text-slate-700 border border-slate-200 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
+                  >
+                    Segunda a Sexta (Padrão)
+                  </button>
+                  <button
+                    onClick={() => handleSetDayPreset([1, 2, 3, 4, 5, 6])}
+                    className="px-2.5 py-1 bg-white hover:bg-blue-50 hover:text-blue-700 text-slate-700 border border-slate-200 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
+                  >
+                    Segunda a Sábado
+                  </button>
+                  <button
+                    onClick={() => handleSetDayPreset([0, 1, 2, 3, 4, 5, 6])}
+                    className="px-2.5 py-1 bg-white hover:bg-blue-50 hover:text-blue-700 text-slate-700 border border-slate-200 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
+                  >
+                    Todos os Dias
+                  </button>
+                </div>
+
+                {/* 7 Days Grid */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-2.5">
+                  {DAY_NAMES_PT.map((dayName, idx) => {
+                    const isSelected = currentOperatingDays.includes(idx);
+                    return (
+                      <button
+                        key={`day-btn-${idx}`}
+                        type="button"
+                        onClick={() => handleToggleDayOfWeek(idx)}
+                        className={`p-3 rounded-2xl border text-center transition-all cursor-pointer flex flex-col items-center gap-1 ${
+                          isSelected
+                            ? 'bg-blue-600 text-white border-blue-600 shadow-md font-bold'
+                            : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300 opacity-60'
+                        }`}
+                      >
+                        <span className="text-xs">{DAY_SHORT_NAMES_PT[idx]}</span>
+                        <span className="text-[10px] opacity-90">{dayName}</span>
+                        {isSelected && <Check className="w-3.5 h-3.5 mt-1" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Summary */}
+              <div className="bg-blue-50/50 border border-blue-200 rounded-2xl p-4 flex items-center gap-3">
+                <Info className="w-5 h-5 text-blue-600 shrink-0" />
+                <div className="text-xs text-blue-900">
+                  <span className="font-bold">Resumo da escala ativa {!isGlobal && selectedBranch ? `(${selectedBranch.name})` : ''}: </span>
+                  <span>{formatAllowedDaysSummary(currentOperatingDays)}</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 3: DOCAS E LIMITES DE CARGA */}
           {activeTab === 'docks' && (
             <div className="space-y-6">
               {/* Add Dock Form */}
@@ -609,11 +1102,10 @@ export const TimeSlotConfigModal: React.FC<TimeSlotConfigModalProps> = ({
                             </div>
                           </div>
 
-                          {/* Seletor de Unidade */}
+                          {/* Unidade do Limite */}
                           <div className="flex items-center justify-between sm:justify-start gap-2">
                             <div className="flex items-center gap-1.5 text-xs text-slate-600 font-medium">
-                              <Package className="w-3.5 h-3.5 text-amber-600" />
-                              <span>Unidade do Limite:</span>
+                              <span>Unidade de Medida:</span>
                             </div>
                             <select
                               value={dock.limitUnit || 'pallets'}
@@ -633,197 +1125,6 @@ export const TimeSlotConfigModal: React.FC<TimeSlotConfigModalProps> = ({
             </div>
           )}
 
-          {/* TAB 2: JANELAS & CAPACIDADE DE FORNECEDORES */}
-          {activeTab === 'slots' && (
-            <div className="space-y-6">
-              {/* Add Slot and Bulk Limit */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {/* Form Add */}
-                <div className="md:col-span-2 bg-blue-50/50 border border-blue-200 rounded-2xl p-4 sm:p-5">
-                  <h3 className="text-xs sm:text-sm font-bold text-slate-800 mb-3 flex items-center gap-2">
-                    <Plus className="w-4 h-4 text-blue-600" />
-                    <span>Adicionar Nova Janela de Horário</span>
-                  </h3>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <div className="sm:col-span-2">
-                      <label className="block text-xs font-semibold text-slate-600 mb-1">Horário (Início - Fim)</label>
-                      <input
-                        type="text"
-                        placeholder="Ex: 08:00 - 09:30"
-                        value={newSlotTime}
-                        onChange={e => setNewSlotTime(e.target.value)}
-                        className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs sm:text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-600 mb-1">Limite Fornecedores</label>
-                      <div className="flex gap-2">
-                        <input
-                          type="number"
-                          min={1}
-                          max={50}
-                          value={newSlotLimit}
-                          onChange={e => setNewSlotLimit(Math.max(1, parseInt(e.target.value) || 1))}
-                          className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs sm:text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                        />
-                        <button
-                          onClick={handleAddSlot}
-                          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-md transition-all active:scale-95 shrink-0 cursor-pointer"
-                        >
-                          Adicionar
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Bulk Limit */}
-                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 sm:p-5 flex flex-col justify-between">
-                  <div>
-                    <h4 className="text-xs font-bold text-slate-800 mb-1 flex items-center gap-1.5">
-                      <Zap className="w-3.5 h-3.5 text-amber-500" />
-                      <span>Limite em Massa</span>
-                    </h4>
-                    <p className="text-[11px] text-slate-500 mb-3">Defina a mesma capacidade para todas as janelas.</p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="number"
-                      min={1}
-                      max={50}
-                      value={bulkLimit}
-                      onChange={e => setBulkLimit(Math.max(1, parseInt(e.target.value) || 1))}
-                      className="w-20 px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-center focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                    />
-                    <button
-                      onClick={handleApplyBulkLimit}
-                      className="flex-1 py-2 bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded-xl transition-all cursor-pointer"
-                    >
-                      Aplicar a Todas
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              {/* Slots List */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between text-xs font-bold text-slate-500 px-1">
-                  <span>Janelas Ativas ({activeSlots.length})</span>
-                  <span>Capacidade de Fornecedores</span>
-                </div>
-
-                {activeSlots.map((slot, sIdx) => (
-                  <div
-                    key={`slot-card-${slot}-${sIdx}`}
-                    className="p-3.5 bg-white border border-slate-200 rounded-2xl flex items-center justify-between gap-4 shadow-xs hover:border-slate-300 transition-all"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 bg-blue-50 text-blue-600 rounded-xl border border-blue-200">
-                        <Clock className="w-4 h-4" />
-                      </div>
-                      <span className="font-bold text-slate-800 text-sm">{slot}</span>
-                    </div>
-
-                    <div className="flex items-center gap-3">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-slate-500 font-medium">Máximo:</span>
-                        <input
-                          type="number"
-                          min={1}
-                          max={50}
-                          value={activeLimits[slot] ?? 3}
-                          onChange={e => handleUpdateSlotLimit(slot, parseInt(e.target.value) || 1)}
-                          className="w-16 px-2 py-1 bg-slate-50 border border-slate-300 rounded-lg text-xs font-bold text-center focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                        />
-                        <span className="text-xs text-slate-500">veículos</span>
-                      </div>
-
-                      <button
-                        onClick={() => handleRemoveSlot(slot)}
-                        className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer"
-                        title="Excluir Janela"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* TAB 3: DIAS DE ATENDIMENTO */}
-          {activeTab === 'days' && (
-            <div className="space-y-6">
-              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5">
-                <h3 className="text-sm font-bold text-slate-800 mb-1 flex items-center gap-2">
-                  <Calendar className="w-4 h-4 text-blue-600" />
-                  <span>Escala Semanal de Recebimento de Cargas</span>
-                </h3>
-                <p className="text-xs text-slate-500 mb-4">
-                  Selecione os dias da semana em que as docas estarão abertas para receber agendamentos.
-                </p>
-
-                {/* Presets */}
-                <div className="flex flex-wrap gap-2 mb-6">
-                  <button
-                    type="button"
-                    onClick={() => handleSetDayPreset([1, 2, 3, 4, 5])}
-                    className="px-3 py-1.5 bg-white hover:bg-blue-50 text-slate-700 hover:text-blue-700 text-xs font-semibold rounded-xl border border-slate-300 transition-colors cursor-pointer"
-                  >
-                    Segunda a Sexta (Padrão)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleSetDayPreset([1, 2, 3, 4, 5, 6])}
-                    className="px-3 py-1.5 bg-white hover:bg-blue-50 text-slate-700 hover:text-blue-700 text-xs font-semibold rounded-xl border border-slate-300 transition-colors cursor-pointer"
-                  >
-                    Segunda a Sábado
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleSetDayPreset([0, 1, 2, 3, 4, 5, 6])}
-                    className="px-3 py-1.5 bg-white hover:bg-blue-50 text-slate-700 hover:text-blue-700 text-xs font-semibold rounded-xl border border-slate-300 transition-colors cursor-pointer"
-                  >
-                    Todos os Dias (24/7)
-                  </button>
-                </div>
-
-                {/* Days Grid */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-2">
-                  {DAY_NAMES_PT.map((dayName, idx) => {
-                    const isSelected = activeOperatingDays.includes(idx);
-                    return (
-                      <button
-                        key={`day-btn-${idx}`}
-                        type="button"
-                        onClick={() => handleToggleDayOfWeek(idx)}
-                        className={`p-3 rounded-2xl border text-center transition-all cursor-pointer flex flex-col items-center gap-1 ${
-                          isSelected
-                            ? 'bg-blue-600 text-white border-blue-600 shadow-md font-bold'
-                            : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300 opacity-60'
-                        }`}
-                      >
-                        <span className="text-xs">{DAY_SHORT_NAMES_PT[idx]}</span>
-                        <span className="text-[10px] opacity-90">{dayName}</span>
-                        {isSelected && <Check className="w-3.5 h-3.5 mt-1" />}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Summary */}
-              <div className="bg-blue-50/50 border border-blue-200 rounded-2xl p-4 flex items-center gap-3">
-                <Info className="w-5 h-5 text-blue-600 shrink-0" />
-                <div className="text-xs text-blue-900">
-                  <span className="font-bold">Resumo da escala ativa: </span>
-                  <span>{formatAllowedDaysSummary(activeOperatingDays)}</span>
-                </div>
-              </div>
-            </div>
-          )}
-
         </div>
 
         {/* Footer */}
@@ -831,10 +1132,10 @@ export const TimeSlotConfigModal: React.FC<TimeSlotConfigModalProps> = ({
           <span className="text-xs text-slate-500">
             {savedSuccess ? (
               <span className="text-emerald-600 font-bold flex items-center gap-1">
-                <CheckCircle2 className="w-4 h-4" /> Configurações salvas nos arquivos do servidor!
+                <CheckCircle2 className="w-4 h-4" /> Configurações salvas nos arquivos do servidor e filiais!
               </span>
             ) : (
-              'As alterações serão salvas diretamente em /data/docks.json, timeslots.json e slot_supplier_limits.json'
+              'As alterações de janelas e limites serão salvas para a unidade selecionada e no servidor'
             )}
           </span>
 

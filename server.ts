@@ -157,20 +157,25 @@ async function startServer() {
 
     // Validação de Dias de Funcionamento e Atendimento (Bloqueio de Fins de Semana ou Dias Não Autorizados)
     if (!isWalkIn) {
-      const allowedDays = operatingDays;
+      const allowedDays = (targetDest?.allowedDaysOfWeek && targetDest.allowedDaysOfWeek.length > 0)
+        ? targetDest.allowedDaysOfWeek
+        : operatingDays;
       const scheduledDayOfWeek = dayOfWeekForDate(scheduledDate);
       const dayNames = ['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'];
 
       if (!allowedDays.includes(scheduledDayOfWeek)) {
         const allowedFormatted = allowedDays.map(d => dayNames[d]).join(', ');
+        const branchName = targetDest?.name ? ` na unidade "${targetDest.name}"` : '';
         return res.status(400).json({
-          error: `Não recebemos agendamentos aos ${dayNames[scheduledDayOfWeek]}s. Dias autorizados para recebimento: ${allowedFormatted}. Por favor, selecione outro dia.`
+          error: `Não recebemos agendamentos aos ${dayNames[scheduledDayOfWeek]}s${branchName}. Dias autorizados para recebimento: ${allowedFormatted}. Por favor, selecione outro dia.`
         });
       }
     }
 
-    // Validação de limite de fornecedores por janela de horário
-    const maxSuppliersForSlot = slotSupplierLimits[body.timeSlot] ?? 3;
+    // Validação de limite de fornecedores por janela de horário (respeitando limite específico da filial se configurado)
+    const maxSuppliersForSlot = targetDest?.slotSupplierLimits?.[body.timeSlot] !== undefined
+      ? targetDest.slotSupplierLimits[body.timeSlot]
+      : (slotSupplierLimits[body.timeSlot] ?? 3);
 
     // Contagem de agendamentos concorrentes EXCLUSIVAMENTE NA FILIAL SELECIONADA
     const currentSuppliersInSlot = appointments.filter(
@@ -391,19 +396,24 @@ async function startServer() {
     const targetDestId = targetDest?.id;
 
     // Validação de Dias de Funcionamento no Reagendamento
-    const allowedDays = operatingDays;
+    const allowedDays = (targetDest?.allowedDaysOfWeek && targetDest.allowedDaysOfWeek.length > 0)
+      ? targetDest.allowedDaysOfWeek
+      : operatingDays;
     const rescheduleDayOfWeek = dayOfWeekForDate(newDate);
     const dayNames = ['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'];
 
     if (!allowedDays.includes(rescheduleDayOfWeek)) {
       const allowedFormatted = allowedDays.map(d => dayNames[d]).join(', ');
+      const branchLabel = targetDest?.name ? ` na unidade "${targetDest.name}"` : '';
       return res.status(400).json({
-        error: `Não é possível reagendar para ${dayNames[rescheduleDayOfWeek]}. Dias autorizados para recebimento: ${allowedFormatted}.`
+        error: `Não é possível reagendar para ${dayNames[rescheduleDayOfWeek]}${branchLabel}. Dias autorizados para recebimento: ${allowedFormatted}.`
       });
     }
 
     // Validação de limite de fornecedores por janela de horário no reagendamento
-    const maxSuppliersForSlot = slotSupplierLimits[newSlot] ?? 3;
+    const maxSuppliersForSlot = targetDest?.slotSupplierLimits?.[newSlot] !== undefined
+      ? targetDest.slotSupplierLimits[newSlot]
+      : (slotSupplierLimits[newSlot] ?? 3);
 
     const currentSuppliersInSlot = appointments.filter(
       a => {

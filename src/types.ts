@@ -57,6 +57,12 @@ export interface DestinationBranch {
   receptionInstructions?: string; // Instruções de acesso e portaria específicas
   active: boolean;
   isDefault?: boolean;
+  
+  // Configurações Específicas por Filial (Janelas, Limites e Dias de Operação)
+  timeSlots?: string[]; // Janelas personalizadas desta filial
+  slotSupplierLimits?: Record<string, number>; // Limite de veículos por janela nesta filial
+  allowedDaysOfWeek?: number[]; // Dias de operação (0=Dom, 1=Seg... 6=Sáb)
+  blockedDates?: string[]; // Datas específicas bloqueadas (feriados locais, etc.)
 }
 
 export interface Appointment {

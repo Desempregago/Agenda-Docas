@@ -6,7 +6,58 @@ export const SAMPLE_SUPPLIERS: RegisteredSupplier[] = [];
 
 export const DEFAULT_SUPPLIERS: RegisteredSupplier[] = [];
 
-export const DEFAULT_DESTINATIONS: DestinationBranch[] = [];
+export const DEFAULT_DESTINATIONS: DestinationBranch[] = [
+  {
+    id: 'DEST-01-MATRIZ',
+    name: 'Matriz - CD Principal',
+    code: 'CD01',
+    cnpj: '12.345.678/0001-90',
+    address: 'Av. das Indústrias, 1000 - Galpão A',
+    neighborhood: 'Distrito Industrial',
+    city: 'São Paulo',
+    state: 'SP',
+    zipCode: '01000-000',
+    contactPhone: '(11) 3456-7890',
+    contactEmail: 'logistica.sp@empresa.com.br',
+    receptionInstructions: 'Apresentar DANFE e documento com foto na portaria principal. Uso obrigatório de EPIs.',
+    active: true,
+    isDefault: true,
+    timeSlots: ['07:00 - 08:30', '08:30 - 10:00', '10:00 - 11:30', '13:00 - 14:30', '14:30 - 16:00', '16:00 - 17:30'],
+    slotSupplierLimits: {
+      '07:00 - 08:30': 4,
+      '08:30 - 10:00': 4,
+      '10:00 - 11:30': 3,
+      '13:00 - 14:30': 4,
+      '14:30 - 16:00': 3,
+      '16:00 - 17:30': 2,
+    },
+    allowedDaysOfWeek: [1, 2, 3, 4, 5],
+  },
+  {
+    id: 'DEST-02-FILIAL-SUL',
+    name: 'Filial Sul - Curitiba',
+    code: 'FILIAL-02',
+    cnpj: '12.345.678/0002-71',
+    address: 'Rodovia BR-116, Km 105, 500',
+    neighborhood: 'CIC - Cidade Industrial',
+    city: 'Curitiba',
+    state: 'PR',
+    zipCode: '81000-000',
+    contactPhone: '(41) 3344-5566',
+    contactEmail: 'recebimento.cwb@empresa.com.br',
+    receptionInstructions: 'Entrada pelo portão 02 para veículos pesados. Apresentar documentação na guarita.',
+    active: true,
+    isDefault: false,
+    timeSlots: ['08:00 - 10:00', '10:00 - 12:00', '13:30 - 15:30', '15:30 - 17:30'],
+    slotSupplierLimits: {
+      '08:00 - 10:00': 2,
+      '10:00 - 12:00': 2,
+      '13:30 - 15:30': 2,
+      '15:30 - 17:30': 2,
+    },
+    allowedDaysOfWeek: [1, 2, 3, 4, 5],
+  }
+];
 
 export const DEFAULT_DOCKS: Dock[] = [];
 
@@ -193,7 +244,11 @@ export const StorageService = {
   },
 
   loadDestinations: (): DestinationBranch[] => {
-    const list = readJsonFile<any[]>('destinations.json', DEFAULT_DESTINATIONS);
+    let list = readJsonFile<any[]>('destinations.json', DEFAULT_DESTINATIONS);
+    if (!Array.isArray(list) || list.length === 0) {
+      list = DEFAULT_DESTINATIONS;
+      writeJsonFile<DestinationBranch[]>('destinations.json', DEFAULT_DESTINATIONS);
+    }
     return list.map(b => ({
       id: String(b.id || `DEST-${Date.now()}`),
       name: String(b.name || ''),
@@ -209,6 +264,10 @@ export const StorageService = {
       receptionInstructions: b.receptionInstructions || '',
       active: b.active ?? true,
       isDefault: Boolean(b.isDefault),
+      timeSlots: Array.isArray(b.timeSlots) ? b.timeSlots : undefined,
+      slotSupplierLimits: (b.slotSupplierLimits && typeof b.slotSupplierLimits === 'object') ? b.slotSupplierLimits : undefined,
+      allowedDaysOfWeek: Array.isArray(b.allowedDaysOfWeek) ? b.allowedDaysOfWeek : undefined,
+      blockedDates: Array.isArray(b.blockedDates) ? b.blockedDates : undefined,
     }));
   },
 
@@ -228,6 +287,10 @@ export const StorageService = {
       receptionInstructions: b.receptionInstructions || '',
       active: b.active ?? true,
       isDefault: Boolean(b.isDefault),
+      timeSlots: Array.isArray(b.timeSlots) ? b.timeSlots : undefined,
+      slotSupplierLimits: (b.slotSupplierLimits && typeof b.slotSupplierLimits === 'object') ? b.slotSupplierLimits : undefined,
+      allowedDaysOfWeek: Array.isArray(b.allowedDaysOfWeek) ? b.allowedDaysOfWeek : undefined,
+      blockedDates: Array.isArray(b.blockedDates) ? b.blockedDates : undefined,
     }));
     return writeJsonFile<DestinationBranch[]>('destinations.json', cleanList);
   },
