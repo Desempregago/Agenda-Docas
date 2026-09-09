@@ -77,17 +77,8 @@ export function createSessionToken(principal: SessionPrincipal): string {
   return encoded + '.' + signature(encoded);
 }
 
-export function getSession(req: Request): SessionPayload | null {
-  const authorization = req.header('authorization');
-  const bearer = authorization?.startsWith('Bearer ') ? authorization.slice(7) : undefined;
-  const cookies = (req.headers.cookie || '').split(';').reduce<Record<string, string>>((all, part) => {
-    const separator = part.indexOf('=');
-    if (separator > 0) all[part.slice(0, separator).trim()] = decodeURIComponent(part.slice(separator + 1));
-    return all;
-  }, {});
-  const token = bearer || cookies[SESSION_COOKIE];
+function verifyToken(token: string | undefined): SessionPayload | null {
   if (!token) return null;
-
   const [encoded, providedSignature] = token.split('.');
   if (!encoded || !providedSignature) return null;
   const expectedSignature = signature(encoded);
@@ -102,6 +93,19 @@ export function getSession(req: Request): SessionPayload | null {
   } catch {
     return null;
   }
+}
+
+export function getSession(req: Request): SessionPayload | null {
+  const authorization = req.header('authorization');
+  const bearer = authorization?.startsWith('Bearer ') ? authorization.slice(7) : undefined;
+  const cookies = (req.headers.cookie || '').split(';').reduce<Record<string, string>>((all, part) => {
+    const separator = part.indexOf('=');
+    if (separator > 0) all[part.slice(0, separator).trim()] = decodeURIComponent(part.slice(separator + 1));
+    return all;
+  }, {});
+  // Tenta o Bearer primeiro; se for inválido/antigo, cai para o cookie de sessão.
+  // Um token antigo no localStorage não pode derrubar uma sessão de cookie válida.
+  return verifyToken(bearer) ?? verifyToken(cookies[SESSION_COOKIE]);
 }
 
 export function setSessionCookie(res: Response, principal: SessionPrincipal, req?: Request): string {
