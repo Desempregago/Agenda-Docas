@@ -12,6 +12,7 @@ import {
   businessToday,
   formatLocalDateToYMD,
 } from '../utils/dateUtils';
+import { authFetch } from '../services/api';
 
 interface ClientNewAppointmentModalProps {
   isOpen: boolean;
@@ -331,6 +332,28 @@ export const ClientNewAppointmentModal: React.FC<ClientNewAppointmentModalProps>
   const [createdAppointment, setCreatedAppointment] = useState<Appointment | null>(null);
   const [copied, setCopied] = useState(false);
 
+  // Ocupação por janela calculada no servidor (GET /api/slot-availability).
+  // GET /api/appointments é filtrado por CNPJ para sessões de fornecedor, então a
+  // lista local não enxerga agendamentos de outros fornecedores e janelas cheias
+  // apareciam como livres. Cai para o cálculo local se a rota falhar.
+  const [serverSlotOccupancy, setServerSlotOccupancy] = useState<Record<string, number> | null>(null);
+
+  useEffect(() => {
+    if (!isOpen || !selectedBranch?.id || !formData.scheduledDate) {
+      setServerSlotOccupancy(null);
+      return;
+    }
+    const controller = new AbortController();
+    setServerSlotOccupancy(null);
+    authFetch(`/api/slot-availability?date=${encodeURIComponent(formData.scheduledDate)}&branchId=${encodeURIComponent(selectedBranch.id)}`, { signal: controller.signal })
+      .then(r => (r.ok ? r.json() : null))
+      .then((data: { counts?: Record<string, number> } | null) => {
+        if (data && data.counts) setServerSlotOccupancy(data.counts);
+      })
+      .catch(() => {});
+    return () => controller.abort();
+  }, [isOpen, selectedBranch?.id, formData.scheduledDate]);
+
   // Calculate supplier count per slot for selected date AND selected branch
   const slotOccupancy = React.useMemo(() => {
     const map: Record<string, number> = {};
@@ -344,8 +367,13 @@ export const ClientNewAppointmentModal: React.FC<ClientNewAppointmentModalProps>
           a.status !== 'NO_SHOW'
       ).length;
     });
+    if (serverSlotOccupancy) {
+      for (const slot of branchAvailableSlots) {
+        if (typeof serverSlotOccupancy[slot] === 'number') map[slot] = serverSlotOccupancy[slot];
+      }
+    }
     return map;
-  }, [existingAppointments, formData.scheduledDate, branchAvailableSlots, selectedBranch]);
+  }, [existingAppointments, formData.scheduledDate, branchAvailableSlots, selectedBranch, serverSlotOccupancy]);
 
   if (!isOpen) return null;
 

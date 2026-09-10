@@ -11,6 +11,7 @@ import {
   getNextAllowedDate,
   formatLocalDateToYMD,
 } from '../utils/dateUtils';
+import { authFetch } from '../services/api';
 
 interface RescheduleModalProps {
   appointment: Appointment | null;
@@ -173,7 +174,28 @@ export const RescheduleModal: React.FC<RescheduleModalProps> = ({
     return slotLimits[slot] ?? 3;
   };
 
-  // Calculate supplier count per slot for the newDate and this specific branch
+  // Calculate supplier count per slot for the newDate and this specific branch.
+  // Contagem vem do servidor (GET /api/slot-availability) porque a lista de
+  // agendamentos é filtrada por CNPJ para fornecedores — a contagem local não
+  // enxerga reservas de outros fornecedores. Cai para o cálculo local se falhar.
+  const [serverSlotOccupancy, setServerSlotOccupancy] = useState<Record<string, number> | null>(null);
+
+  useEffect(() => {
+    if (!isOpen || !appointment || !apptDest?.id || !newDate) {
+      setServerSlotOccupancy(null);
+      return;
+    }
+    const controller = new AbortController();
+    setServerSlotOccupancy(null);
+    authFetch(`/api/slot-availability?date=${encodeURIComponent(newDate)}&branchId=${encodeURIComponent(apptDest.id)}&excludeId=${encodeURIComponent(appointment.id)}`, { signal: controller.signal })
+      .then(r => (r.ok ? r.json() : null))
+      .then((data: { counts?: Record<string, number> } | null) => {
+        if (data && data.counts) setServerSlotOccupancy(data.counts);
+      })
+      .catch(() => {});
+    return () => controller.abort();
+  }, [isOpen, appointment?.id, apptDest?.id, newDate]);
+
   const slotOccupancy = useMemo(() => {
     if (!appointment) return {} as Record<string, number>;
     const map: Record<string, number> = {};
@@ -188,8 +210,13 @@ export const RescheduleModal: React.FC<RescheduleModalProps> = ({
           a.status !== 'NO_SHOW'
       ).length;
     });
+    if (serverSlotOccupancy) {
+      for (const slot of branchAvailableSlots) {
+        if (typeof serverSlotOccupancy[slot] === 'number') map[slot] = serverSlotOccupancy[slot];
+      }
+    }
     return map;
-  }, [existingAppointments, newDate, branchAvailableSlots, appointment?.id, apptDest]);
+  }, [existingAppointments, newDate, branchAvailableSlots, appointment?.id, apptDest, serverSlotOccupancy]);
 
   // Calculate Dock Capacity for the newly selected date
   const targetDockInfo = useMemo(() => {

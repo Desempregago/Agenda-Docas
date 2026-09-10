@@ -687,6 +687,43 @@ async function startServer() {
     res.json(slotSupplierLimits);
   });
 
+  // Disponibilidade real por janela de horário, calculada no servidor.
+  // O GET /api/appointments é filtrado por CNPJ para sessões de fornecedor, então
+  // o seletor de janelas no cliente não enxerga agendamentos de terceiros e janelas
+  // cheias apareciam como livres. Esta rota devolve contagens com a MESMA lógica do
+  // validador do POST /api/appointments (status, data, unidade), incluindo o limite
+  // efetivo por janela (config da unidade > limite global > 3).
+  app.get('/api/slot-availability', (req, res) => {
+    const { date, branchId, excludeId } = req.query;
+    if (!date || typeof date !== 'string' || !isValidDateOnly(date)) {
+      return res.status(400).json({ error: 'Parâmetro "date" inválido. Use o formato YYYY-MM-DD.' });
+    }
+    const targetDest = destinations.find(d => d.id === branchId);
+    if (!targetDest) {
+      return res.status(400).json({ error: 'Unidade de destino não encontrada.' });
+    }
+    const branchSlots = (targetDest.timeSlots && targetDest.timeSlots.length > 0)
+      ? targetDest.timeSlots
+      : timeSlots;
+    const counts: Record<string, number> = {};
+    const maxSuppliers: Record<string, number> = {};
+    for (const slot of branchSlots) {
+      maxSuppliers[slot] = targetDest.slotSupplierLimits?.[slot] !== undefined
+        ? targetDest.slotSupplierLimits[slot]
+        : (slotSupplierLimits[slot] ?? 3);
+      counts[slot] = appointments.filter(
+        a => {
+          if (excludeId && typeof excludeId === 'string' && a.id === excludeId) return false;
+          if (a.scheduledDate !== date || a.timeSlot !== slot) return false;
+          if (a.status === 'CANCELADO' || a.status === 'NO_SHOW') return false;
+          if (a.destinationBranchId) return a.destinationBranchId === targetDest.id;
+          return targetDest.isDefault;
+        }
+      ).length;
+    }
+    res.json({ date, branchId: targetDest.id, counts, maxSuppliers });
+  });
+
   // Get Destinations / Branches (Persistent)
   app.get('/api/destinations', (_req, res) => {
     res.json(destinations);
