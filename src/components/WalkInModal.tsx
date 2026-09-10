@@ -359,13 +359,6 @@ export const WalkInModal: React.FC<WalkInModalProps> = ({
           }}
           className="p-6 space-y-4 overflow-y-auto flex-1"
         >
-          {error && (
-            <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700 flex items-center gap-2">
-              <AlertTriangle className="w-4 h-4 shrink-0 text-rose-500" />
-              <span>{error}</span>
-            </div>
-          )}
-
           <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 flex items-start gap-2.5">
             <ShieldCheck className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
             <p>
@@ -397,7 +390,7 @@ export const WalkInModal: React.FC<WalkInModalProps> = ({
             <div className="sm:col-span-2">
               <div className="flex items-center justify-between mb-1">
                 <label className="block text-xs font-bold text-slate-800">
-                  Pedido(s) de Compra (PO / Ordem de Fornecimento)
+                  Pedido(s) de Compra (PO / Ordem de Fornecimento) <span className="text-slate-400 font-normal text-[11px]">(Opcional)</span>
                 </label>
                 {formData.purchaseOrder && formData.purchaseOrder.split(/[,;\n\/]+/).filter(Boolean).length > 1 && (
                   <span className="text-[11px] font-bold bg-amber-100 text-amber-900 border border-amber-300 px-2 py-0.5 rounded-full">
@@ -407,7 +400,7 @@ export const WalkInModal: React.FC<WalkInModalProps> = ({
               </div>
               <input
                 type="text"
-                placeholder="Ex: PC-8841, PO-94821 (separe por vírgula se houver mais de um)"
+                placeholder="Ex: PC-8841, PO-94821 — opcional para encaixe de emergência"
                 value={formData.purchaseOrder}
                 onChange={e => setFormData({ ...formData, purchaseOrder: e.target.value })}
                 className="w-full px-3 py-2 text-sm border border-slate-300 rounded-xl focus:ring-2 focus:ring-amber-500 font-mono"
@@ -830,6 +823,13 @@ export const WalkInModal: React.FC<WalkInModalProps> = ({
               />
             </div>
           </div>
+
+          {error && (
+            <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700 flex items-center gap-2 animate-in fade-in duration-200">
+              <AlertTriangle className="w-4 h-4 shrink-0 text-rose-500" />
+              <span>{error}</span>
+            </div>
+          )}
 
           <div className="pt-3 border-t border-slate-200 flex items-center justify-end gap-3">
             <button

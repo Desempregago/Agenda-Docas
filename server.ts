@@ -138,7 +138,9 @@ async function startServer() {
       body.supplierName = session.supplierName;
     }
 
-    if (!body.purchaseOrder || !String(body.purchaseOrder).trim()) {
+    const isWalkIn = Boolean(body.isWalkIn);
+
+    if (!isWalkIn && (!body.purchaseOrder || !String(body.purchaseOrder).trim())) {
       return res.status(400).json({ error: 'O número do Pedido de Compra (PO) é obrigatório para solicitar o agendamento.' });
     }
     if (!body.supplierName || !body.scheduledDate || !body.timeSlot) {
@@ -151,7 +153,6 @@ async function startServer() {
     }
     const cargoType = body.cargoType || 'PALETIZADA';
     const requestedVolumes = Number(body.totalVolumes) || 10;
-    const isWalkIn = Boolean(body.isWalkIn);
     const isPreApprovedContract = Boolean(body.isPreApprovedContract || body.isPreApproved);
 
     // Validação D+0: Proibir que agendamentos normais sejam solicitados para o mesmo dia ou datas passadas
@@ -180,7 +181,9 @@ async function startServer() {
         error: `Nenhuma janela de horário configurada para a unidade "${targetDest.name}". O administrador deve configurar as janelas de atendimento.`
       });
     }
-    if (!branchSlots.includes(body.timeSlot)) {
+    // Walk-ins (encaixe na portaria) não passam por agendamento prévio: qualquer
+    // janela informada é aceita, sem validar contra as janelas configuradas.
+    if (!isWalkIn && !branchSlots.includes(body.timeSlot)) {
       return res.status(400).json({ error: 'Janela de horário inválida para a unidade selecionada.' });
     }
 
