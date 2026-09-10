@@ -256,8 +256,14 @@ async function startServer() {
       const currentTotal = existingApptsOnDate.reduce((sum, a) => sum + (Number(a.totalVolumes) || 0), 0);
 
       if (currentTotal + requestedVolumes > targetDock.dailyLimit) {
+        // Não expor a ocupação exata (X/Y) a fornecedores: eles poderiam declarar
+        // volumes falsos apenas o suficiente para espremer mais um agendamento.
+        // O detalhe numérico fica restrito a sessões internas (equipe operacional).
+        const isStaffCaller = session?.type === 'system';
         return res.status(400).json({
-          error: `Capacidade diária da ${targetDock.name} excedida na unidade ${targetDest?.name || ''} para a data selecionada (${currentTotal}/${targetDock.dailyLimit} ${targetDock.limitUnit || 'volumes'}). Por favor, selecione outra data para a entrega.`
+          error: isStaffCaller
+            ? `Capacidade diária da ${targetDock.name} excedida na unidade ${targetDest?.name || ''} para a data selecionada (${currentTotal}/${targetDock.dailyLimit} ${targetDock.limitUnit || 'volumes'}). Por favor, selecione outra data para a entrega.`
+            : `A capacidade de recebimento para a data selecionada na unidade ${targetDest?.name || ''} já foi atingida. Por favor, selecione outra data para a entrega ou contate a equipe de recebimento.`
         });
       }
     }
