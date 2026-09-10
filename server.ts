@@ -152,7 +152,14 @@ async function startServer() {
       return res.status(400).json({ error: 'Data de agendamento inválida. Use o formato YYYY-MM-DD.' });
     }
     const cargoType = body.cargoType || 'PALETIZADA';
-    const requestedVolumes = Number(body.totalVolumes) || 10;
+    // Quantidade de volumes/paletes é essencial: valida contra a capacidade diária das docas.
+    // Sem valor válido, rejeita a requisição em vez de inventar um padrão silencioso.
+    const requestedVolumes = Number(body.totalVolumes);
+    if (!Number.isFinite(requestedVolumes) || requestedVolumes < 1) {
+      return res.status(400).json({
+        error: 'Informe a quantidade de volumes/paletes da entrega. O valor é essencial para validar a capacidade das docas e a lotação da janela de horário.'
+      });
+    }
     const isPreApprovedContract = Boolean(body.isPreApprovedContract || body.isPreApproved);
 
     // Validação D+0: Proibir que agendamentos normais sejam solicitados para o mesmo dia ou datas passadas
