@@ -408,17 +408,6 @@ export const AdminDockDashboard: React.FC<AdminDockDashboardProps> = ({
                 </div>
                 <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">Controle de Docas & Janelas</h1>
               </div>
-
-              {onOpenTimeSlotConfig && effectiveIsAdmin && (
-                <button
-                  onClick={() => onOpenTimeSlotConfig(selectedBranchFilter !== 'ALL' ? selectedBranchFilter : undefined)}
-                  className="inline-flex items-center gap-1.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold px-3 py-1.5 rounded-xl border border-slate-700 shadow-xs transition-colors cursor-pointer shrink-0"
-                  title="Cadastrar e gerenciar janelas de horário e capacidade de docas desta loja"
-                >
-                  <Clock className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                  <span className="hidden sm:inline">Configurar Loja</span>
-                </button>
-              )}
             </div>
 
             {/* Calendário Interativo: no Desktop fica embutido; no Mobile usamos a barra compacta com popover */}
@@ -1184,17 +1173,6 @@ export const AdminDockDashboard: React.FC<AdminDockDashboardProps> = ({
                             title="Prevenção de Perdas: Registrar chegada do veículo na portaria"
                           >
                             <ShieldCheck className="w-3.5 h-3.5" /> Chegada na Portaria
-                          </button>
-                        )}
-
-                        {/* Action 3: Prevenção de Perdas Releases Vehicle in Real-Time */}
-                        {appt.status === 'NO_PATIO' && (
-                          <button
-                            onClick={() => setSelectedApptForDoubleCheck(appt)}
-                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-3 py-1.5 rounded-lg shadow-2xs flex items-center gap-1.5 animate-pulse cursor-pointer"
-                            title="Prevenção de Perdas: Realizar Double Check de chaves de acesso, valor e boleto antes de liberar para a doca"
-                          >
-                            <ArrowRightCircle className="w-4 h-4" /> Liberar para Descarga
                           </button>
                         )}
 

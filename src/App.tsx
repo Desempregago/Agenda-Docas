@@ -1040,10 +1040,6 @@ export default function App() {
         destinations={destinations}
         onClose={() => setIsDestinationsModalOpen(false)}
         onSave={handleSaveDestinations}
-        onConfigureBranch={(branchId) => {
-          setIsDestinationsModalOpen(false);
-          handleOpenTimeSlotConfig(branchId);
-        }}
       />
 
       {/* Logistics & Dock Performance Reports Modal */}

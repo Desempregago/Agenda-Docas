@@ -16,8 +16,7 @@ import {
   Sparkles,
   Info,
   Navigation,
-  FileText,
-  Sliders
+  FileText
 } from 'lucide-react';
 import { DestinationBranch } from '../types';
 
@@ -26,7 +25,6 @@ interface DestinationsManagementModalProps {
   destinations: DestinationBranch[];
   onSave?: (newDestinations: DestinationBranch[]) => Promise<void> | void;
   onSaveDestinations?: (newDestinations: DestinationBranch[]) => Promise<void> | void;
-  onConfigureBranch?: (branchId: string) => void;
   onClose: () => void;
 }
 
@@ -35,7 +33,6 @@ export const DestinationsManagementModal: React.FC<DestinationsManagementModalPr
   destinations,
   onSave,
   onSaveDestinations,
-  onConfigureBranch,
   onClose,
 }) => {
   const [list, setList] = useState<DestinationBranch[]>(destinations);
@@ -670,17 +667,6 @@ export const DestinationsManagementModal: React.FC<DestinationsManagementModalPr
 
                   {/* Right actions */}
                   <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-center flex-wrap">
-                    {onConfigureBranch && (
-                      <button
-                        onClick={() => onConfigureBranch(branch.id)}
-                        className="px-2.5 py-1.5 text-xs font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-xl transition-colors cursor-pointer flex items-center gap-1"
-                        title="Configurar manualmente as janelas, limites e docas desta loja"
-                      >
-                        <Sliders className="w-3.5 h-3.5 text-blue-600" />
-                        <span>Janelas & Docas</span>
-                      </button>
-                    )}
-
                     {!branch.isDefault && branch.active && (
                       <button
                         onClick={() => handleSetDefault(branch.id)}
