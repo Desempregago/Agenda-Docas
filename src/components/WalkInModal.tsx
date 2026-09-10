@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { X, ShieldCheck, Truck, FileText, CheckCircle2, AlertTriangle, Zap, MapPin, KeyRound, Plus, Trash2, DollarSign, User, Building2, Sparkles, Loader2, Lock, Unlock, RotateCcw } from 'lucide-react';
 import { Appointment, Dock, DestinationBranch } from '../types';
 import { formatCpf, formatCnpj, formatPhone, parseCurrencyInput, cleanNfeAccessKey, extractNfeKeysFromText, extractInvoiceNumberFromNfeKey, extractUniqueCnpjsFromNfeKeys } from '../utils/formatters';
+import { businessToday } from '../utils/dateUtils';
 
 interface WalkInModalProps {
   isOpen: boolean;
@@ -17,7 +18,7 @@ export const WalkInModal: React.FC<WalkInModalProps> = ({
   onSuccess,
   destinations = [],
 }) => {
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = businessToday();
   const activeDestinations = destinations.filter(d => d.active);
   const defaultDestination = activeDestinations.find(d => d.isDefault) || activeDestinations[0];
 

@@ -255,7 +255,7 @@ async function startServer() {
       }
     }
 
-    const year = new Date().getFullYear();
+    const year = Number(businessToday().split('-')[0]);
     const protocol = `AGD-${year}-${randomUUID().replace(/-/g, '').slice(0, 10).toUpperCase()}`;
 
     // Initial status determination: WalkIn -> NO_PATIO; PreApproved -> CONFIRMADO; Default -> PENDENTE

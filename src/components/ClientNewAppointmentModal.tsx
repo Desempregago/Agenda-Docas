@@ -9,6 +9,8 @@ import {
   isDateAllowed,
   formatAllowedDaysSummary,
   getNextAllowedDate,
+  businessToday,
+  formatLocalDateToYMD,
 } from '../utils/dateUtils';
 
 interface ClientNewAppointmentModalProps {
@@ -36,7 +38,7 @@ export const ClientNewAppointmentModal: React.FC<ClientNewAppointmentModalProps>
 }) => {
   const tomorrow = new Date();
   tomorrow.setDate(tomorrow.getDate() + 1);
-  const minDateStr = tomorrow.toISOString().split('T')[0];
+  const minDateStr = formatLocalDateToYMD(tomorrow);
 
   // Baseline vazio: nenhuma janela padrão inventada — janelas devem ser configuradas pelo administrador.
   const availableSlots = timeSlots;
@@ -377,7 +379,7 @@ export const ClientNewAppointmentModal: React.FC<ClientNewAppointmentModalProps>
     }
 
     // Validação D+0 (Proibir solicitação para o dia atual ou datas passadas)
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = businessToday();
     if (formData.scheduledDate <= todayStr) {
       setError('Não é permitido solicitar agendamentos para o mesmo dia (D+0). A data mínima permitida é a partir de amanhã.');
       return;

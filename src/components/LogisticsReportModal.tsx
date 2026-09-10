@@ -21,6 +21,7 @@ import {
 import { Appointment, AppointmentStatus, DestinationBranch, Dock } from '../types';
 import { triggerLocalDownload } from '../services/localExportService';
 import { formatCnpj, formatCurrencyBRL } from '../utils/formatters';
+import { formatLocalDateToYMD } from '../utils/dateUtils';
 
 interface LogisticsReportModalProps {
   isOpen: boolean;
@@ -55,10 +56,10 @@ export const LogisticsReportModal: React.FC<LogisticsReportModalProps> = ({
     // Primeiro dia do mês atual ou 7 dias atrás
     const d = new Date();
     d.setDate(d.getDate() - 14);
-    return d.toISOString().split('T')[0];
+    return formatLocalDateToYMD(d);
   });
   const [endDate, setEndDate] = useState<string>(() => {
-    return new Date().toISOString().split('T')[0];
+    return formatLocalDateToYMD(new Date());
   });
   const [selectedBranch, setSelectedBranch] = useState<string>('ALL');
   const [selectedStatus, setSelectedStatus] = useState<string>('ALL');

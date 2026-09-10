@@ -9,6 +9,7 @@ import {
   isDateAllowed,
   formatAllowedDaysSummary,
   getNextAllowedDate,
+  formatLocalDateToYMD,
 } from '../utils/dateUtils';
 
 interface RescheduleModalProps {
@@ -59,7 +60,7 @@ export const RescheduleModal: React.FC<RescheduleModalProps> = ({
 
   const tomorrow = new Date();
   tomorrow.setDate(tomorrow.getDate() + 1);
-  const defaultNextDate = tomorrow.toISOString().split('T')[0];
+  const defaultNextDate = formatLocalDateToYMD(tomorrow);
   const initialValidDate = getNextAllowedDate(defaultNextDate, branchAllowedDays);
 
   const [newDate, setNewDate] = useState(initialValidDate);

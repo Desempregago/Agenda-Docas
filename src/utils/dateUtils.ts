@@ -22,6 +22,20 @@ export const DAY_SHORT_NAMES_PT = [
 export const DEFAULT_ALLOWED_DAYS: number[] = [1, 2, 3, 4, 5];
 
 /**
+ * Data de "hoje" no fuso America/Sao_Paulo como 'YYYY-MM-DD'.
+ * Evita o bug de fuso horário do toISOString() (que retorna a data UTC e,
+ * entre 21h e 23h59 no Brasil, "viaja" um dia para trás/frente).
+ */
+export function businessToday(): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date());
+}
+
+/**
  * Converte 'YYYY-MM-DD' em objeto Date local seguro (evita problemas de fuso horário UTC)
  */
 export function parseLocalDate(dateStr: string): Date {
