@@ -336,7 +336,7 @@ async function startServer() {
       vehiclePlate: body.vehiclePlate ? body.vehiclePlate.toUpperCase() : '',
       vehicleType: body.vehicleType || 'TRUCK_34',
       cargoType: body.cargoType || 'PALETIZADA',
-      weightKg: Number(body.weightKg) || 1000,
+      weightKg: Number(body.weightKg) || 0,
       totalVolumes: requestedVolumes,
       
       destinationBranchId: targetDest?.id,

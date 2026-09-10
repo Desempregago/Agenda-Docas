@@ -38,8 +38,8 @@ export const WalkInModal: React.FC<WalkInModalProps> = ({
     vehiclePlate: '',
     vehicleType: 'TRUCK_34' as const,
     cargoType: 'PALETIZADA' as const,
-    weightKg: 2000,
-    totalVolumes: 15,
+    weightKg: '' as number | '',
+    totalVolumes: '' as number | '',
     notes: 'REGISTRO DE PORTARIA - ENCAIXE DE VEÍCULO NÃO AGENDADO',
   });
 
@@ -281,6 +281,12 @@ export const WalkInModal: React.FC<WalkInModalProps> = ({
       return;
     }
 
+    // Quantidade de volumes/paletes é obrigatória para o controle de capacidade das docas
+    if (!Number(formData.totalVolumes) || Number(formData.totalVolumes) < 1) {
+      setError('Informe a quantidade de volumes/paletes entregues (usada no limite diário das docas).');
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -293,6 +299,8 @@ export const WalkInModal: React.FC<WalkInModalProps> = ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...formData,
+          totalVolumes: Number(formData.totalVolumes) || 0,
+          weightKg: Number(formData.weightKg) || 0,
           invoiceNumber: finalInvoiceNumber,
           invoiceTotalValue: parsedVal > 0 ? parsedVal : undefined,
           nfeAccessKeys: validNfeKeys,
@@ -782,6 +790,41 @@ export const WalkInModal: React.FC<WalkInModalProps> = ({
                 <option value="FRACIONADA">Fracionada / Express</option>
                 <option value="REFRIGERADA">Refrigerada</option>
               </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                {formData.cargoType === 'BATIDA' || formData.cargoType === 'FRACIONADA'
+                  ? 'Total de Volumes (Caixas)'
+                  : 'Total de Paletes (PBR)'}
+                <span className="text-rose-500"> *</span>
+              </label>
+              <input
+                type="number"
+                min={1}
+                required
+                placeholder={formData.cargoType === 'BATIDA' || formData.cargoType === 'FRACIONADA' ? 'Ex: 150 volumes' : 'Ex: 24 paletes'}
+                value={formData.totalVolumes}
+                onChange={e => setFormData({ ...formData, totalVolumes: e.target.value === '' ? '' : Number(e.target.value) })}
+                className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-amber-500"
+              />
+              <p className="text-[10px] text-slate-500 mt-1">
+                Usado para o controle de capacidade diária das docas.
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                Peso Total (Kg) <span className="text-slate-400 font-normal text-[11px]">(Opcional)</span>
+              </label>
+              <input
+                type="number"
+                min={0}
+                placeholder="Ex: 2000"
+                value={formData.weightKg}
+                onChange={e => setFormData({ ...formData, weightKg: e.target.value === '' ? '' : Number(e.target.value) })}
+                className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-amber-500"
+              />
             </div>
           </div>
 
