@@ -83,6 +83,10 @@ export const TimeSlotConfigModal: React.FC<TimeSlotConfigModalProps> = ({
 
   // Edição de doca existente
   const [editingDockId, setEditingDockId] = useState<string | null>(null);
+  // Rascunho do ID da doca durante edição: mantemos o valor digitado aqui para
+  // NÃO alterar o dock.id (nem a key do card) a cada tecla — key diferente
+  // remonta o card e o input perde o foco. O novo ID é commitado ao confirmar/sair.
+  const [dockIdDraft, setDockIdDraft] = useState('');
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -117,6 +121,7 @@ export const TimeSlotConfigModal: React.FC<TimeSlotConfigModalProps> = ({
       }
       setSavedSuccess(false);
       setEditingDockId(null);
+      setDockIdDraft('');
       setCopyFeedback(null);
     }
   }, [isOpen, destinations, initialBranchId]);
@@ -273,19 +278,8 @@ export const TimeSlotConfigModal: React.FC<TimeSlotConfigModalProps> = ({
 
   const handleUpdateDockField = (dockId: string, field: keyof Dock, value: any) => {
     if (field === 'id') {
-      // Edição do ID da doca: normaliza e garante unicidade dentro da unidade.
-      const sanitized = String(value).trim().toUpperCase().replace(/\s+/g, '-');
-      if (!sanitized) return;
-      updateSelectedBranch(b => {
-        const duplicate = (b.docks || []).some(d => d.id === sanitized && d.id !== dockId);
-        if (duplicate) return b;
-        return {
-          ...b,
-          docks: (b.docks || []).map(dock => (dock.id === dockId ? { ...dock, id: sanitized } : dock)),
-        };
-      });
-      // Mantém a linha de edição aberta: o estado acompanha o novo ID.
-      if (editingDockId === dockId) setEditingDockId(sanitized);
+      // O ID é editado via dockIdDraft e só é commitado em commitDockIdEdit —
+      // alterar o id a cada tecla remonta o card (key) e derruba o foco do input.
       return;
     }
     updateSelectedBranch(b => ({
@@ -294,6 +288,38 @@ export const TimeSlotConfigModal: React.FC<TimeSlotConfigModalProps> = ({
         dock.id === dockId ? { ...dock, [field]: value } : dock
       ),
     }));
+  };
+
+  /**
+   * Inicia a edição de uma doca.
+   */
+  const beginDockEdit = (dockId: string) => {
+    setEditingDockId(dockId);
+    setDockIdDraft(dockId);
+  };
+
+  /**
+   * Confirma a edição da doca: aplica o novo ID (normalizado e único) e fecha a linha.
+   */
+  const commitDockIdEdit = () => {
+    const oldId = editingDockId;
+    if (!oldId) return;
+    const sanitized = dockIdDraft.trim().toUpperCase().replace(/\s+/g, '-');
+    if (!sanitized || sanitized === oldId) {
+      setEditingDockId(null);
+      setDockIdDraft('');
+      return;
+    }
+    updateSelectedBranch(b => {
+      const duplicate = (b.docks || []).some(d => d.id === sanitized && d.id !== oldId);
+      if (duplicate) return b;
+      return {
+        ...b,
+        docks: (b.docks || []).map(dock => (dock.id === oldId ? { ...dock, id: sanitized } : dock)),
+      };
+    });
+    setEditingDockId(null);
+    setDockIdDraft('');
   };
 
   const handleRemoveDock = (dockId: string) => {
@@ -945,10 +971,17 @@ export const TimeSlotConfigModal: React.FC<TimeSlotConfigModalProps> = ({
                                 />
                                 <input
                                   type="text"
-                                  value={dock.id}
-                                  onChange={e => handleUpdateDockField(dock.id, 'id', e.target.value)}
+                                  value={dockIdDraft}
+                                  onChange={e => setDockIdDraft(e.target.value)}
+                                  onBlur={commitDockIdEdit}
+                                  onKeyDown={e => {
+                                    if (e.key === 'Enter') {
+                                      e.preventDefault();
+                                      commitDockIdEdit();
+                                    }
+                                  }}
                                   className="px-2 py-1 bg-white border border-indigo-400 rounded-lg text-xs font-mono font-bold w-28"
-                                  title="ID único da doca — usado na alocação de agendamentos"
+                                  title="ID único da doca — usado na alocação de agendamentos. Pressione Enter ou saia do campo para confirmar."
                                 />
                                 <select
                                   value={dock.type}
@@ -962,7 +995,10 @@ export const TimeSlotConfigModal: React.FC<TimeSlotConfigModalProps> = ({
                                   <option value="PERIGOSA">PERIGOSA</option>
                                 </select>
                                 <button
-                                  onClick={() => setEditingDockId(null)}
+                                  onClick={() => {
+                                    commitDockIdEdit();
+                                    setEditingDockId(null);
+                                  }}
                                   className="p-1 bg-emerald-600 text-white rounded-lg text-xs font-bold cursor-pointer"
                                   title="Concluir edição"
                                 >
@@ -979,7 +1015,7 @@ export const TimeSlotConfigModal: React.FC<TimeSlotConfigModalProps> = ({
                                   {dock.type}
                                 </span>
                                 <button
-                                  onClick={() => setEditingDockId(dock.id)}
+                                  onClick={() => beginDockEdit(dock.id)}
                                   className="text-slate-400 hover:text-blue-600 p-0.5 rounded transition-colors cursor-pointer"
                                   title="Editar nome, ID e tipo"
                                 >

@@ -597,7 +597,8 @@ async function startServer() {
   });
 
   // Update Status & Discrepancy & Double Check (Persistent)
-  app.patch('/api/appointments/:id/status', requireSystemRole('ADMIN', 'SUPERVISOR', 'OPERATOR', 'SECURITY_GATE'), async (req, res) => {
+  // Fornecedores autenticados também passam (requireAuth), mas com fluxo restrito abaixo.
+  app.patch('/api/appointments/:id/status', requireAuth(), async (req, res) => {
     const { id } = req.params;
     const { 
       status, 
@@ -643,6 +644,36 @@ async function startServer() {
 
     const session = getSession(req);
     const userRole = session && session.type === 'system' ? session.role : null;
+
+    // Fluxo do fornecedor: pode APENAS sinalizar "Em Trânsito" (CONFIRMADO -> EM_TRANSITO)
+    // no PRÓPRIO agendamento. Nenhum outro campo do payload é aceito — doca, NFs, prevenção,
+    // discrepâncias e dados do veículo são atribuições exclusivas da equipe interna.
+    if (session?.type === 'supplier') {
+      const supplierIndex = appointments.findIndex(a => a.id === id || a.protocol === id);
+      if (supplierIndex === -1) {
+        return res.status(404).json({ error: 'Agendamento não encontrado' });
+      }
+      const supplierAppt = appointments[supplierIndex];
+      const ownCnpj = session.supplierCnpj.replace(/\D/g, '');
+      if (!ownCnpj || supplierAppt.supplierCnpj.replace(/\D/g, '') !== ownCnpj) {
+        return res.status(403).json({ error: 'Você não possui acesso a este agendamento.' });
+      }
+      if (status !== 'EM_TRANSITO' || supplierAppt.status !== 'CONFIRMADO') {
+        return res.status(403).json({ error: 'Fornecedores podem apenas sinalizar que o veículo está Em Trânsito em agendamentos confirmados.' });
+      }
+      const supplierNowIso = new Date().toISOString();
+      const supplierUpdated: Appointment = {
+        ...supplierAppt,
+        status: 'EM_TRANSITO',
+        updatedAt: supplierNowIso,
+        statusTimestamps: { ...(supplierAppt.statusTimestamps || {}), EM_TRANSITO: supplierNowIso },
+      };
+      if (!(await StorageService.saveAppointment(supplierUpdated))) {
+        return res.status(503).json({ error: 'Não foi possível persistir a alteração. Tente novamente.' });
+      }
+      appointments[supplierIndex] = supplierUpdated;
+      return res.json(supplierUpdated);
+    }
 
     const index = appointments.findIndex(a => a.id === id || a.protocol === id);
     if (index === -1) {
