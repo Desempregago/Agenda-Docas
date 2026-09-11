@@ -1,6 +1,16 @@
+import { eq, notInArray, sql } from 'drizzle-orm';
 import fs from 'fs';
 import path from 'path';
-import { Appointment, Dock, SystemUser, RegisteredSupplier, DestinationBranch, DestinationBranchIdentity, BranchOperationalConfig } from '../types';
+import { db, ensureMigrated } from './db';
+import { appointments, appSettings, branchConfigs, destinations, suppliers, systemUsers } from './db/schema';
+import type {
+  Appointment,
+  Dock,
+  DestinationBranch,
+  DestinationBranchIdentity,
+  RegisteredSupplier,
+  SystemUser,
+} from '../types';
 
 export const SAMPLE_SUPPLIERS: RegisteredSupplier[] = [];
 
@@ -22,20 +32,6 @@ export interface BrandSettings {
   primaryColor: string;
 }
 
-export interface AppNotification {
-  id: string;
-  title: string;
-  message: string;
-  timestamp: string;
-  type: 'STATUS_CHANGE' | 'NEW_APPOINTMENT' | 'RESCHEDULE' | 'GATE_ENTRY' | 'DISCREPANCY' | 'SYSTEM';
-  protocol?: string;
-  supplierCnpj?: string;
-  userId?: string;
-  operatorId?: string;
-  operatorName?: string;
-  read: boolean;
-}
-
 export const DEFAULT_BRAND_SETTINGS: BrandSettings = {
   appName: 'Agenda-docas',
   appSubtitle: 'Agendamento de Cargas e Gestão Operacional de Docas',
@@ -43,169 +39,170 @@ export const DEFAULT_BRAND_SETTINGS: BrandSettings = {
   primaryColor: 'blue',
 };
 
-// Target directory for persistent storage (local container / filesystem)
-const DATA_DIR = process.env.DATA_DIR || path.join(process.cwd(), 'data');
-// Sub-diretório das configurações operacionais descentralizadas por unidade
-const DEST_CONFIG_DIR_NAME = 'destinations';
+export const DEFAULT_OPERATING_DAYS: number[] = [1, 2, 3, 4, 5];
 
-function destConfigDir(): string {
-  return path.join(DATA_DIR, DEST_CONFIG_DIR_NAME);
+// Chaves da tabela app_settings
+export const SETTING_KEYS = {
+  TIME_SLOTS: 'timeSlots',
+  SLOT_SUPPLIER_LIMITS: 'slotSupplierLimits',
+  OPERATING_DAYS: 'operatingDays',
+  DOCKS: 'docks',
+  BRANDING: 'branding',
+} as const;
+
+/**
+ * Diretório de dados legado (JSON). Continua exposto apenas para:
+ * - o segredo de sessão (data/.session_secret) mantido pelo security.ts;
+ * - o logo enviado em branding (data/custom_logo.*);
+ * - o script de importação JSON→Postgres.
+ * Nenhum dado de negócio é mais lido/gravado aqui.
+ */
+export const LEGACY_DATA_DIR = process.env.DATA_DIR || path.join(process.cwd(), 'data');
+
+export const getDataDir = (): string => LEGACY_DATA_DIR;
+
+export const getDefaultSampleAppointments = (): Appointment[] => [];
+
+async function getSetting<T>(key: string, fallback: T): Promise<T> {
+  await ensureMigrated();
+  const rows = await db.select().from(appSettings).where(eq(appSettings.key, key)).limit(1);
+  if (rows.length === 0) return fallback;
+  return rows[0].value as T;
 }
 
-function ensureDestConfigDir(): string {
-  const dir = destConfigDir();
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
-  return dir;
-}
-
-/** Nome seguro de arquivo para o config de uma unidade (id sanitizado). */
-function branchConfigFileName(branchId: string): string {
-  const safe = (branchId || 'UNKNOWN').replace(/[^a-zA-Z0-9_-]/g, '_');
-  return `${safe}.config.json`;
-}
-
-// Ensure data folder exists
-function ensureDataDir(): string {
-  if (!fs.existsSync(DATA_DIR)) {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
-  }
-  return DATA_DIR;
-}
-
-// Generic file reading with safe error fallback
-function readJsonFile<T>(fileName: string, defaultValue: T): T {
+async function putSetting<T>(key: string, value: T): Promise<boolean> {
   try {
-    ensureDataDir();
-    const filePath = path.join(DATA_DIR, fileName);
-    if (!fs.existsSync(filePath)) {
-      writeJsonFile(fileName, defaultValue);
-      return defaultValue;
-    }
-    const raw = fs.readFileSync(filePath, 'utf-8');
-    if (!raw.trim()) {
-      writeJsonFile(fileName, defaultValue);
-      return defaultValue;
-    }
-    return JSON.parse(raw) as T;
-  } catch (error) {
-    console.error(`[Server Storage] Erro ao ler ${fileName}:`, error);
-    return defaultValue;
-  }
-}
-
-// Generic file writing with atomic/safe replacement
-function writeJsonFile<T>(fileName: string, data: T): boolean {
-  try {
-    ensureDataDir();
-    const filePath = path.join(DATA_DIR, fileName);
-    const tempPath = path.join(DATA_DIR, `${fileName}.tmp-${Date.now()}`);
-    const jsonStr = JSON.stringify(data, null, 2);
-    
-    fs.writeFileSync(tempPath, jsonStr, 'utf-8');
-    fs.renameSync(tempPath, filePath);
+    await ensureMigrated();
+    await db
+      .insert(appSettings)
+      .values({ key, value })
+      .onConflictDoUpdate({ target: appSettings.key, set: { value, updatedAt: new Date() } });
     return true;
-  } catch (error) {
-    console.error(`[Server Storage] Erro ao gravar ${fileName}:`, error);
-    try {
-      // Fallback direct write if rename fails
-      const filePath = path.join(DATA_DIR, fileName);
-      fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf-8');
-      return true;
-    } catch (fallbackError) {
-      console.error(`[Server Storage] Falha crítica ao gravar ${fileName}:`, fallbackError);
-      return false;
-    }
+  } catch (e) {
+    console.error(`[Storage] Erro ao gravar setting "${key}":`, e);
+    return false;
   }
 }
 
-export const getDefaultSampleAppointments = (): Appointment[] => {
-  return [];
-};
+function identityFromBranch(b: DestinationBranch): DestinationBranchIdentity {
+  return {
+    id: b.id,
+    name: b.name,
+    code: b.code || '',
+    cnpj: b.cnpj || '',
+    address: b.address || '',
+    neighborhood: b.neighborhood || '',
+    city: b.city || '',
+    state: b.state || 'SP',
+    zipCode: b.zipCode || '',
+    contactPhone: b.contactPhone || '',
+    contactEmail: b.contactEmail || '',
+    receptionInstructions: b.receptionInstructions || '',
+    active: b.active ?? true,
+    isDefault: Boolean(b.isDefault),
+  };
+}
 
-// Persistent Store Helpers
+/**
+ * Camada de persistência — agora 100% Postgres (Drizzle).
+ *
+ * Compatibilidade com o código existente:
+ * - Os nomes dos métodos são idênticos aos do serviço em JSON;
+ * - Todos viraram async (server.ts já foi ajustado para await);
+ * - load*() retornam os MESMOS formatos em memória que antes (ex:
+ *   destinations inclui a config operacional re-anexada).
+ */
 export const StorageService = {
-  getDataDir: () => DATA_DIR,
+  getDataDir,
   getDefaultSampleAppointments,
 
-  loadAppointments: (): Appointment[] => {
+  // ---------------------------------------------------------------
+  // Agendamentos
+  // ---------------------------------------------------------------
+
+  loadAppointments: async (): Promise<Appointment[]> => {
     try {
-      ensureDataDir();
-      const cnpjDir = path.join(DATA_DIR, 'cnpjs');
-      if (!fs.existsSync(cnpjDir)) {
-        fs.mkdirSync(cnpjDir, { recursive: true });
-        return [];
-      }
-      const allAppointments: Appointment[] = [];
-      const cnpjFolders = fs.readdirSync(cnpjDir);
-      for (const folder of cnpjFolders) {
-        const folderPath = path.join(cnpjDir, folder);
-        if (fs.statSync(folderPath).isDirectory()) {
-          const files = fs.readdirSync(folderPath);
-          for (const file of files) {
-            if (file.endsWith('.json')) {
-              try {
-                const raw = fs.readFileSync(path.join(folderPath, file), 'utf-8');
-                const appt = JSON.parse(raw) as Appointment;
-                if (appt && appt.id) {
-                  allAppointments.push(appt);
-                }
-              } catch (err) {
-                console.error(`[Storage] Erro ao ler agendamento ${file}:`, err);
-              }
-            }
-          }
-        }
-      }
-      // Ordena decrescente por data de criação / data agendada
-      allAppointments.sort((a, b) => new Date(b.createdAt || b.scheduledDate).getTime() - new Date(a.createdAt || a.scheduledDate).getTime());
-      return allAppointments;
+      await ensureMigrated();
+      const rows = await db
+        .select({ payload: appointments.payload })
+        .from(appointments)
+        .orderBy(sql`${appointments.createdAt} DESC`);
+      return rows.map(r => r.payload);
     } catch (error) {
-      console.error('[Storage] Erro ao carregar agendamentos das pastas de CNPJ:', error);
+      console.error('[Storage] Erro ao carregar agendamentos:', error);
       return [];
     }
   },
 
-  saveAppointment: (appointment: Appointment): boolean => {
+  saveAppointment: async (appointment: Appointment): Promise<boolean> => {
     try {
-      ensureDataDir();
-      const rawCnpj = appointment.supplierCnpj || 'OUTROS';
-      const digits = rawCnpj.replace(/\D/g, '') || 'OUTROS';
-      const cnpjDir = path.join(DATA_DIR, 'cnpjs', digits);
-      if (!fs.existsSync(cnpjDir)) {
-        fs.mkdirSync(cnpjDir, { recursive: true });
-      }
-      const filePath = path.join(cnpjDir, `${appointment.id}.json`);
-      const tempPath = path.join(cnpjDir, `${appointment.id}.json.tmp-${Date.now()}`);
-      fs.writeFileSync(tempPath, JSON.stringify(appointment, null, 2), 'utf-8');
-      fs.renameSync(tempPath, filePath);
+      await ensureMigrated();
+      await db
+        .insert(appointments)
+        .values({
+          id: appointment.id,
+          protocol: appointment.protocol || '',
+          supplierCnpj: (appointment.supplierCnpj || '').replace(/\D/g, '') || 'OUTROS',
+          supplierName: appointment.supplierName || '',
+          scheduledDate: appointment.scheduledDate || '',
+          timeSlot: appointment.timeSlot || '',
+          dockId: appointment.dockId || null,
+          destinationBranchId: appointment.destinationBranchId || null,
+          status: appointment.status,
+          totalVolumes: Number(appointment.totalVolumes) || 0,
+          weightKg: Number(appointment.weightKg) || 0,
+          isWalkIn: Boolean(appointment.isWalkIn),
+          payload: appointment,
+          // Preserva a data de criação original (ordenação do painel e da API)
+          ...(appointment.createdAt ? { createdAt: new Date(appointment.createdAt) } : {}),
+          ...(appointment.updatedAt ? { updatedAt: new Date(appointment.updatedAt) } : {}),
+        })
+        .onConflictDoUpdate({
+          target: appointments.id,
+          set: {
+            protocol: appointment.protocol || '',
+            supplierCnpj: (appointment.supplierCnpj || '').replace(/\D/g, '') || 'OUTROS',
+            supplierName: appointment.supplierName || '',
+            scheduledDate: appointment.scheduledDate || '',
+            timeSlot: appointment.timeSlot || '',
+            dockId: appointment.dockId || null,
+            destinationBranchId: appointment.destinationBranchId || null,
+            status: appointment.status,
+            totalVolumes: Number(appointment.totalVolumes) || 0,
+            weightKg: Number(appointment.weightKg) || 0,
+            isWalkIn: Boolean(appointment.isWalkIn),
+            payload: appointment,
+            updatedAt: new Date(),
+          },
+        });
       return true;
     } catch (e) {
-      console.error('[Storage] Erro ao salvar agendamento na pasta do CNPJ:', e);
+      console.error('[Storage] Erro ao salvar agendamento:', e);
       return false;
     }
   },
 
-  saveAppointments: (appointments: Appointment[]): boolean => {
-    if (appointments.length === 0) {
-      StorageService.cleanCnpjFolders();
+  saveAppointments: async (list: Appointment[]): Promise<boolean> => {
+    try {
+      if (list.length === 0) {
+        await StorageService.cleanAllAppointments();
+        return true;
+      }
+      for (const appt of list) {
+        const ok = await StorageService.saveAppointment(appt);
+        if (!ok) return false;
+      }
       return true;
+    } catch (e) {
+      console.error('[Storage] Erro ao salvar lista de agendamentos:', e);
+      return false;
     }
-    for (const appt of appointments) {
-      StorageService.saveAppointment(appt);
-    }
-    return true;
   },
 
-  deleteAppointment: (appointment: { id: string; supplierCnpj?: string }): boolean => {
+  deleteAppointment: async (appointment: { id: string }): Promise<boolean> => {
     try {
-      const rawCnpj = appointment.supplierCnpj || 'OUTROS';
-      const digits = rawCnpj.replace(/\D/g, '') || 'OUTROS';
-      const filePath = path.join(DATA_DIR, 'cnpjs', digits, `${appointment.id}.json`);
-      if (fs.existsSync(filePath)) {
-        fs.unlinkSync(filePath);
-      }
+      await ensureMigrated();
+      await db.delete(appointments).where(eq(appointments.id, appointment.id));
       return true;
     } catch (e) {
       console.error('[Storage] Erro ao remover agendamento:', e);
@@ -213,127 +210,121 @@ export const StorageService = {
     }
   },
 
-  loadDestinations: (): DestinationBranch[] => {
-    // Lista vazia é um estado válido (sem dados de demonstração; sem re-seed automático).
-    let list = readJsonFile<any[]>('destinations.json', []);
-    if (!Array.isArray(list)) {
-      list = [];
-      writeJsonFile<DestinationBranch[]>('destinations.json', list);
-    }
-    // Migração automática: extrai config operacional embutida (modelo antigo) para
-    // data/destinations/<id>.config.json e persiste destinations.json apenas com identidade.
-    let needsIdentityRewrite = false;
-    const migrated = list.map((b: any) => {
-      const identity: DestinationBranchIdentity = {
-        id: String(b.id || `DEST-${Date.now()}`),
-        name: String(b.name || ''),
-        code: b.code || '',
-        cnpj: b.cnpj || '',
-        address: b.address || '',
-        neighborhood: b.neighborhood || '',
-        city: b.city || '',
-        state: b.state || 'SP',
-        zipCode: b.zipCode || '',
-        contactPhone: b.contactPhone || '',
-        contactEmail: b.contactEmail || '',
-        receptionInstructions: b.receptionInstructions || '',
-        active: b.active ?? true,
-        isDefault: Boolean(b.isDefault),
-      };
-      const embedded: BranchOperationalConfig | null =
-        Array.isArray(b.timeSlots) || (b.slotSupplierLimits && typeof b.slotSupplierLimits === 'object')
-        || Array.isArray(b.allowedDaysOfWeek) || Array.isArray(b.blockedDates) || Array.isArray(b.docks)
-          ? {
-              branchId: identity.id,
-              timeSlots: Array.isArray(b.timeSlots) ? b.timeSlots : undefined,
-              slotSupplierLimits: (b.slotSupplierLimits && typeof b.slotSupplierLimits === 'object') ? b.slotSupplierLimits : undefined,
-              allowedDaysOfWeek: Array.isArray(b.allowedDaysOfWeek) ? b.allowedDaysOfWeek : undefined,
-              blockedDates: Array.isArray(b.blockedDates) ? b.blockedDates : undefined,
-              docks: Array.isArray(b.docks) ? b.docks : undefined,
-            }
-          : null;
-      if (embedded) {
-        StorageService.saveBranchConfig(embedded);
-        needsIdentityRewrite = true;
-      }
-      return identity;
-    });
-    if (needsIdentityRewrite) {
-      console.log('[Storage] Config operacional de unidades migrada para data/destinations/<id>.config.json');
-      writeJsonFile<DestinationBranchIdentity[]>('destinations.json', migrated);
-    }
-    return migrated;
-  },
-
-  saveDestinations: (destinations: DestinationBranch[]): boolean => {
-    // Persiste APENAS identidade; a config operacional é gerida por saveBranchConfig.
-    const cleanList = destinations.map(b => ({
-      id: b.id,
-      name: b.name,
-      code: b.code || '',
-      cnpj: b.cnpj || '',
-      address: b.address || '',
-      neighborhood: b.neighborhood || '',
-      city: b.city || '',
-      state: b.state || 'SP',
-      zipCode: b.zipCode || '',
-      contactPhone: b.contactPhone || '',
-      contactEmail: b.contactEmail || '',
-      receptionInstructions: b.receptionInstructions || '',
-      active: b.active ?? true,
-      isDefault: Boolean(b.isDefault),
-    }));
-    return writeJsonFile<DestinationBranch[]>('destinations.json', cleanList);
-  },
-
-  /** Lê o config operacional descentralizado de uma unidade (sem fallback global). */
-  loadBranchConfig: (branchId: string): BranchOperationalConfig => {
-    const raw = readJsonFile<Partial<BranchOperationalConfig> | null>(
-      path.join(DEST_CONFIG_DIR_NAME, branchConfigFileName(branchId)),
-      null
-    );
-    if (!raw) return { branchId };
-    return {
-      branchId,
-      timeSlots: Array.isArray(raw.timeSlots) ? raw.timeSlots : undefined,
-      slotSupplierLimits: (raw.slotSupplierLimits && typeof raw.slotSupplierLimits === 'object') ? raw.slotSupplierLimits : undefined,
-      allowedDaysOfWeek: Array.isArray(raw.allowedDaysOfWeek) ? raw.allowedDaysOfWeek : undefined,
-      blockedDates: Array.isArray(raw.blockedDates) ? raw.blockedDates : undefined,
-      docks: Array.isArray(raw.docks) ? raw.docks : undefined,
-    };
-  },
-
-  /** Remove o arquivo de config operacional de uma unidade excluída. */
-  deleteBranchConfig: (branchId: string): boolean => {
+  /** Remove todos os agendamentos (equivalente ao antigo cleanCnpjFolders). */
+  cleanAllAppointments: async (): Promise<boolean> => {
     try {
-      const filePath = path.join(destConfigDir(), branchConfigFileName(branchId));
-      if (fs.existsSync(filePath)) {
-        fs.unlinkSync(filePath);
-      }
+      await ensureMigrated();
+      await db.delete(appointments);
       return true;
     } catch (e) {
-      console.error('[Storage] Erro ao remover config da unidade:', e);
+      console.error('[Storage] Erro ao limpar agendamentos:', e);
       return false;
     }
   },
 
-  /** Grava o config operacional de uma unidade em seu próprio arquivo. */
-  saveBranchConfig: (config: BranchOperationalConfig): boolean => {
+  // ---------------------------------------------------------------
+  // Unidades (identidade + config operacional)
+  // ---------------------------------------------------------------
+
+  /** Retorna identidade + config operacional mescladas (formato DestinationBranch). */
+  loadDestinations: async (): Promise<DestinationBranch[]> => {
     try {
-      ensureDestConfigDir();
-      const clean: BranchOperationalConfig = {
+      await ensureMigrated();
+      const rows = await db.select().from(destinations).orderBy(destinations.createdAt);
+      const configs = await db.select().from(branchConfigs);
+      const configByBranch = new Map(configs.map(c => [c.branchId, c.config as Record<string, unknown>]));
+      return rows.map(r => ({
+        ...(r as unknown as DestinationBranchIdentity),
+        ...(configByBranch.get(r.id) || {}),
+      })) as DestinationBranch[];
+    } catch (error) {
+      console.error('[Storage] Erro ao carregar unidades:', error);
+      return [];
+    }
+  },
+
+  /**
+   * Salva a lista completa de unidades. Cada elemento vem mesclado
+   * (identidade + config), como no formato em memória da API.
+   */
+  saveDestinations: async (list: DestinationBranch[]): Promise<boolean> => {
+    try {
+      await ensureMigrated();
+      const ids = list.map(b => b.id);
+      // Remove unidades que saíram da lista
+      if (ids.length > 0) {
+        await db.delete(destinations).where(notInArray(destinations.id, ids));
+        await db.delete(branchConfigs).where(notInArray(branchConfigs.branchId, ids));
+      } else {
+        await db.delete(destinations);
+        await db.delete(branchConfigs);
+      }
+      for (const b of list) {
+        const identity = identityFromBranch(b);
+        await db
+          .insert(destinations)
+          .values({ ...identity, updatedAt: new Date() })
+          .onConflictDoUpdate({ target: destinations.id, set: { ...identity, updatedAt: new Date() } });
+        const config = {
+          branchId: b.id,
+          timeSlots: Array.isArray(b.timeSlots) ? b.timeSlots : undefined,
+          slotSupplierLimits:
+            b.slotSupplierLimits && typeof b.slotSupplierLimits === 'object' ? b.slotSupplierLimits : undefined,
+          allowedDaysOfWeek: Array.isArray(b.allowedDaysOfWeek) ? b.allowedDaysOfWeek : undefined,
+          blockedDates: Array.isArray(b.blockedDates) ? b.blockedDates : undefined,
+          docks: Array.isArray(b.docks) ? b.docks : undefined,
+        };
+        await db
+          .insert(branchConfigs)
+          .values({ branchId: b.id, config })
+          .onConflictDoUpdate({ target: branchConfigs.branchId, set: { config, updatedAt: new Date() } });
+      }
+      return true;
+    } catch (e) {
+      console.error('[Storage] Erro ao salvar unidades:', e);
+      return false;
+    }
+  },
+
+  loadBranchConfig: async (branchId: string): Promise<BranchOperationalConfigShape> => {
+    try {
+      await ensureMigrated();
+      const rows = await db.select().from(branchConfigs).where(eq(branchConfigs.branchId, branchId)).limit(1);
+      if (rows.length === 0) return { branchId };
+      const raw = rows[0].config as Partial<BranchOperationalConfigShape>;
+      return {
+        branchId,
+        timeSlots: Array.isArray(raw.timeSlots) ? raw.timeSlots : undefined,
+        slotSupplierLimits:
+          raw.slotSupplierLimits && typeof raw.slotSupplierLimits === 'object' ? raw.slotSupplierLimits : undefined,
+        allowedDaysOfWeek: Array.isArray(raw.allowedDaysOfWeek) ? raw.allowedDaysOfWeek : undefined,
+        blockedDates: Array.isArray(raw.blockedDates) ? raw.blockedDates : undefined,
+        docks: Array.isArray(raw.docks) ? raw.docks : undefined,
+      };
+    } catch (e) {
+      console.error('[Storage] Erro ao ler config da unidade:', e);
+      return { branchId };
+    }
+  },
+
+  saveBranchConfig: async (config: BranchOperationalConfigShape): Promise<boolean> => {
+    try {
+      await ensureMigrated();
+      const clean: BranchOperationalConfigShape = {
         branchId: config.branchId,
         timeSlots: Array.isArray(config.timeSlots) ? config.timeSlots : undefined,
-        slotSupplierLimits: (config.slotSupplierLimits && typeof config.slotSupplierLimits === 'object') ? config.slotSupplierLimits : undefined,
+        slotSupplierLimits:
+          config.slotSupplierLimits && typeof config.slotSupplierLimits === 'object'
+            ? config.slotSupplierLimits
+            : undefined,
         allowedDaysOfWeek: Array.isArray(config.allowedDaysOfWeek) ? config.allowedDaysOfWeek : undefined,
         blockedDates: Array.isArray(config.blockedDates) ? config.blockedDates : undefined,
         docks: Array.isArray(config.docks) ? config.docks : undefined,
       };
-      const tempName = `${branchConfigFileName(config.branchId)}.tmp-${Date.now()}`;
-      const dir = destConfigDir();
-      const tempPath = path.join(dir, tempName);
-      fs.writeFileSync(tempPath, JSON.stringify(clean, null, 2), 'utf-8');
-      fs.renameSync(tempPath, path.join(dir, branchConfigFileName(config.branchId)));
+      await db
+        .insert(branchConfigs)
+        .values({ branchId: config.branchId, config: clean })
+        .onConflictDoUpdate({ target: branchConfigs.branchId, set: { config: clean, updatedAt: new Date() } });
       return true;
     } catch (e) {
       console.error('[Storage] Erro ao salvar config da unidade:', e);
@@ -341,68 +332,161 @@ export const StorageService = {
     }
   },
 
-  loadOperatingDays: (): number[] => {
-    return readJsonFile<number[]>('operating_days.json', [1, 2, 3, 4, 5]);
+  deleteBranchConfig: async (branchId: string): Promise<boolean> => {
+    try {
+      await ensureMigrated();
+      await db.delete(branchConfigs).where(eq(branchConfigs.branchId, branchId));
+      return true;
+    } catch (e) {
+      console.error('[Storage] Erro ao remover config da unidade:', e);
+      return false;
+    }
   },
 
-  saveOperatingDays: (days: number[]): boolean => {
-    return writeJsonFile<number[]>('operating_days.json', days);
+  // ---------------------------------------------------------------
+  // Configurações globais (settings chave/valor)
+  // ---------------------------------------------------------------
+
+  loadOperatingDays: async (): Promise<number[]> => {
+    return getSetting<number[]>(SETTING_KEYS.OPERATING_DAYS, DEFAULT_OPERATING_DAYS);
   },
 
-  loadDocks: (): Dock[] => {
-    return readJsonFile<Dock[]>('docks.json', DEFAULT_DOCKS);
+  saveOperatingDays: (days: number[]): Promise<boolean> => putSetting(SETTING_KEYS.OPERATING_DAYS, days),
+
+  loadTimeSlots: async (): Promise<string[]> => {
+    return getSetting<string[]>(SETTING_KEYS.TIME_SLOTS, DEFAULT_TIME_SLOTS);
   },
 
-  saveDocks: (docks: Dock[]): boolean => {
-    return writeJsonFile<Dock[]>('docks.json', docks);
+  saveTimeSlots: (slots: string[]): Promise<boolean> => putSetting(SETTING_KEYS.TIME_SLOTS, slots),
+
+  loadSlotSupplierLimits: async (): Promise<Record<string, number>> => {
+    return getSetting<Record<string, number>>(SETTING_KEYS.SLOT_SUPPLIER_LIMITS, DEFAULT_SLOT_SUPPLIER_LIMITS);
   },
 
-  loadTimeSlots: (): string[] => {
-    return readJsonFile<string[]>('timeslots.json', DEFAULT_TIME_SLOTS);
+  saveSlotSupplierLimits: (limits: Record<string, number>): Promise<boolean> =>
+    putSetting(SETTING_KEYS.SLOT_SUPPLIER_LIMITS, limits),
+
+  loadDocks: async (): Promise<Dock[]> => {
+    return getSetting<Dock[]>(SETTING_KEYS.DOCKS, DEFAULT_DOCKS);
   },
 
-  saveTimeSlots: (slots: string[]): boolean => {
-    return writeJsonFile<string[]>('timeslots.json', slots);
+  saveDocks: (docks: Dock[]): Promise<boolean> => putSetting(SETTING_KEYS.DOCKS, docks),
+
+  // ---------------------------------------------------------------
+  // Usuários e fornecedores
+  // ---------------------------------------------------------------
+
+  loadUsers: async (): Promise<SystemUser[]> => {
+    try {
+      await ensureMigrated();
+      const rows = await db.select().from(systemUsers);
+      return rows.map(r => r.payload as SystemUser);
+    } catch (error) {
+      console.error('[Storage] Erro ao carregar usuários:', error);
+      return [];
+    }
   },
 
-  loadSlotSupplierLimits: (): Record<string, number> => {
-    return readJsonFile<Record<string, number>>('slot_supplier_limits.json', DEFAULT_SLOT_SUPPLIER_LIMITS);
+  saveUsers: async (users: SystemUser[]): Promise<boolean> => {
+    try {
+      await ensureMigrated();
+      const ids = users.map(u => u.id);
+      if (ids.length > 0) {
+        await db.delete(systemUsers).where(notInArray(systemUsers.id, ids));
+      } else {
+        await db.delete(systemUsers);
+      }
+      for (const u of users) {
+        const row = {
+          id: u.id,
+          username: u.username,
+          email: u.email || null,
+          role: u.role,
+          active: u.active ?? true,
+          passwordHash: u.password || null,
+          pinHash: u.pin || null,
+          payload: u,
+        };
+        await db
+          .insert(systemUsers)
+          .values(row)
+          .onConflictDoUpdate({ target: systemUsers.id, set: { ...row, updatedAt: new Date() } });
+      }
+      return true;
+    } catch (e) {
+      console.error('[Storage] Erro ao salvar usuários:', e);
+      return false;
+    }
   },
 
-  saveSlotSupplierLimits: (limits: Record<string, number>): boolean => {
-    return writeJsonFile<Record<string, number>>('slot_supplier_limits.json', limits);
+  loadSuppliers: async (): Promise<RegisteredSupplier[]> => {
+    try {
+      await ensureMigrated();
+      const rows = await db.select().from(suppliers);
+      return rows.map(r => r.payload as RegisteredSupplier);
+    } catch (error) {
+      console.error('[Storage] Erro ao carregar fornecedores:', error);
+      return [];
+    }
   },
 
-  loadUsers: (): SystemUser[] => {
-    return readJsonFile<SystemUser[]>('users.json', []);
+  saveSuppliers: async (list: RegisteredSupplier[]): Promise<boolean> => {
+    try {
+      await ensureMigrated();
+      const cnjps = list.map(s => (s.cnpj || '').replace(/\D/g, ''));
+      if (cnjps.length > 0) {
+        await db.delete(suppliers).where(notInArray(suppliers.cnpj, cnjps));
+      } else {
+        await db.delete(suppliers);
+      }
+      for (const s of list) {
+        const cnpj = (s.cnpj || '').replace(/\D/g, '');
+        if (!cnpj) continue;
+        const row = {
+          cnpj,
+          name: s.name || '',
+          tradeName: s.tradeName || null,
+          contactEmail: s.contactEmail || null,
+          contactPhone: s.contactPhone || null,
+          payload: s,
+        };
+        await db
+          .insert(suppliers)
+          .values(row)
+          .onConflictDoUpdate({ target: suppliers.cnpj, set: { ...row, updatedAt: new Date() } });
+      }
+      return true;
+    } catch (e) {
+      console.error('[Storage] Erro ao salvar fornecedores:', e);
+      return false;
+    }
   },
 
-  saveUsers: (users: SystemUser[]): boolean => {
-    return writeJsonFile<SystemUser[]>('users.json', users);
+  // ---------------------------------------------------------------
+  // Branding
+  // ---------------------------------------------------------------
+
+  loadBranding: async (): Promise<BrandSettings> => {
+    return getSetting<BrandSettings>(SETTING_KEYS.BRANDING, DEFAULT_BRAND_SETTINGS);
   },
 
-  loadBranding: (): BrandSettings => {
-    return readJsonFile<BrandSettings>('branding.json', DEFAULT_BRAND_SETTINGS);
-  },
+  saveBranding: async (settings: BrandSettings): Promise<boolean> => {
+    const success = await putSetting(SETTING_KEYS.BRANDING, settings);
 
-  saveBranding: (settings: BrandSettings): boolean => {
-    const success = writeJsonFile<BrandSettings>('branding.json', settings);
-    
-    // Se foi enviado um logo em base64 (Data URL), salvar fisicamente no servidor nos diretórios estáticos
+    // Se foi enviado um logo em base64 (Data URL), salvar fisicamente no servidor
     if (settings.logoUrl && settings.logoUrl.startsWith('data:image/')) {
       try {
         const matches = settings.logoUrl.match(/^data:image\/([a-zA-Z0-9+.-]+);base64,(.+)$/);
         if (matches && matches[2]) {
           const extension = matches[1].replace('svg+xml', 'svg').replace('jpeg', 'jpg');
           const buffer = Buffer.from(matches[2], 'base64');
-          
-          // Salvar na pasta data do servidor
-          const customLogoPath = path.join(DATA_DIR, `custom_logo.${extension}`);
-          const customFaviconPath = path.join(DATA_DIR, 'custom_favicon.ico');
+
+          const customLogoPath = path.join(LEGACY_DATA_DIR, `custom_logo.${extension}`);
+          const customFaviconPath = path.join(LEGACY_DATA_DIR, 'custom_favicon.ico');
+          fs.mkdirSync(LEGACY_DATA_DIR, { recursive: true });
           fs.writeFileSync(customLogoPath, buffer);
           fs.writeFileSync(customFaviconPath, buffer);
 
-          // Salvar também nas pastas públicas do projeto para acesso direto
           const publicDir = path.join(process.cwd(), 'public');
           if (fs.existsSync(publicDir)) {
             try {
@@ -423,86 +507,39 @@ export const StorageService = {
         console.error('[Storage] Erro ao gravar favicon/logo fisicamente no servidor:', e);
       }
     }
-    
+
     return success;
   },
 
-  loadSuppliers: (): RegisteredSupplier[] => {
-    return readJsonFile<RegisteredSupplier[]>('suppliers.json', DEFAULT_SUPPLIERS);
-  },
+  // ---------------------------------------------------------------
+  // Diagnósticos
+  // ---------------------------------------------------------------
 
-  saveSuppliers: (suppliers: RegisteredSupplier[]): boolean => {
-    return writeJsonFile<RegisteredSupplier[]>('suppliers.json', suppliers);
-  },
-
-  cleanCnpjFolders: () => {
+  getStats: async () => {
+    await ensureMigrated();
+    let totalAppointments = 0;
     try {
-      ensureDataDir();
-      const cnpjDir = path.join(DATA_DIR, 'cnpjs');
-      if (fs.existsSync(cnpjDir)) {
-        fs.rmSync(cnpjDir, { recursive: true, force: true });
-        fs.mkdirSync(cnpjDir, { recursive: true });
-      }
-      // Remove legado appointments.json ou notifications.json se ainda existirem
-      const legacyFiles = ['appointments.json', 'notifications.json'];
-      for (const lf of legacyFiles) {
-        const p = path.join(DATA_DIR, lf);
-        if (fs.existsSync(p)) {
-          fs.unlinkSync(p);
-        }
-      }
-    } catch (e) {
-      console.error('[Storage] Erro ao limpar pastas de CNPJ:', e);
-    }
-  },
-
-  syncAppointmentToCnpjFolder: (appointment: Appointment) => {
-    return StorageService.saveAppointment(appointment);
-  },
-
-  syncAllAppointmentsToCnpjFolders: (appointments: Appointment[]) => {
-    return StorageService.saveAppointments(appointments);
-  },
-
-  getStats: () => {
-    ensureDataDir();
-    const files = ['docks.json', 'timeslots.json', 'users.json', 'suppliers.json', 'branding.json'];
-    const fileStats = files.map(file => {
-      const p = path.join(DATA_DIR, file);
-      const exists = fs.existsSync(p);
-      let sizeBytes = 0;
-      let updatedAt: string | null = null;
-      if (exists) {
-        try {
-          const stat = fs.statSync(p);
-          sizeBytes = stat.size;
-          updatedAt = stat.mtime.toISOString();
-        } catch (_) {}
-      }
-      return { file, exists, sizeBytes, updatedAt };
-    });
-
-    const cnpjDir = path.join(DATA_DIR, 'cnpjs');
-    let totalCnpjFiles = 0;
-    if (fs.existsSync(cnpjDir)) {
-      try {
-        const folders = fs.readdirSync(cnpjDir);
-        for (const f of folders) {
-          const fp = path.join(cnpjDir, f);
-          if (fs.statSync(fp).isDirectory()) {
-            totalCnpjFiles += fs.readdirSync(fp).filter(fn => fn.endsWith('.json')).length;
-          }
-        }
-      } catch (_) {}
-    }
+      const result = await db.select({ count: sql<number>`count(*)::int` }).from(appointments);
+      totalAppointments = result[0]?.count ?? 0;
+    } catch (_) {}
 
     return {
-      storageType: 'Local Server / Container Persistent Volume',
-      dataDirectory: DATA_DIR,
-      isMounted: fs.existsSync(DATA_DIR),
-      totalAppointmentsInCnpjFolders: totalCnpjFiles,
-      files: fileStats,
+      storageType: 'PostgreSQL (Drizzle ORM)',
+      dataDirectory: LEGACY_DATA_DIR,
+      isMounted: fs.existsSync(LEGACY_DATA_DIR),
+      totalAppointmentsInCnpjFolders: totalAppointments,
+      files: [] as Array<{ file: string; exists: boolean; sizeBytes: number; updatedAt: string | null }>,
       timestamp: new Date().toISOString(),
     };
-  }
+  },
 };
+
+// Formas locais para evitar imports circulares com ../types em tempo de execução
+interface BranchOperationalConfigShape {
+  branchId: string;
+  timeSlots?: string[];
+  slotSupplierLimits?: Record<string, number>;
+  allowedDaysOfWeek?: number[];
+  blockedDates?: string[];
+  docks?: Dock[];
+}

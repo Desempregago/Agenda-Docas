@@ -20,31 +20,50 @@ async function startServer() {
   });
   app.use(express.json({ limit: '10mb' }));
 
-  // Load state directly from persistent files in container / server filesystem
-  let appointments: Appointment[] = StorageService.loadAppointments();
-  // Unidades (identidade) + config operacional descentralizada por unidade.
+  // Express 4 não captura rejections em handlers async — sem este shim, uma
+  // falha inesperada de banco deixaria a requisição pendurada para sempre.
+  const routeMethods = ['get', 'post', 'put', 'patch', 'delete', 'all'] as const;
+  for (const method of routeMethods) {
+    const original = (app as any)[method].bind(app);
+    (app as any)[method] = (routePath: any, ...handlers: any[]) => {
+      const wrapped = handlers.map(h =>
+        typeof h === 'function'
+          ? (req: any, res: any, next: any) => Promise.resolve(h(req, res, next)).catch(next)
+          : h
+      );
+      return original(routePath, ...wrapped);
+    };
+  }
+
+  // Load state from PostgreSQL (Drizzle). Migrations run automatically at boot.
+  let appointments: Appointment[] = await StorageService.loadAppointments();
+  // Unidades (identidade) + config operacional por unidade.
   // Em memória usamos o formato mesclado (identidade + config re-anexada) para
   // manter os handlers e o payload da API compatíveis com o frontend.
-  let destinations: DestinationBranch[] = StorageService.loadDestinations().map(b => ({
-    ...b,
-    ...StorageService.loadBranchConfig(b.id),
-  }));
-  let docks: Dock[] = StorageService.loadDocks();
-  // Reagrega as docas das unidades (fonte: arquivos de config por unidade) para a
+  let destinations: DestinationBranch[] = [];
+  const loadedDestinations = await StorageService.loadDestinations();
+  for (const b of loadedDestinations) {
+    destinations.push({
+      ...b,
+      ...(await StorageService.loadBranchConfig(b.id)),
+    });
+  }
+  let docks: Dock[] = await StorageService.loadDocks();
+  // Reagrega as docas das unidades (fonte: config por unidade) para a
   // lista global em memória, mantendo /api/docks consistente após restart/migração.
-  const bootDocks = destinations.flatMap(b => StorageService.loadBranchConfig(b.id).docks || []);
+  const bootDocks = destinations.flatMap(b => b.docks || []);
   if (bootDocks.length > 0) {
     docks = bootDocks;
   }
-  let timeSlots: string[] = StorageService.loadTimeSlots();
-  let slotSupplierLimits: Record<string, number> = StorageService.loadSlotSupplierLimits();
-  let operatingDays: number[] = StorageService.loadOperatingDays();
-  let users: SystemUser[] = StorageService.loadUsers();
-  let suppliers: RegisteredSupplier[] = StorageService.loadSuppliers();
-  let brandSettings: BrandSettings = StorageService.loadBranding();
+  let timeSlots: string[] = await StorageService.loadTimeSlots();
+  let slotSupplierLimits: Record<string, number> = await StorageService.loadSlotSupplierLimits();
+  let operatingDays: number[] = await StorageService.loadOperatingDays();
+  let users: SystemUser[] = await StorageService.loadUsers();
+  let suppliers: RegisteredSupplier[] = await StorageService.loadSuppliers();
+  let brandSettings: BrandSettings = await StorageService.loadBranding();
 
-  console.log(`[Storage] Armazenamento persistente carregado com sucesso.`);
-  console.log(`[Storage] Diretório de dados: ${StorageService.getDataDir()}`);
+    console.log(`[Storage] Armazenamento PostgreSQL carregado com sucesso.`);
+  console.log(`[Storage] Diretório legado (JSON): ${StorageService.getDataDir()}`);
   console.log(`[Storage] Agendamentos: ${appointments.length} | Destinos: ${destinations.length} | Docas: ${docks.length} | Janelas: ${timeSlots.length} | Usuários: ${users.length} | Fornecedores: ${suppliers.length}`);
   console.log(`[Auth] Session secret source: ${sessionSecretSource} (env | file | memory)`);
 
@@ -56,8 +75,8 @@ async function startServer() {
       timestamp: new Date().toISOString(),
       version: '1.1.0',
       storage: {
-        type: 'Persistent Container File Storage',
-        directory: StorageService.getDataDir(),
+        type: 'PostgreSQL (Drizzle ORM)',
+        legacyDirectory: StorageService.getDataDir(),
         appointmentsCount: appointments.length,
         docksCount: docks.length,
         usersCount: users.length
@@ -66,8 +85,8 @@ async function startServer() {
   });
 
   // Storage Diagnostics & Stats
-  app.get('/api/storage/status', requireSystemRole('ADMIN', 'OPERATOR'), (_req, res) => {
-    res.json(StorageService.getStats());
+  app.get('/api/storage/status', requireSystemRole('ADMIN', 'OPERATOR'), async (_req, res) => {
+    res.json(await StorageService.getStats());
   });
 
   // List & Search Appointments
@@ -130,7 +149,7 @@ async function startServer() {
   });
 
   // Create new appointment (Persistent)
-  app.post('/api/appointments', (req, res) => {
+  app.post('/api/appointments', async (req, res) => {
     const body = req.body || {};
     const session = getSession(req);
     if (session?.type === 'supplier') {
@@ -370,12 +389,12 @@ async function startServer() {
       rescheduleHistory: []
     };
 
-    if (!StorageService.saveAppointment(newAppointment)) {
+    if (!(await StorageService.saveAppointment(newAppointment))) {
       return res.status(503).json({ error: 'Não foi possível persistir o agendamento. Tente novamente.' });
     }
     appointments.unshift(newAppointment);
 
-    // Auto-register/sync supplier in suppliers.json if CNPJ and Name are provided
+    // Auto-register/sync supplier if CNPJ and Name are provided
     if (newAppointment.supplierCnpj && newAppointment.supplierName) {
       const cleanDigits = newAppointment.supplierCnpj.replace(/\D/g, '');
       if (cleanDigits.length >= 11) {
@@ -387,10 +406,10 @@ async function startServer() {
             createdAt: nowIso,
             lastLoginAt: nowIso,
           });
-          StorageService.saveSuppliers(suppliers);
+          await StorageService.saveSuppliers(suppliers);
         } else if (!suppliers[existingIndex].name && newAppointment.supplierName) {
           suppliers[existingIndex].name = newAppointment.supplierName;
-          StorageService.saveSuppliers(suppliers);
+          await StorageService.saveSuppliers(suppliers);
         }
       }
     }
@@ -399,15 +418,15 @@ async function startServer() {
   });
 
   // Admin Reset Data (Zeroing appointments for production go-live)
-  app.post('/api/admin/reset-data', requireSystemRole('ADMIN'), (_req, res) => {
+  app.post('/api/admin/reset-data', requireSystemRole('ADMIN'), async (_req, res) => {
     appointments = [];
-    StorageService.saveAppointments(appointments);
-    StorageService.cleanCnpjFolders();
+    await StorageService.saveAppointments(appointments);
+    await StorageService.cleanAllAppointments();
     res.json({ success: true, message: 'Todos os agendamentos foram removidos do servidor. Base limpa!' });
   });
 
   // Request Reschedule (Persistent)
-  app.put('/api/appointments/:id/reschedule', (req, res) => {
+  app.put('/api/appointments/:id/reschedule', async (req, res) => {
     const { id } = req.params;
     const { newDate, newSlot, reason, requestedBy, additionalInvoices, updatedVolumes, updatedWeightKg } = req.body || {};
     if (!isValidDateOnly(newDate)) {
@@ -534,7 +553,7 @@ async function startServer() {
       rescheduleHistory: [historyEntry, ...(current.rescheduleHistory || [])]
     };
 
-    if (!StorageService.saveAppointment(updated)) {
+    if (!(await StorageService.saveAppointment(updated))) {
       return res.status(503).json({ error: 'Não foi possível persistir a alteração. Tente novamente.' });
     }
     appointments[index] = updated;
@@ -543,7 +562,7 @@ async function startServer() {
   });
 
   // Update Status & Discrepancy & Double Check (Persistent)
-  app.patch('/api/appointments/:id/status', requireSystemRole('ADMIN', 'SUPERVISOR', 'OPERATOR', 'SECURITY_GATE'), (req, res) => {
+  app.patch('/api/appointments/:id/status', requireSystemRole('ADMIN', 'SUPERVISOR', 'OPERATOR', 'SECURITY_GATE'), async (req, res) => {
     const { id } = req.params;
     const { 
       status, 
@@ -665,7 +684,7 @@ async function startServer() {
       ...(discrepancy ? { discrepancy } : {})
     };
 
-    if (!StorageService.saveAppointment(updated)) {
+    if (!(await StorageService.saveAppointment(updated))) {
       return res.status(503).json({ error: 'Não foi possível persistir a alteração. Tente novamente.' });
     }
     appointments[index] = updated;
@@ -679,10 +698,10 @@ async function startServer() {
   });
 
   // Save Slot Supplier Limits
-  app.put('/api/slot-limits', requireSystemRole('ADMIN', 'SUPERVISOR', 'OPERATOR'), (req, res) => {
+  app.put('/api/slot-limits', requireSystemRole('ADMIN', 'SUPERVISOR', 'OPERATOR'), async (req, res) => {
     if (req.body && typeof req.body === 'object') {
       slotSupplierLimits = req.body;
-      StorageService.saveSlotSupplierLimits(slotSupplierLimits);
+      await StorageService.saveSlotSupplierLimits(slotSupplierLimits);
     }
     res.json(slotSupplierLimits);
   });
@@ -730,7 +749,7 @@ async function startServer() {
   });
 
   // Save / Update Destinations List (Persistent)
-  app.put('/api/destinations', requireSystemRole('ADMIN', 'SUPERVISOR', 'OPERATOR'), (req, res) => {
+  app.put('/api/destinations', requireSystemRole('ADMIN', 'SUPERVISOR', 'OPERATOR'), async (req, res) => {
     try {
       const updated = req.body;
       if (!Array.isArray(updated)) {
@@ -746,7 +765,7 @@ async function startServer() {
           || Array.isArray(branch.blockedDates)
           || Array.isArray(branch.docks);
         if (hasConfig) {
-          StorageService.saveBranchConfig({
+          await StorageService.saveBranchConfig({
             branchId: branch.id,
             timeSlots: branch.timeSlots,
             slotSupplierLimits: branch.slotSupplierLimits,
@@ -756,25 +775,24 @@ async function startServer() {
           });
         }
       }
-      // Remove arquivos de config de unidades excluídas
+      // Remove config de unidades excluídas
       const incomingIds = new Set(updated.map((b: any) => b?.id).filter(Boolean));
       for (const existing of destinations) {
         if (!incomingIds.has(existing.id)) {
-          StorageService.deleteBranchConfig(existing.id);
+          await StorageService.deleteBranchConfig(existing.id);
         }
       }
       destinations = updated;
-      const ok = StorageService.saveDestinations(destinations);
+      const ok = await StorageService.saveDestinations(destinations);
       if (!ok) {
         return res.status(500).json({ error: 'Falha ao salvar lojas no armazenamento do servidor.' });
       }
 
       // Sincroniza a lista agregada de docas no servidor com as docas configuradas nas lojas
-      // (config operacional descentralizada: docas vivem em destinations/<id>.config.json)
-      const aggregatedDocks = destinations.flatMap(d => StorageService.loadBranchConfig(d.id).docks || []);
+      const aggregatedDocks = destinations.flatMap(d => d.docks || []);
       if (aggregatedDocks.length > 0) {
         docks = aggregatedDocks;
-        StorageService.saveDocks(docks);
+        await StorageService.saveDocks(docks);
       }
 
       res.json(destinations);
@@ -790,11 +808,11 @@ async function startServer() {
   });
 
   // Save / Update Docks List (Persistent)
-  app.put('/api/docks', requireSystemRole('ADMIN', 'SUPERVISOR', 'OPERATOR'), (req, res) => {
+  app.put('/api/docks', requireSystemRole('ADMIN', 'SUPERVISOR', 'OPERATOR'), async (req, res) => {
     const updated = req.body;
     if (Array.isArray(updated)) {
       docks = updated;
-      StorageService.saveDocks(docks);
+      await StorageService.saveDocks(docks);
     }
     res.json(docks);
   });
@@ -805,11 +823,11 @@ async function startServer() {
   });
 
   // Save / Update Time Slots List (Persistent)
-  app.put('/api/timeslots', requireSystemRole('ADMIN', 'SUPERVISOR', 'OPERATOR'), (req, res) => {
+  app.put('/api/timeslots', requireSystemRole('ADMIN', 'SUPERVISOR', 'OPERATOR'), async (req, res) => {
     const updated = req.body;
     if (Array.isArray(updated)) {
       timeSlots = updated;
-      StorageService.saveTimeSlots(timeSlots);
+      await StorageService.saveTimeSlots(timeSlots);
     }
     res.json(timeSlots);
   });
@@ -820,11 +838,11 @@ async function startServer() {
   });
 
   // Save / Update Operating Days (Persistent)
-  app.put('/api/operating-days', requireSystemRole('ADMIN', 'SUPERVISOR', 'OPERATOR'), (req, res) => {
+  app.put('/api/operating-days', requireSystemRole('ADMIN', 'SUPERVISOR', 'OPERATOR'), async (req, res) => {
     const updated = req.body;
     if (Array.isArray(updated)) {
       operatingDays = updated;
-      StorageService.saveOperatingDays(operatingDays);
+      await StorageService.saveOperatingDays(operatingDays);
     }
     res.json(operatingDays);
   });
@@ -870,7 +888,7 @@ async function startServer() {
   }
 
   // Clear all appointments (start clean)
-  app.delete('/api/appointments', requireSystemRole('ADMIN'), (req, res) => {
+  app.delete('/api/appointments', requireSystemRole('ADMIN'), async (req, res) => {
     const pass = req.body?.password || req.body?.adminPassword || req.headers['x-admin-password'];
     const session = getSession(req);
     const check = verifyAdminPassword(
@@ -883,13 +901,13 @@ async function startServer() {
     }
 
     appointments = [];
-    StorageService.saveAppointments(appointments);
-    StorageService.cleanCnpjFolders();
+    await StorageService.saveAppointments(appointments);
+    await StorageService.cleanAllAppointments();
     res.json({ message: 'Todos os agendamentos foram limpos e salvos.', appointmentsCount: 0 });
   });
 
   // Reset appointments to clean state
-  app.post('/api/appointments/reset', requireSystemRole('ADMIN'), (req, res) => {
+  app.post('/api/appointments/reset', requireSystemRole('ADMIN'), async (req, res) => {
     const pass = req.body?.password || req.body?.adminPassword || req.headers['x-admin-password'];
     const session = getSession(req);
     const check = verifyAdminPassword(
@@ -902,13 +920,13 @@ async function startServer() {
     }
 
     appointments = [];
-    StorageService.saveAppointments(appointments);
-    StorageService.cleanCnpjFolders();
+    await StorageService.saveAppointments(appointments);
+    await StorageService.cleanAllAppointments();
     res.json({ message: 'Base de dados salva no servidor com sucesso.', appointmentsCount: 0, docksCount: docks.length });
   });
 
   // Factory reset (Appointments + Suppliers + Reset Docks to defaults)
-  app.post('/api/storage/factory-reset', requireSystemRole('ADMIN'), (req, res) => {
+  app.post('/api/storage/factory-reset', requireSystemRole('ADMIN'), async (req, res) => {
     const pass = req.body?.password || req.body?.adminPassword || req.headers['x-admin-password'];
     const session = getSession(req);
     const check = verifyAdminPassword(
@@ -922,11 +940,11 @@ async function startServer() {
 
     appointments = [];
     suppliers = [];
-    docks = StorageService.loadDocks();
-    timeSlots = StorageService.loadTimeSlots();
-    StorageService.saveAppointments(appointments);
-    StorageService.saveSuppliers(suppliers);
-    StorageService.cleanCnpjFolders();
+    docks = await StorageService.loadDocks();
+    timeSlots = await StorageService.loadTimeSlots();
+    await StorageService.saveAppointments(appointments);
+    await StorageService.saveSuppliers(suppliers);
+    await StorageService.cleanAllAppointments();
     res.json({ message: 'Base zerada com sucesso (agendamentos e fornecedores removidos).', appointmentsCount: 0, suppliersCount: 0 });
   });
 
@@ -954,14 +972,14 @@ async function startServer() {
     next();
   });
 
-  app.put('/api/settings/branding', requireSystemRole('ADMIN'), (req, res) => {
+  app.put('/api/settings/branding', requireSystemRole('ADMIN'), async (req, res) => {
     const newSettings = req.body as BrandSettings;
     if (newSettings && typeof newSettings === 'object') {
       brandSettings = {
         ...brandSettings,
         ...newSettings
       };
-      StorageService.saveBranding(brandSettings);
+      await StorageService.saveBranding(brandSettings);
     }
     res.json(brandSettings);
   });
@@ -1002,7 +1020,7 @@ async function startServer() {
   });
 
   // Reset all system users (Clean slate for setup)
-  app.post('/api/auth/reset-users', requireSystemRole('ADMIN'), (req, res) => {
+  app.post('/api/auth/reset-users', requireSystemRole('ADMIN'), async (req, res) => {
     const pass = req.body?.password || req.body?.adminPassword || req.headers['x-admin-password'];
     const session = getSession(req);
     const check = verifyAdminPassword(
@@ -1015,12 +1033,12 @@ async function startServer() {
     }
 
     users = [];
-    StorageService.saveUsers(users);
+    await StorageService.saveUsers(users);
     res.json({ message: 'Todos os usuários foram removidos com sucesso. O sistema retornou ao estado de configuração inicial.' });
   });
 
   // Setup Initial Admin (When database has 0 users)
-  app.post('/api/auth/setup-admin', (req, res) => {
+  app.post('/api/auth/setup-admin', async (req, res) => {
     if (users.length > 0) {
       return res.status(400).json({ error: 'O sistema já possui usuários cadastrados. Utilize o painel de login.' });
     }
@@ -1046,7 +1064,7 @@ async function startServer() {
     };
 
     users.push(newAdmin);
-    StorageService.saveUsers(users);
+    await StorageService.saveUsers(users);
     const token = setSessionCookie(res, { type: 'system', userId: newAdmin.id, username: newAdmin.username, role: newAdmin.role }, req);
 
     const { password: _, pin: __, ...sanitized } = newAdmin;
@@ -1084,7 +1102,7 @@ async function startServer() {
   });
 
   // User Login Authentication
-  app.post('/api/auth/login', (req, res) => {
+  app.post('/api/auth/login', async (req, res) => {
     const { username, login, password, pin } = req.body || {};
     const inputLogin = (username || login || '').trim().toLowerCase();
     const inputSecret = (password || pin || '').trim();
@@ -1135,7 +1153,7 @@ async function startServer() {
     if (matchesPassword && needsSecretMigration(user.password)) user.password = hashSecret(inputSecret);
     if (matchesPin && needsSecretMigration(user.pin)) user.pin = hashSecret(inputSecret);
     user.lastLogin = new Date().toISOString();
-    StorageService.saveUsers(users);
+    await StorageService.saveUsers(users);
     const token = setSessionCookie(res, { type: 'system', userId: user.id, username: user.username, role: user.role }, req);
 
     const { password: _, pin: __, ...sanitized } = user;
@@ -1158,7 +1176,7 @@ async function startServer() {
   });
 
   // Create new user / operator (Persistent)
-  app.post('/api/users', requireSystemRole('ADMIN'), (req, res) => {
+  app.post('/api/users', requireSystemRole('ADMIN'), async (req, res) => {
     const { name, username, email, password, pin, role, department } = req.body || {};
 
     if (!name || !username || (!password && !pin)) {
@@ -1185,14 +1203,14 @@ async function startServer() {
     };
 
     users.push(newUser);
-    StorageService.saveUsers(users);
+    await StorageService.saveUsers(users);
 
     const { password: _, pin: __, ...sanitized } = newUser;
     res.status(201).json(sanitized);
   });
 
   // Update user (Persistent)
-  app.put('/api/users/:id', requireSystemRole('ADMIN'), (req, res) => {
+  app.put('/api/users/:id', requireSystemRole('ADMIN'), async (req, res) => {
     const userIndex = users.findIndex(u => u.id === req.params.id);
     if (userIndex === -1) {
       return res.status(404).json({ error: 'Usuário não encontrado.' });
@@ -1214,14 +1232,14 @@ async function startServer() {
     };
 
     users[userIndex] = updated;
-    StorageService.saveUsers(users);
+    await StorageService.saveUsers(users);
 
     const { password: _, pin: __, ...sanitized } = updated;
     res.json(sanitized);
   });
 
   // Delete user (Persistent)
-  app.delete('/api/users/:id', requireSystemRole('ADMIN'), (req, res) => {
+  app.delete('/api/users/:id', requireSystemRole('ADMIN'), async (req, res) => {
     const userIndex = users.findIndex(u => u.id === req.params.id);
     if (userIndex === -1) {
       return res.status(404).json({ error: 'Usuário não encontrado.' });
@@ -1236,7 +1254,7 @@ async function startServer() {
     }
 
     users.splice(userIndex, 1);
-    StorageService.saveUsers(users);
+    await StorageService.saveUsers(users);
     res.json({ message: 'Usuário excluído com sucesso do servidor.' });
   });
 
@@ -1290,7 +1308,7 @@ async function startServer() {
   });
 
   // Supplier Login & Auto-Registration (Persistent in ./data/suppliers.json)
-  app.post('/api/suppliers/auth', (req, res) => {
+  app.post('/api/suppliers/auth', async (req, res) => {
     const { cnpj, name, tradeName, contactEmail, contactPhone } = req.body || {};
 
     if (!cnpj) {
@@ -1335,7 +1353,7 @@ async function startServer() {
       suppliers.push(supplierRecord);
     }
 
-    StorageService.saveSuppliers(suppliers);
+    await StorageService.saveSuppliers(suppliers);
     const token = setSessionCookie(res, { type: 'supplier', supplierCnpj: supplierRecord.cnpj, supplierName: supplierRecord.name }, req);
 
     const apptCount = appointments.filter(a => a.supplierCnpj.replace(/\D/g, '') === cleanDigits).length;
@@ -1365,23 +1383,33 @@ async function startServer() {
   });
 
   // Delete all suppliers (wipe suppliers list)
-  app.delete('/api/suppliers', requireSystemRole('ADMIN'), (_req, res) => {
+  app.delete('/api/suppliers', requireSystemRole('ADMIN'), async (_req, res) => {
     suppliers = [];
-    StorageService.saveSuppliers(suppliers);
+    await StorageService.saveSuppliers(suppliers);
     res.json({ message: 'Todos os fornecedores foram removidos do servidor.', suppliersCount: 0 });
   });
 
   // Delete a specific supplier by CNPJ
-  app.delete('/api/suppliers/:cnpj', requireSystemRole('ADMIN'), (req, res) => {
+  app.delete('/api/suppliers/:cnpj', requireSystemRole('ADMIN'), async (req, res) => {
     const cleanDigits = (req.params.cnpj || '').replace(/\D/g, '');
     const beforeCount = suppliers.length;
     suppliers = suppliers.filter(s => s.cnpj.replace(/\D/g, '') !== cleanDigits);
-    StorageService.saveSuppliers(suppliers);
+    await StorageService.saveSuppliers(suppliers);
     res.json({
       message: 'Fornecedor removido com sucesso.',
       removed: beforeCount > suppliers.length,
       suppliersCount: suppliers.length
     });
+  });
+
+  // Error handler global — DEVE vir depois de todas as rotas para capturar
+  // rejections dos handlers async (express só entrega erros a middleware
+  // registrado após o ponto da falha).
+  app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+    console.error('[Server] Erro não tratado em handler async:', err);
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Erro interno do servidor.' });
+    }
   });
 
   // Serve Vite in dev or static files in production

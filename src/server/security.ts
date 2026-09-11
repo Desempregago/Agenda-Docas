@@ -63,8 +63,8 @@ function base64UrlEncode(value: string): string {
   return Buffer.from(value, 'utf8').toString('base64url');
 }
 
-function base64UrlDecode(value: string): string {
-  return Buffer.from(value, 'base64url').toString('utf8');
+function base64UrlDecode(value: string): Buffer {
+  return Buffer.from(value, 'base64url');
 }
 
 function signature(value: string): string {
@@ -87,7 +87,7 @@ function verifyToken(token: string | undefined): SessionPayload | null {
   if (provided.length !== expected.length || !timingSafeEqual(provided, expected)) return null;
 
   try {
-    const payload = JSON.parse(base64UrlDecode(encoded)) as SessionPayload;
+    const payload = JSON.parse(Buffer.from(encoded, 'base64url').toString('utf8')) as SessionPayload;
     if (!payload.exp || payload.exp <= Math.floor(Date.now() / 1000)) return null;
     return payload;
   } catch {
@@ -134,33 +134,37 @@ export function clearSessionCookie(res: Response, req?: Request): void {
 
 export function requireAuth(): RequestHandler {
   return (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const users = StorageService.loadUsers();
-      if (users.length === 0) {
-        return next();
-      }
-    } catch (_) {}
+    (async () => {
+      try {
+        const users = await StorageService.loadUsers();
+        if (users.length === 0) {
+          return next();
+        }
+      } catch (_) {}
 
-    if (!getSession(req)) return res.status(401).json({ error: 'Autenticação necessária. Faça login para continuar.' });
-    next();
+      if (!getSession(req)) return res.status(401).json({ error: 'Autenticação necessária. Faça login para continuar.' });
+      next();
+    })().catch(() => res.status(500).json({ error: 'Erro interno de autenticação.' }));
   };
 }
 
 export function requireSystemRole(...roles: SystemUserRole[]): RequestHandler {
   return (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const users = StorageService.loadUsers();
-      if (users.length === 0) {
-        return next();
-      }
-    } catch (_) {}
+    (async () => {
+      try {
+        const users = await StorageService.loadUsers();
+        if (users.length === 0) {
+          return next();
+        }
+      } catch (_) {}
 
-    const session = getSession(req);
-    if (!session) return res.status(401).json({ error: 'Autenticação necessária. Por favor, acesse com seu login de Administrador ou Operador.' });
-    if (session.type !== 'system' || !roles.includes(session.role)) {
-      return res.status(403).json({ error: 'Você não possui permissão para esta operação operacional.' });
-    }
-    next();
+      const session = getSession(req);
+      if (!session) return res.status(401).json({ error: 'Autenticação necessária. Por favor, acesse com seu login de Administrador ou Operador.' });
+      if (session.type !== 'system' || !roles.includes(session.role)) {
+        return res.status(403).json({ error: 'Você não possui permissão para esta operação operacional.' });
+      }
+      next();
+    })().catch(() => res.status(500).json({ error: 'Erro interno de autorização.' }));
   };
 }
 
