@@ -322,6 +322,31 @@ async function startServer() {
       return res.status(400).json({ error: 'A chave de acesso NF-e informada é inválida (deve conter 44 dígitos numéricos).' });
     }
 
+    // Deduplicação: a mesma chave repetida na submissão conta uma vez só.
+    parsedNfeKeys = Array.from(new Set(parsedNfeKeys));
+
+    // Chave de acesso NF-e é única por agendamento ativo: impede reutilizar chaves
+    // já vinculadas a outro agendamento para fabricar agendamentos/encaixes extras
+    // sem registrar as notas fiscais reais. Chaves de agendamentos CANCELADO/NO_SHOW
+    // voltam a ficar disponíveis (a entrega não ocorreu).
+    if (parsedNfeKeys.length > 0) {
+      const duplicateConflicts = appointments.filter(
+        a =>
+          a.status !== 'CANCELADO' &&
+          a.status !== 'NO_SHOW' &&
+          (Array.isArray(a.nfeAccessKeys) || typeof a.nfeAccessKey === 'string') &&
+          parsedNfeKeys.some(k => a.nfeAccessKeys?.includes(k) || a.nfeAccessKey === k)
+      );
+      if (duplicateConflicts.length > 0) {
+        const conflict = duplicateConflicts[0];
+        const usedKey = parsedNfeKeys.find(k => conflict.nfeAccessKeys?.includes(k) || conflict.nfeAccessKey === k) || '';
+        const keyPreview = usedKey.length > 8 ? `•••${usedKey.slice(-8)}` : usedKey;
+        return res.status(409).json({
+          error: `A Chave de Acesso NF-e (${keyPreview}) já está vinculada ao agendamento ${conflict.protocol}${conflict.supplierName ? ` — ${conflict.supplierName}` : ''}. Cada chave de 44 dígitos pode ser utilizada em apenas um agendamento ativo. Se esta entrega foi cancelada ou não compareceu, aguarde o status CANCELADO/NO_SHOW ou contate a equipe de recebimento.`
+        });
+      }
+    }
+
     const rawInvoiceStr = String(body.invoiceNumber || '').trim();
     // Parse multiple invoice numbers separated by commas, spaces, or slashes, or derive from NFe access keys
     let parsedInvoiceNumbers = rawInvoiceStr
