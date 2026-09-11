@@ -121,6 +121,7 @@ export interface Appointment {
   status: AppointmentStatus;
   notes?: string;
   isWalkIn?: boolean; // Indicação de Encaixe na Portaria / Veículo Não Agendado
+  walkInOverCapacity?: boolean; // Encaixe que excedeu deliberadamente o limite diário da doca (registrado para KPIs)
   isPreApprovedContract?: boolean; // Indicação de Janela Pré-Aprovada / Contrato Fixo Recorrente
   
   createdAt: string;

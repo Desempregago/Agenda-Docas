@@ -809,7 +809,7 @@ export const WalkInModal: React.FC<WalkInModalProps> = ({
                 className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-amber-500"
               />
               <p className="text-[10px] text-slate-500 mt-1">
-                Usado para o controle de capacidade diária das docas.
+                Usado para o controle de capacidade diária das docas. Encaixes podem exceder o limite do dia — o excesso fica registrado no protocolo (KPI).
               </p>
             </div>
 
