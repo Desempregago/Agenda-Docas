@@ -37,9 +37,12 @@ function buildPoolConfig(): pg.PoolConfig {
     );
   }
 
-  // SSL automático para hosts gerenciados (Neon etc.); off para localhost.
+  // SSL automático apenas para conexões TCP a hosts remotos (Neon etc.).
+  // Conexões por Unix socket (host vazio na URL, ?host=/caminho) NÃO usam SSL.
   const isLocal = ['localhost', '127.0.0.1', '::1'].includes(parsed.hostname);
-  const ssl: boolean | { rejectUnauthorized: boolean } = isLocal ? false : { rejectUnauthorized: false };
+  const isSocket = parsed.hostname.length === 0;
+  const ssl: boolean | { rejectUnauthorized: boolean } =
+    isSocket || isLocal ? false : { rejectUnauthorized: false };
 
   return {
     connectionString,

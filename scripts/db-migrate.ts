@@ -19,7 +19,8 @@ async function main() {
   try {
     const url = new URL(connectionString);
     const isLocal = ['localhost', '127.0.0.1', '::1'].includes(url.hostname);
-    if (!isLocal) ssl = { rejectUnauthorized: false };
+    const isSocket = url.hostname.length === 0; // Unix socket (ex: postgresql://:@/agendamento?host=/run/postgresql)
+    if (!isLocal && !isSocket) ssl = { rejectUnauthorized: false };
   } catch (_) {}
 
   const pool = new pg.Pool({ connectionString, ssl });
