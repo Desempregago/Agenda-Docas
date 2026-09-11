@@ -20,17 +20,26 @@ function buildPoolConfig(): pg.PoolConfig {
     );
   }
 
-  let ssl: boolean | { rejectUnauthorized: boolean } = false;
+  // Valida ANTES de chegar ao driver — o erro cru do pg ("Invalid URL") não diz o que corrigir.
+  let parsed: URL;
   try {
-    const url = new URL(connectionString);
-    const isLocal = ['localhost', '127.0.0.1', '::1'].includes(url.hostname);
-    if (!isLocal) {
-      // Neon e outros gerenciados exigem SSL.
-      ssl = { rejectUnauthorized: false };
-    }
+    parsed = new URL(connectionString);
   } catch {
-    // Connection string inválida será reportada pelo próprio driver.
+    throw new Error(
+      '[DB] DATABASE_URL inválida (não é uma URL). Formato esperado: postgresql://usuario:senha@host:5432/banco. ' +
+        'Verifique: (1) começa com postgresql:// ; (2) senha sem caracteres especiais não codificados (@ : / # ? — codifique como %40 %3A %2F %23) ' +
+        'ou troque a senha por uma alfanumérica; (3) no .env, nada de comentários na mesma linha da variável.'
+    );
   }
+  if (parsed.protocol !== 'postgresql:' && parsed.protocol !== 'postgres:') {
+    throw new Error(
+      `[DB] DATABASE_URL com protocolo inesperado "${parsed.protocol}" — deve ser postgresql:// (host detectado: ${parsed.hostname}).`
+    );
+  }
+
+  // SSL automático para hosts gerenciados (Neon etc.); off para localhost.
+  const isLocal = ['localhost', '127.0.0.1', '::1'].includes(parsed.hostname);
+  const ssl: boolean | { rejectUnauthorized: boolean } = isLocal ? false : { rejectUnauthorized: false };
 
   return {
     connectionString,
