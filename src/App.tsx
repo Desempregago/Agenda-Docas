@@ -89,24 +89,48 @@ export default function App() {
 
   const readIdsRef = useRef<Set<string>>(readIds);
   const dismissedIdsRef = useRef<Set<string>>(dismissedIds);
+  const lastNotifPayloadRef = useRef<string>('');
   useEffect(() => { readIdsRef.current = readIds; }, [readIds]);
   useEffect(() => { dismissedIdsRef.current = dismissedIds; }, [dismissedIds]);
 
   // Busca o feed de notificações no servidor. Chamada no login, após ações que
   // geram notificações e periodicamente para todos os dispositivos conectados.
   // (O useEffect de polling fica logo após a definição de isLoggedIn.)
+  // Guarda de mudança: se o feed veio idêntico, NÃO atualiza o estado — evita
+  // re-renderizar a árvore inteira (painéis/modais abertos) a cada 10s.
   const refreshNotifications = async () => {
     try {
       const res = await authFetch('/api/notifications');
       if (!res.ok) return;
       const data: ServerNotification[] = await res.json();
-      setNotifications(
-        data
-          .filter(n => !dismissedIdsRef.current.has(n.id))
-          .map(n => ({ ...n, read: readIdsRef.current.has(n.id) }))
-      );
+      const visible = data.filter(n => !dismissedIdsRef.current.has(n.id));
+      const payloadKey = JSON.stringify(visible.map(n => `${n.id}:${readIdsRef.current.has(n.id)}`));
+      if (payloadKey === lastNotifPayloadRef.current) return;
+      lastNotifPayloadRef.current = payloadKey;
+      setNotifications(visible.map(n => ({ ...n, read: readIdsRef.current.has(n.id) })));
     } catch {
       // silencioso — o polling tenta novamente
+    }
+  };
+
+  const lastApptsSignatureRef = useRef<string>('');
+
+  // Sincronização leve da lista de agendamentos (sem girar o spinner global):
+  // status definidos por OUTRAS sessões (fornecedor sinaliza "Em Trânsito",
+  // portaria registra "No Pátio", aprovação do supervisor...) aparecem em
+  // todos os painéis sem refresh da página. Guarda de mudança por id+updatedAt
+  // evita atualizações de estado (e re-renders) quando nada mudou.
+  const refreshAppointments = async () => {
+    try {
+      const res = await authFetch('/api/appointments');
+      if (!res.ok) return;
+      const data: Appointment[] = await res.json();
+      const signature = data.map(a => `${a.id}:${a.updatedAt}`).join('|');
+      if (signature === lastApptsSignatureRef.current) return;
+      lastApptsSignatureRef.current = signature;
+      setAppointments(data);
+    } catch {
+      // silencioso — o próximo ciclo tenta de novo
     }
   };
 
@@ -539,15 +563,30 @@ export default function App() {
 
   const isLoggedIn = userRole === 'ADMIN' || Boolean(currentSystemUser) || Boolean(currentSupplierSession);
 
-  // Polling: painel de notificações sempre atualizado, sem refresh da página.
+  // Polling: painel de notificações e lista de agendamentos sempre atualizados,
+  // sem refresh da página — em qualquer dispositivo logado.
   useEffect(() => {
     if (!isLoggedIn) {
       setNotifications([]);
       return;
     }
     refreshNotifications();
-    const interval = setInterval(refreshNotifications, 10_000);
-    return () => clearInterval(interval);
+    refreshAppointments();
+    const tick = () => {
+      refreshNotifications();
+      refreshAppointments();
+    };
+    const interval = setInterval(tick, 10_000);
+    // Sincronização imediata ao voltar para a aba (browsers descartam/congelam
+    // abas em segundo plano — tablet da guarita, celular do fornecedor).
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') tick();
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
   }, [isLoggedIn]);
 
   // Filtragem de notificações exibidas:

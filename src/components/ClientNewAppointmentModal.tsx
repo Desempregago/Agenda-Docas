@@ -46,33 +46,69 @@ export const ClientNewAppointmentModal: React.FC<ClientNewAppointmentModalProps>
   const activeDestinations = destinations.filter(d => d.active);
   const defaultDestination = activeDestinations.find(d => d.isDefault) || activeDestinations[0];
 
-  const [formData, setFormData] = useState({
-    destinationBranchId: defaultDestination?.id || '',
-    purchaseOrder: '',
-    invoiceNumber: '',
-    invoiceSeries: '1',
-    invoiceTotalValue: '' as string | number, // Valor Total das NFs (R$)
-    supplierName: currentSupplierSession?.name || '',
-    supplierCnpj: currentSupplierSession?.cnpj || '',
-    carrierName: '',
-    driverName: '',
-    driverCpf: '',
-    driverPhone: '',
-    vehiclePlate: '',
-    vehicleType: 'TRUCK_34' as const,
-    cargoType: 'PALETIZADA' as const,
-    weightKg: '' as number | '',
-    totalVolumes: '' as number | '',
-    scheduledDate: minDateStr,
-    timeSlot: availableSlots[0] || '08:00 - 09:30',
-    isPreApprovedContract: false,
-    notes: '',
-  });
+  // -----------------------------------------------------------
+  // Rascunho persistente (sessionStorage): formulários longos (motorista,
+  // NFs, volumes) não se perdem se a aba for recarregada pelo navegador
+  // (descarte de aba em segundo plano, atualização de front via polling,
+  // etc.). O rascunho é restaurado no remount e limpo apenas no envio.
+  // -----------------------------------------------------------
+  const DRAFT_KEY = 'agendadocas_newappt_draft';
+  const readDraft = (): { formData?: any; nfeAccessKeys?: string[]; isInvoiceManualEdit?: boolean } | null => {
+    try {
+      const raw = sessionStorage.getItem(DRAFT_KEY);
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  };
+  const draft = readDraft();
+
+  const [formData, setFormData] = useState(() => ({
+    destinationBranchId: draft?.formData?.destinationBranchId || defaultDestination?.id || '',
+    purchaseOrder: draft?.formData?.purchaseOrder || '',
+    invoiceNumber: draft?.formData?.invoiceNumber || '',
+    invoiceSeries: draft?.formData?.invoiceSeries || '1',
+    invoiceTotalValue: draft?.formData?.invoiceTotalValue ?? ('' as string | number),
+    supplierName: draft?.formData?.supplierName ?? (currentSupplierSession?.name || ''),
+    supplierCnpj: draft?.formData?.supplierCnpj ?? (currentSupplierSession?.cnpj || ''),
+    carrierName: draft?.formData?.carrierName || '',
+    driverName: draft?.formData?.driverName || '',
+    driverCpf: draft?.formData?.driverCpf || '',
+    driverPhone: draft?.formData?.driverPhone || '',
+    vehiclePlate: draft?.formData?.vehiclePlate || '',
+    vehicleType: draft?.formData?.vehicleType || 'TRUCK_34',
+    cargoType: draft?.formData?.cargoType || 'PALETIZADA',
+    weightKg: draft?.formData?.weightKg ?? ('' as number | ''),
+    totalVolumes: draft?.formData?.totalVolumes ?? ('' as number | ''),
+    scheduledDate: draft?.formData?.scheduledDate || minDateStr,
+    timeSlot: draft?.formData?.timeSlot || availableSlots[0] || '08:00 - 09:30',
+    isPreApprovedContract: draft?.formData?.isPreApprovedContract || false,
+    notes: draft?.formData?.notes || '',
+  }));
 
   // Lista de Chaves de Acesso da NF-e (permitindo até 5 ou mais chaves de 44 dígitos)
-  const [nfeAccessKeys, setNfeAccessKeys] = useState<string[]>(['']);
+  const [nfeAccessKeys, setNfeAccessKeys] = useState<string[]>(() =>
+    Array.isArray(draft?.nfeAccessKeys) && draft.nfeAccessKeys.length > 0 ? draft.nfeAccessKeys : ['']
+  );
   const nfeInputRefs = useRef<(HTMLInputElement | null)[]>([]);
-  const [isInvoiceManualEdit, setIsInvoiceManualEdit] = useState<boolean>(false);
+  const [isInvoiceManualEdit, setIsInvoiceManualEdit] = useState<boolean>(() => Boolean(draft?.isInvoiceManualEdit));
+
+  // Persiste o rascunho a cada alteração relevante
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(DRAFT_KEY, JSON.stringify({ formData, nfeAccessKeys, isInvoiceManualEdit }));
+    } catch {
+      // storage cheio/indisponível — segue sem persistir
+    }
+  }, [formData, nfeAccessKeys, isInvoiceManualEdit]);
+
+  const clearDraft = () => {
+    try {
+      sessionStorage.removeItem(DRAFT_KEY);
+    } catch {
+      // noop
+    }
+  };
 
   // Estados para extração e identificação de CNPJ e fornecedor
   const [multipleCnpjsFromKeys, setMultipleCnpjsFromKeys] = useState<string[]>([]);
@@ -466,6 +502,7 @@ export const ClientNewAppointmentModal: React.FC<ClientNewAppointmentModalProps>
       }
 
       const data: Appointment = await res.json();
+      clearDraft(); // envio concluído — próximo formulário abre limpo
       setCreatedAppointment(data);
       onSuccess(data);
     } catch (err: any) {

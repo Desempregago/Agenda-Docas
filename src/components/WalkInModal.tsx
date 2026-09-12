@@ -22,30 +22,68 @@ export const WalkInModal: React.FC<WalkInModalProps> = ({
   const activeDestinations = destinations.filter(d => d.active);
   const defaultDestination = activeDestinations.find(d => d.isDefault) || activeDestinations[0];
 
-  const [formData, setFormData] = useState({
-    destinationBranchId: defaultDestination?.id || '',
-    purchaseOrder: '',
-    invoiceNumber: '',
-    invoiceDueDate: '',
-    invoiceSeries: '1',
-    invoiceTotalValue: '' as string | number,
-    supplierName: '',
-    supplierCnpj: '',
-    carrierName: '',
-    driverName: '',
-    driverCpf: '',
-    driverPhone: '',
-    vehiclePlate: '',
-    vehicleType: 'TRUCK_34' as const,
-    cargoType: 'PALETIZADA' as const,
-    weightKg: '' as number | '',
-    totalVolumes: '' as number | '',
-    notes: 'REGISTRO DE PORTARIA - ENCAIXE DE VEÍCULO NÃO AGENDADO',
-  });
+  // -----------------------------------------------------------
+  // Rascunho persistente (sessionStorage): o painel de encaixe fica
+  // aberto enquanto a equipe digita dados do motorista/NFs. Se o navegador
+  // recarregar a página (descarte de aba em segundo plano, atualização do
+  // front pelo polling de notificações, etc.), o que já foi digitado NÃO
+  // é perdido — o rascunho é restaurado no remount e limpo só no envio.
+  // -----------------------------------------------------------
+  const DRAFT_KEY = 'agendadocas_walkin_draft';
 
-  const [nfeAccessKeys, setNfeAccessKeys] = useState<string[]>(['']);
+  const readDraft = (): { formData?: any; nfeAccessKeys?: string[]; isInvoiceManualEdit?: boolean } | null => {
+    try {
+      const raw = sessionStorage.getItem(DRAFT_KEY);
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  };
+  const draft = readDraft();
+
+  const [formData, setFormData] = useState(() => ({
+    destinationBranchId: draft?.formData?.destinationBranchId || defaultDestination?.id || '',
+    purchaseOrder: draft?.formData?.purchaseOrder || '',
+    invoiceNumber: draft?.formData?.invoiceNumber || '',
+    invoiceDueDate: draft?.formData?.invoiceDueDate || '',
+    invoiceSeries: draft?.formData?.invoiceSeries || '1',
+    invoiceTotalValue: draft?.formData?.invoiceTotalValue ?? ('' as string | number),
+    supplierName: draft?.formData?.supplierName || '',
+    supplierCnpj: draft?.formData?.supplierCnpj || '',
+    carrierName: draft?.formData?.carrierName || '',
+    driverName: draft?.formData?.driverName || '',
+    driverCpf: draft?.formData?.driverCpf || '',
+    driverPhone: draft?.formData?.driverPhone || '',
+    vehiclePlate: draft?.formData?.vehiclePlate || '',
+    vehicleType: draft?.formData?.vehicleType || 'TRUCK_34',
+    cargoType: draft?.formData?.cargoType || 'PALETIZADA',
+    weightKg: draft?.formData?.weightKg ?? ('' as number | ''),
+    totalVolumes: draft?.formData?.totalVolumes ?? ('' as number | ''),
+    notes: draft?.formData?.notes ?? 'REGISTRO DE PORTARIA - ENCAIXE DE VEÍCULO NÃO AGENDADO',
+  }));
+
+  const [nfeAccessKeys, setNfeAccessKeys] = useState<string[]>(() =>
+    Array.isArray(draft?.nfeAccessKeys) && draft.nfeAccessKeys.length > 0 ? draft.nfeAccessKeys : ['']
+  );
   const nfeInputRefs = useRef<(HTMLInputElement | null)[]>([]);
-  const [isInvoiceManualEdit, setIsInvoiceManualEdit] = useState<boolean>(false);
+  const [isInvoiceManualEdit, setIsInvoiceManualEdit] = useState<boolean>(() => Boolean(draft?.isInvoiceManualEdit));
+
+  // Persiste o rascunho a cada alteração relevante
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(DRAFT_KEY, JSON.stringify({ formData, nfeAccessKeys, isInvoiceManualEdit }));
+    } catch {
+      // storage cheio/indisponível — segue sem persistir
+    }
+  }, [formData, nfeAccessKeys, isInvoiceManualEdit]);
+
+  const clearDraft = () => {
+    try {
+      sessionStorage.removeItem(DRAFT_KEY);
+    } catch {
+      // noop
+    }
+  };
 
   // CNPJs extraídos das chaves bipadas
   const [multipleCnpjsFromKeys, setMultipleCnpjsFromKeys] = useState<string[]>([]);
@@ -318,6 +356,7 @@ export const WalkInModal: React.FC<WalkInModalProps> = ({
       }
 
       const created: Appointment = await res.json();
+      clearDraft(); // registro concluído — próximo modal abre limpo
       setSavedSuccess(true);
       setTimeout(() => {
         onSuccess(created);
