@@ -120,10 +120,38 @@ export const appSettings = pgTable('app_settings', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
+/**
+ * Notificações operacionais — criadas no SERVIDOR (POST /api/appointments,
+ * PATCH de status, reschedule, encaixes) e compartilhadas entre todos os
+ * dispositivos da equipe via GET /api/notifications. Sem isto, cada navegador
+ * gera as próprias notificações localmente e ninguém vê o trabalho do outro.
+ */
+export const notifications = pgTable(
+  'notifications',
+  {
+    id: text('id').primaryKey(),
+    title: text('title').notNull(),
+    message: text('message').notNull(),
+    type: text('type').notNull(),
+    protocol: text('protocol'),
+    supplierCnpj: text('supplier_cnpj'),
+    operatorId: text('operator_id'),
+    operatorName: text('operator_name'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  table => [
+    // Listagem ordenada por mais recente
+    index('notifications_created_at_idx').on(table.createdAt),
+    // Filtro do portal do fornecedor (por CNPJ)
+    index('notifications_supplier_cnpj_idx').on(table.supplierCnpj),
+  ]
+);
+
 export type AppointmentRow = typeof appointments.$inferSelect;
 export type DestinationRow = typeof destinations.$inferSelect;
 export type SystemUserRow = typeof systemUsers.$inferSelect;
 export type SupplierRow = typeof suppliers.$inferSelect;
+export type NotificationRow = typeof notifications.$inferSelect;
 
 // Tipos auxiliares reexportados para clareza nos módulos consumidores
 export type { Appointment };

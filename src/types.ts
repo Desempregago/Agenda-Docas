@@ -185,3 +185,19 @@ export interface RegisteredSupplier {
   lastLoginAt?: string;
   appointmentCount?: number;
 }
+
+/**
+ * Notificação operacional criada no SERVIDOR e compartilhada entre todos os
+ * dispositivos (o cliente apenas lê o feed e marca leitura localmente).
+ */
+export interface ServerNotification {
+  id: string;
+  title: string;
+  message: string;
+  type: 'STATUS_CHANGE' | 'NEW_APPOINTMENT' | 'RESCHEDULE' | 'GATE_ENTRY' | 'DISCREPANCY' | 'SYSTEM';
+  protocol?: string;
+  supplierCnpj?: string;
+  operatorId?: string;
+  operatorName?: string;
+  timestamp: string;
+}

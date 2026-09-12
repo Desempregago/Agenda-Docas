@@ -17,7 +17,7 @@ import { ResetDatabaseModal } from './components/ResetDatabaseModal';
 import { AppointmentReceiptModal } from './components/AppointmentReceiptModal';
 import { DestinationsManagementModal } from './components/DestinationsManagementModal';
 import { LogisticsReportModal } from './components/LogisticsReportModal';
-import { Appointment, AppointmentStatus, DiscrepancyReport, Dock, SystemUser, DestinationBranch } from './types';
+import { Appointment, AppointmentStatus, DiscrepancyReport, Dock, SystemUser, DestinationBranch, ServerNotification } from './types';
 import { Bell, CheckCircle2, AlertCircle, ShieldAlert, X } from 'lucide-react';
 import { authFetch, getAuthToken, setAuthToken } from './services/api';
 
@@ -49,13 +49,24 @@ export default function App() {
   const [isUsersModalOpen, setIsUsersModalOpen] = useState<boolean>(false);
   const [isDestinationsModalOpen, setIsDestinationsModalOpen] = useState<boolean>(false);
 
-  // Notifications state (Armazenamento exclusivo no cache/LocalStorage do navegador)
-  const [notifications, setNotifications] = useState<AppNotification[]>(() => {
+  // Notificações: o FEED vive no servidor (Postgres) e é compartilhado entre
+  // todos os dispositivos via polling. O estado local guarda apenas o que é
+  // por-navegador: leitura (readIds) e descarte (dismissedIds).
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [readIds, setReadIds] = useState<Set<string>>(() => {
     try {
-      const saved = localStorage.getItem('agendadocas_notifications');
-      return saved ? JSON.parse(saved) : [];
+      const saved = localStorage.getItem('agendadocas_read_notifications');
+      return saved ? new Set<string>(JSON.parse(saved)) : new Set<string>();
     } catch {
-      return [];
+      return new Set<string>();
+    }
+  });
+  const [dismissedIds, setDismissedIds] = useState<Set<string>>(() => {
+    try {
+      const saved = localStorage.getItem('agendadocas_dismissed_notifications');
+      return saved ? new Set<string>(JSON.parse(saved)) : new Set<string>();
+    } catch {
+      return new Set<string>();
     }
   });
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
@@ -76,74 +87,26 @@ export default function App() {
     }
   });
 
-  const addNotification = (
-    title: string,
-    message: string,
-    type: AppNotification['type'],
-    protocol?: string,
-    supplierCnpj?: string,
-    operatorInfo?: { userId?: string; operatorId?: string; operatorName?: string }
-  ) => {
-    const newNotif: AppNotification = {
-      id: `notif-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-      title,
-      message,
-      timestamp: new Date().toISOString(),
-      type,
-      protocol,
-      supplierCnpj,
-      userId: operatorInfo?.userId,
-      operatorId: operatorInfo?.operatorId,
-      operatorName: operatorInfo?.operatorName,
-      read: false,
-    };
-    setNotifications(prev => {
-      const updated = [newNotif, ...prev].slice(0, 100);
-      try {
-        localStorage.setItem('agendadocas_notifications', JSON.stringify(updated));
-      } catch (_) {}
-      return updated;
-    });
+  const readIdsRef = useRef<Set<string>>(readIds);
+  const dismissedIdsRef = useRef<Set<string>>(dismissedIds);
+  useEffect(() => { readIdsRef.current = readIds; }, [readIds]);
+  useEffect(() => { dismissedIdsRef.current = dismissedIds; }, [dismissedIds]);
 
-    const isAppt = isAppointmentNotification(newNotif);
-
-    // Notificações em toast são exibidas para a sessão logada ativa e relevante
-    let isRelevantToActiveSession = false;
-
-    if (isAppt) {
-      // Notificações de agendamento: visíveis para todos os operadores/admin; fornecedor se coincidir o CNPJ
-      if (userRole === 'ADMIN' || Boolean(currentSystemUser)) {
-        isRelevantToActiveSession = true;
-      } else if (Boolean(currentSupplierSession)) {
-        const rawCurrentCnpj = currentSupplierSession?.cnpj.replace(/\D/g, '');
-        const rawNotifCnpj = supplierCnpj ? supplierCnpj.replace(/\D/g, '') : '';
-        isRelevantToActiveSession = !rawNotifCnpj || rawCurrentCnpj === rawNotifCnpj;
-      }
-    } else {
-      // Notificações de operador/sistema que NÃO são sobre agendamentos: filtradas por operador
-      if (currentSystemUser) {
-        const currentUserId = currentSystemUser.id;
-        const currentUsername = currentSystemUser.username?.toLowerCase();
-        const isAdmin = currentSystemUser.role === 'ADMIN';
-
-        if (isAdmin) {
-          isRelevantToActiveSession = true;
-        } else if (operatorInfo?.userId || operatorInfo?.operatorId) {
-          isRelevantToActiveSession =
-            operatorInfo.userId === currentUserId ||
-            operatorInfo.userId?.toLowerCase() === currentUsername ||
-            operatorInfo.operatorId === currentUserId ||
-            operatorInfo.operatorId?.toLowerCase() === currentUsername;
-        } else {
-          isRelevantToActiveSession = true;
-        }
-      } else if (userRole === 'ADMIN') {
-        isRelevantToActiveSession = true;
-      }
-    }
-
-    if (isRelevantToActiveSession) {
-      showToast(title, message, type === 'DISCREPANCY' ? 'warning' : 'success');
+  // Busca o feed de notificações no servidor. Chamada no login, após ações que
+  // geram notificações e periodicamente para todos os dispositivos conectados.
+  // (O useEffect de polling fica logo após a definição de isLoggedIn.)
+  const refreshNotifications = async () => {
+    try {
+      const res = await authFetch('/api/notifications');
+      if (!res.ok) return;
+      const data: ServerNotification[] = await res.json();
+      setNotifications(
+        data
+          .filter(n => !dismissedIdsRef.current.has(n.id))
+          .map(n => ({ ...n, read: readIdsRef.current.has(n.id) }))
+      );
+    } catch {
+      // silencioso — o polling tenta novamente
     }
   };
 
@@ -472,31 +435,18 @@ export default function App() {
         return;
       }
 
-      // Generate status notification
+      // A notificação de mudança de status é criada no SERVIDOR (compartilhada
+      // entre dispositivos). Aqui apenas sincronizamos o feed imediatamente e
+      // damos o feedback visual à sessão ativa.
       if (updatedAppt) {
         let title = 'Status Atualizado';
-        let notifType: AppNotification['type'] = 'STATUS_CHANGE';
+        if (status === 'NO_PATIO') title = 'Chegada na Portaria';
+        else if (status === 'AGUARDANDO_DESCARGA') title = updatedAppt.preventionDoubleChecked ? 'Double Check Concluído & Liberado' : 'Veículo Liberado para a Doca';
+        else if (status === 'ENTREGUE_COM_DIVERGENCIA') title = 'Divergência Registrada';
+        else if (status === 'ENTREGUE_SEM_DIVERGENCIA') title = 'Entrega Concluída com Sucesso';
 
-        if (status === 'NO_PATIO') {
-          title = 'Chegada na Portaria';
-          notifType = 'GATE_ENTRY';
-        } else if (status === 'AGUARDANDO_DESCARGA') {
-          title = updatedAppt.preventionDoubleChecked ? 'Double Check Concluído & Liberado' : 'Veículo Liberado para a Doca';
-        } else if (status === 'ENTREGUE_COM_DIVERGENCIA') {
-          title = 'Divergência Registrada';
-          notifType = 'DISCREPANCY';
-        } else if (status === 'ENTREGUE_SEM_DIVERGENCIA') {
-          title = 'Entrega Concluída com Sucesso';
-        }
-
-        addNotification(
-          title,
-          `Agendamento ${updatedAppt.protocol} (${updatedAppt.supplierName}) alterado para ${status.replace(/_/g, ' ')}.`,
-          notifType,
-          updatedAppt.protocol,
-          updatedAppt.supplierCnpj,
-          currentSystemUser ? { userId: currentSystemUser.id, operatorId: currentSystemUser.id, operatorName: currentSystemUser.name } : undefined
-        );
+        await refreshNotifications();
+        showToast(title, `Agendamento ${updatedAppt.protocol} (${updatedAppt.supplierName}) alterado para ${status.replace(/_/g, ' ')}.`, status === 'ENTREGUE_COM_DIVERGENCIA' ? 'warning' : 'success');
       }
     } catch (e) {
       showToast('Falha de conexão', 'Não foi possível salvar a alteração no servidor.', 'warning');
@@ -504,31 +454,22 @@ export default function App() {
   };
 
   // Handle newly created appointment from modal
-  const handleAppointmentCreated = (newAppt: Appointment) => {
+  const handleAppointmentCreated = async (newAppt: Appointment) => {
     setAppointments(prev => [newAppt, ...prev]);
-    addNotification(
-      'Novo Agendamento Solicitado',
-      `Solicitação enviada sob protocolo ${newAppt.protocol} (NF ${newAppt.invoiceNumber}).`,
-      'NEW_APPOINTMENT',
-      newAppt.protocol,
-      newAppt.supplierCnpj,
-      currentSystemUser ? { userId: currentSystemUser.id, operatorId: currentSystemUser.id, operatorName: currentSystemUser.name } : undefined
-    );
+    // Notificação persistida no servidor (visível para toda a equipe); feedback
+    // local via toast + sincronização imediata do feed.
+    await refreshNotifications();
+    showToast('Novo Agendamento Solicitado', `Solicitação enviada sob protocolo ${newAppt.protocol} (NF ${newAppt.invoiceNumber}).`, 'success');
   };
 
   // Handle appointment rescheduled
-  const handleAppointmentRescheduled = (updatedAppt: Appointment) => {
+  const handleAppointmentRescheduled = async (updatedAppt: Appointment) => {
     setAppointments(prev =>
       prev.map(a => (a.id === updatedAppt.id ? updatedAppt : a))
     );
-    addNotification(
-      'Reagendamento Solicitado',
-      `Agendamento ${updatedAppt.protocol} atualizado para ${updatedAppt.scheduledDate} às ${updatedAppt.timeSlot}.`,
-      'RESCHEDULE',
-      updatedAppt.protocol,
-      updatedAppt.supplierCnpj,
-      currentSystemUser ? { userId: currentSystemUser.id, operatorId: currentSystemUser.id, operatorName: currentSystemUser.name } : undefined
-    );
+    // Notificação de reagendamento persistida no servidor; sync imediato do feed.
+    await refreshNotifications();
+    showToast('Reagendamento Solicitado', `Agendamento ${updatedAppt.protocol} atualizado para ${updatedAppt.scheduledDate} às ${updatedAppt.timeSlot}.`, 'info');
   };
 
   // Clear all appointments (zero database)
@@ -565,8 +506,15 @@ export default function App() {
     }
     setAppointments([]);
     setNotifications([]);
+    setReadIds(new Set());
+    setDismissedIds(new Set());
     try {
-      localStorage.removeItem('agendadocas_notifications');
+      localStorage.removeItem('agendadocas_read_notifications');
+      localStorage.removeItem('agendadocas_dismissed_notifications');
+    } catch (_) {}
+    // Limpa também o feed compartilhado no servidor (best-effort)
+    try {
+      await authFetch('/api/notifications', { method: 'DELETE' });
     } catch (_) {}
     showToast('Limpeza Completa', 'Agendamentos, fornecedores e notificações foram zerados com sucesso.', 'info');
   };
@@ -590,6 +538,17 @@ export default function App() {
   };
 
   const isLoggedIn = userRole === 'ADMIN' || Boolean(currentSystemUser) || Boolean(currentSupplierSession);
+
+  // Polling: painel de notificações sempre atualizado, sem refresh da página.
+  useEffect(() => {
+    if (!isLoggedIn) {
+      setNotifications([]);
+      return;
+    }
+    refreshNotifications();
+    const interval = setInterval(refreshNotifications, 10_000);
+    return () => clearInterval(interval);
+  }, [isLoggedIn]);
 
   // Filtragem de notificações exibidas:
   // - Notificações sobre agendamentos (status, novos agendamentos, reagendamento, portaria, divergências)
@@ -927,24 +886,44 @@ export default function App() {
         notifications={visibleNotifications}
         onClose={() => setIsNotificationsOpen(false)}
         onMarkAllAsRead={() => {
-          setNotifications(prev => {
-            const visibleIds = new Set(visibleNotifications.map(n => n.id));
-            const updated = prev.map(n => (visibleIds.has(n.id) ? { ...n, read: true } : n));
+          const visibleIds = visibleNotifications.map(n => n.id);
+          setReadIds(prev => {
+            const next = new Set(prev);
+            visibleIds.forEach(id => next.add(id));
             try {
-              localStorage.setItem('agendadocas_notifications', JSON.stringify(updated));
+              localStorage.setItem('agendadocas_read_notifications', JSON.stringify([...next]));
             } catch (_) {}
-            return updated;
+            return next;
           });
+          // Reflexo imediato no estado exibido (sem esperar o próximo poll)
+          setNotifications(prev => prev.map(n => (visibleIds.includes(n.id) ? { ...n, read: true } : n)));
         }}
-        onClearNotifications={() => {
-          setNotifications(prev => {
-            const visibleIds = new Set(visibleNotifications.map(n => n.id));
-            const updated = prev.filter(n => !visibleIds.has(n.id));
+        onClearNotifications={async () => {
+          const visibleIds = visibleNotifications.map(n => n.id);
+          // Administrador limpa o feed compartilhado no servidor; demais sessões
+          // apenas descartam localmente (o feed é comum a todos os dispositivos).
+          if (isUserAdmin) {
             try {
-              localStorage.setItem('agendadocas_notifications', JSON.stringify(updated));
+              await authFetch('/api/notifications', { method: 'DELETE' });
             } catch (_) {}
-            return updated;
-          });
+            setNotifications([]);
+            setReadIds(new Set());
+            setDismissedIds(new Set());
+            try {
+              localStorage.removeItem('agendadocas_read_notifications');
+              localStorage.removeItem('agendadocas_dismissed_notifications');
+            } catch (_) {}
+          } else {
+            setDismissedIds(prev => {
+              const next = new Set(prev);
+              visibleIds.forEach(id => next.add(id));
+              try {
+                localStorage.setItem('agendadocas_dismissed_notifications', JSON.stringify([...next]));
+              } catch (_) {}
+              return next;
+            });
+            setNotifications(prev => prev.filter(n => !visibleIds.includes(n.id)));
+          }
         }}
         onSelectProtocol={protocol => {
           setCurrentView('TRACKING');
@@ -1001,18 +980,6 @@ export default function App() {
           setCurrentView('ADMIN');
           void loadData();
           showToast('Modo Operacional Ativado', `Bem-vindo(a), ${authenticatedUser.name}! Acesso de nível ${authenticatedUser.role === 'ADMIN' ? 'Administrador' : 'Operador'} liberado.`, 'success');
-          addNotification(
-            `Sessão de ${authenticatedUser.name} Iniciada`,
-            `Acesso concedido como ${authenticatedUser.role === 'ADMIN' ? 'Administrador Geral' : 'Operador'} (${authenticatedUser.department}).`,
-            'SYSTEM',
-            undefined,
-            undefined,
-            {
-              userId: authenticatedUser.id,
-              operatorId: authenticatedUser.id,
-              operatorName: authenticatedUser.name,
-            }
-          );
         }}
       />
 

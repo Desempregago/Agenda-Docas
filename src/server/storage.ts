@@ -1,14 +1,15 @@
-import { eq, notInArray, sql } from 'drizzle-orm';
+import { desc, eq, notInArray, sql } from 'drizzle-orm';
 import fs from 'fs';
 import path from 'path';
 import { db, ensureMigrated } from './db';
-import { appointments, appSettings, branchConfigs, destinations, suppliers, systemUsers } from './db/schema';
+import { appointments, appSettings, branchConfigs, destinations, notifications, suppliers, systemUsers } from './db/schema';
 import type {
   Appointment,
   Dock,
   DestinationBranch,
   DestinationBranchIdentity,
   RegisteredSupplier,
+  ServerNotification,
   SystemUser,
 } from '../types';
 
@@ -509,6 +510,74 @@ export const StorageService = {
     }
 
     return success;
+  },
+
+  // ---------------------------------------------------------------
+  // Notificações operacionais (compartilhadas entre dispositivos)
+  // ---------------------------------------------------------------
+
+  loadNotifications: async (limit = 200): Promise<ServerNotification[]> => {
+    try {
+      await ensureMigrated();
+      const rows = await db
+        .select()
+        .from(notifications)
+        .orderBy(desc(notifications.createdAt))
+        .limit(Math.min(Math.max(limit, 1), 500));
+      return rows.map(r => ({
+        id: r.id,
+        title: r.title,
+        message: r.message,
+        type: r.type as ServerNotification['type'],
+        protocol: r.protocol || undefined,
+        supplierCnpj: r.supplierCnpj || undefined,
+        operatorId: r.operatorId || undefined,
+        operatorName: r.operatorName || undefined,
+        timestamp: r.createdAt.toISOString(),
+      }));
+    } catch (e) {
+      console.error('[Storage] Erro ao carregar notificações:', e);
+      return [];
+    }
+  },
+
+  saveNotification: async (notif: ServerNotification): Promise<boolean> => {
+    try {
+      await ensureMigrated();
+      await db.insert(notifications).values({
+        id: notif.id,
+        title: notif.title,
+        message: notif.message,
+        type: notif.type,
+        protocol: notif.protocol || null,
+        supplierCnpj: notif.supplierCnpj || null,
+        operatorId: notif.operatorId || null,
+        operatorName: notif.operatorName || null,
+        createdAt: new Date(notif.timestamp),
+      });
+      // Retenção: mantém apenas as 500 mais recentes (as notificações não são
+      // histórico permanente — são feed operacional).
+      await db.execute(
+        sql`DELETE FROM ${notifications} WHERE id IN (
+          SELECT id FROM ${notifications} ORDER BY created_at DESC OFFSET 500
+        )`
+      );
+      return true;
+    } catch (e) {
+      console.error('[Storage] Erro ao salvar notificação:', e);
+      return false;
+    }
+  },
+
+  clearNotifications: async (): Promise<boolean> => {
+    try {
+      await ensureMigrated();
+      await db.delete(notifications);
+      return true;
+    } catch (e) {
+      console.error('[Storage] Erro ao limpar notificações:', e);
+      return false;
+    }
   },
 
   // ---------------------------------------------------------------

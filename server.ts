@@ -7,6 +7,7 @@ import { Appointment, AppointmentStatus, DiscrepancyReport, Dock, RescheduleHist
 import { StorageService, BrandSettings } from './src/server/storage';
 import { businessToday, dayOfWeekForDate, isAppointmentStatus, isValidDateOnly, normalizeNfeKeys, extractInvoiceNumberFromNfeKey } from './src/server/validation';
 import { clearSessionCookie, getSession, hashSecret, needsSecretMigration, requireAuth, requireSystemRole, sessionSecretSource, setSessionCookie, verifySecret } from './src/server/security';
+import { closeDb } from './src/server/db';
 
 async function startServer() {
   const app = express();
@@ -66,6 +67,61 @@ async function startServer() {
   console.log(`[Storage] Diretório legado (JSON): ${StorageService.getDataDir()}`);
   console.log(`[Storage] Agendamentos: ${appointments.length} | Destinos: ${destinations.length} | Docas: ${docks.length} | Janelas: ${timeSlots.length} | Usuários: ${users.length} | Fornecedores: ${suppliers.length}`);
   console.log(`[Auth] Session secret source: ${sessionSecretSource} (env | file | memory)`);
+
+  // -------------------------------------------------------------------
+  // Notificações operacionais — criadas no SERVIDOR, compartilhadas entre
+  // todos os dispositivos. Sem isto, cada navegador gera as próprias
+  // notificações no localStorage e ninguém vê o que aconteceu no outro.
+  // -------------------------------------------------------------------
+  const createNotification = async (
+    title: string,
+    message: string,
+    type: 'STATUS_CHANGE' | 'NEW_APPOINTMENT' | 'RESCHEDULE' | 'GATE_ENTRY' | 'DISCREPANCY' | 'SYSTEM',
+    opts?: { protocol?: string; supplierCnpj?: string; operatorId?: string; operatorName?: string }
+  ): Promise<void> => {
+    try {
+      await StorageService.saveNotification({
+        id: `notif-${randomUUID()}`,
+        title,
+        message,
+        type,
+        timestamp: new Date().toISOString(),
+        ...opts,
+      });
+    } catch (e) {
+      console.error('[Notifications] Falha ao registrar notificação:', e);
+    }
+  };
+
+  const operatorInfoFromSession = (req: express.Request) => {
+    const s = getSession(req);
+    return s?.type === 'system' ? { operatorId: s.userId, operatorName: s.username } : {};
+  };
+
+  // Feed compartilhado (requer login; fornecedor vê apenas o próprio CNPJ)
+  app.get('/api/notifications', requireAuth(), async (req, res) => {
+    const session = getSession(req);
+    const all = await StorageService.loadNotifications(200);
+    if (session?.type === 'supplier') {
+      const ownCnpj = session.supplierCnpj.replace(/\D/g, '');
+      return res.json(
+        all.filter(n => {
+          const isAppt = Boolean(n.protocol) || n.type !== 'SYSTEM';
+          if (!isAppt) return false;
+          return !n.supplierCnpj || n.supplierCnpj.replace(/\D/g, '') === ownCnpj;
+        })
+      );
+    }
+    res.json(all);
+  });
+
+  // Limpar feed (staff apenas) — afeta todos os dispositivos
+  app.delete('/api/notifications', requireSystemRole('ADMIN'), async (_req, res) => {
+    const ok = await StorageService.clearNotifications();
+    if (!ok) return res.status(503).json({ error: 'Não foi possível limpar as notificações. Tente novamente.' });
+    res.json({ message: 'Notificações limpas.' });
+  });
+
 
   // API Routes
   app.get('/api/health', (_req, res) => {
@@ -429,6 +485,14 @@ async function startServer() {
     }
     appointments.unshift(newAppointment);
 
+    // Notificação compartilhada: criada no servidor, visível para toda a equipe
+    await createNotification(
+      isWalkIn ? 'Encaixe Registrado na Portaria' : 'Novo Agendamento Solicitado',
+      `${newAppointment.protocol} — ${newAppointment.supplierName} • ${newAppointment.scheduledDate} ${newAppointment.timeSlot} • ${newAppointment.totalVolumes} ${newAppointment.cargoType === 'BATIDA' || newAppointment.cargoType === 'FRACIONADA' ? 'volumes' : 'paletes'}.`,
+      isWalkIn ? 'GATE_ENTRY' : 'NEW_APPOINTMENT',
+      { protocol: newAppointment.protocol, supplierCnpj: newAppointment.supplierCnpj, ...operatorInfoFromSession(req) }
+    );
+
     // Auto-register/sync supplier if CNPJ and Name are provided
     if (newAppointment.supplierCnpj && newAppointment.supplierName) {
       const cleanDigits = newAppointment.supplierCnpj.replace(/\D/g, '');
@@ -593,6 +657,13 @@ async function startServer() {
     }
     appointments[index] = updated;
 
+    await createNotification(
+      'Reagendamento Solicitado',
+      `${updated.protocol} — ${updated.supplierName} reagendou de ${historyEntry.previousDate} ${historyEntry.previousSlot} para ${newDate} ${newSlot}.`,
+      'RESCHEDULE',
+      { protocol: updated.protocol, supplierCnpj: updated.supplierCnpj, ...operatorInfoFromSession(req) }
+    );
+
     res.json(updated);
   });
 
@@ -672,6 +743,14 @@ async function startServer() {
         return res.status(503).json({ error: 'Não foi possível persistir a alteração. Tente novamente.' });
       }
       appointments[supplierIndex] = supplierUpdated;
+
+      await createNotification(
+        'Veículo Em Trânsito',
+        `${supplierUpdated.protocol} — ${supplierUpdated.supplierName} sinalizou que o veículo está a caminho da unidade.`,
+        'STATUS_CHANGE',
+        { protocol: supplierUpdated.protocol, supplierCnpj: supplierUpdated.supplierCnpj }
+      );
+
       return res.json(supplierUpdated);
     }
 
@@ -754,6 +833,29 @@ async function startServer() {
       return res.status(503).json({ error: 'Não foi possível persistir a alteração. Tente novamente.' });
     }
     appointments[index] = updated;
+
+    // Notificação compartilhada de mudança de status (com detalhe de divergência)
+    if (normalizedStatus && normalizedStatus !== current.status) {
+      const statusTitles: Partial<Record<AppointmentStatus, string>> = {
+        CONFIRMADO: 'Agendamento Confirmado',
+        NO_PATIO: 'Chegada na Portaria',
+        AGUARDANDO_DESCARGA: 'Liberado para a Doca',
+        ENTREGUE_SEM_DIVERGENCIA: 'Entrega Concluída com Sucesso',
+        ENTREGUE_COM_DIVERGENCIA: 'Divergência Registrada',
+        NO_SHOW: 'Não Comparecimento (No Show)',
+        CANCELADO: 'Agendamento Cancelado',
+      };
+      await createNotification(
+        statusTitles[normalizedStatus] || 'Status Atualizado',
+        `${updated.protocol} — ${updated.supplierName} • status alterado para ${normalizedStatus.replace(/_/g, ' ')}.`,
+        normalizedStatus === 'NO_PATIO'
+          ? 'GATE_ENTRY'
+          : normalizedStatus === 'ENTREGUE_COM_DIVERGENCIA'
+            ? 'DISCREPANCY'
+            : 'STATUS_CHANGE',
+        { protocol: updated.protocol, supplierCnpj: updated.supplierCnpj, ...operatorInfoFromSession(req) }
+      );
+    }
 
     res.json(updated);
   });
@@ -1493,9 +1595,34 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
+  // ------------------------------------------------------------
+  // HTTP tuning: mantém conexões keep-alive vivas atrás do proxy
+  // (502 curto acontece quando o proxy reutiliza uma conexão que o
+  // Node já fechou) e desliga graciosamente no restart do PM2.
+  // ------------------------------------------------------------
+  const server = app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server running on http://0.0.0.0:${PORT}`);
   });
+  server.keepAliveTimeout = 65_000; // > timeout padrão de 60s dos proxies (nginx/ALB)
+  server.headersTimeout = 66_000; // sempre > keepAliveTimeout
+
+  // Desligamento gracioso: para de aceitar conexões novas e termina as em
+  // andamento antes de sair. O PM2 espera até kill_timeout antes do SIGKILL,
+  // eliminando o 502 que aparecia nas janelas de restart.
+  const gracefulShutdown = (signal: string) => {
+    console.log(`[Server] ${signal} recebido — desligando graciosamente...`);
+    server.close(() => {
+      console.log('[Server] Servidor HTTP encerrado.');
+      process.exit(0);
+    });
+    // Força a saída se conexões keep-alive ociosas segurarem o processo
+    setTimeout(() => {
+      console.warn('[Server] Timeout de desligamento — forçando saída.');
+      process.exit(0);
+    }, 8_000);
+  };
+  process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+  process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 }
 
 startServer().catch(err => {
