@@ -121,55 +121,6 @@ export function exportAppointmentsToExcelCSV(appointments: Appointment[], dateFi
   return { count: list.length, filename };
 }
 
-/**
- * Export SQL Backup file containing DDL and INSERT statements ready for On-Premise PostgreSQL / MySQL / SQLite
- */
-export function exportAppointmentsToSQL(appointments: Appointment[], docks: Dock[] = []): { count: number; filename: string } {
-  const dateTag = new Date().toISOString().split('T')[0];
-  const filename = `Backup_Agenda_Docas_${dateTag}.sql`;
-
-  const escapeSQL = (val: any) => {
-    if (val === null || val === undefined) return 'NULL';
-    if (typeof val === 'number' || typeof val === 'boolean') return val ? 'TRUE' : 'FALSE';
-    return `'${String(val).replace(/'/g, "''")}'`;
-  };
-
-  let sql = `-- ============================================================================
--- EXPORTAÇÃO DE DADOS - AGENDA-DOCAS
--- Data: ${new Date().toLocaleString('pt-BR')}
--- Quantidade de Agendamentos: ${appointments.length}
---
--- ATENÇÃO: este arquivo NÃO é um backup restaurável do banco PostgreSQL do
--- sistema (para isso, use pg_dump no servidor). É uma exportação genérica
--- (tabelas docas/agendamentos) para análise ou importação em outro banco SQL.
--- ============================================================================
-
-`;
-
-  // Insert Docks
-  if (docks.length > 0) {
-    sql += `\n-- 1. DOCAS CADASTRADAS\n`;
-    docks.forEach(d => {
-      const docNum = parseInt(d.id.replace(/\D/g, '')) || 1;
-      const statusStr = d.isOperational ? 'AVAILABLE' : 'MAINTENANCE';
-      // Doca sem limite configurado → NULL (não inventar um teto)
-      const limitSql = d.dailyLimit !== undefined && d.dailyLimit !== null ? Number(d.dailyLimit) : 'NULL';
-      sql += `INSERT INTO docas (id, numero, nome, tipo, status, daily_limit, limit_unit) VALUES (${escapeSQL(d.id)}, ${docNum}, ${escapeSQL(d.name)}, ${escapeSQL(d.type)}, ${escapeSQL(statusStr)}, ${limitSql}, ${escapeSQL(d.limitUnit || 'volumes')}) ON CONFLICT (id) DO UPDATE SET status = EXCLUDED.status, daily_limit = EXCLUDED.daily_limit;\n`;
-    });
-  }
-
-  // Insert Appointments
-  sql += `\n-- 2. AGENDAMENTOS REGISTRADOS\n`;
-  appointments.forEach(a => {
-    const nfList = Array.isArray(a.invoiceNumbers) && a.invoiceNumbers.length > 0 ? a.invoiceNumbers.join(', ') : a.invoiceNumber;
-    const nfeKeysStr = Array.isArray(a.nfeAccessKeys) && a.nfeAccessKeys.length > 0 ? a.nfeAccessKeys.join(';') : '';
-    sql += `INSERT INTO agendamentos (id, protocolo, fornecedor_nome, fornecedor_cnpj, transportadora_nome, motorista_nome, motorista_cpf, motorista_telefone, veiculo_placa, veiculo_tipo, tipo_carga, notas_fiscais, chaves_nfe, valor_total_nf, vencimento_boleto, prevention_double_checked, prevention_checked_by, prevention_checked_at, total_volumes, peso_kg, data_agendamento, horario_janela, doca_id, status, observacoes, is_walk_in, is_pre_approved, created_at, updated_at) VALUES (${escapeSQL(a.id)}, ${escapeSQL(a.protocol)}, ${escapeSQL(a.supplierName)}, ${escapeSQL(a.supplierCnpj)}, ${escapeSQL(a.carrierName)}, ${escapeSQL(a.driverName)}, ${escapeSQL(a.driverCpf)}, ${escapeSQL(a.driverPhone)}, ${escapeSQL(a.vehiclePlate)}, ${escapeSQL(a.vehicleType)}, ${escapeSQL(a.cargoType)}, ${escapeSQL(nfList)}, ${escapeSQL(nfeKeysStr)}, ${a.invoiceTotalValue !== undefined ? Number(a.invoiceTotalValue) : 'NULL'}, ${escapeSQL(a.invoiceDueDate)}, ${a.preventionDoubleChecked ? 'TRUE' : 'FALSE'}, ${escapeSQL(a.preventionCheckedBy)}, ${escapeSQL(a.preventionCheckedAt)}, ${Number(a.totalVolumes || 0)}, ${Number(a.weightKg || 0)}, ${escapeSQL(a.scheduledDate)}, ${escapeSQL(a.timeSlot)}, ${escapeSQL(a.dockId)}, ${escapeSQL(a.status)}, ${escapeSQL(a.notes)}, ${a.isWalkIn ? 'TRUE' : 'FALSE'}, ${a.isPreApprovedContract ? 'TRUE' : 'FALSE'}, ${escapeSQL(a.createdAt)}, ${escapeSQL(a.updatedAt)}) ON CONFLICT (id) DO UPDATE SET status = EXCLUDED.status, updated_at = EXCLUDED.updated_at;\n`;
-  });
-
-  triggerLocalDownload(sql, filename, 'application/sql;charset=utf-8');
-
-  return { count: appointments.length, filename };
-}
 
 /**
  * Export complete JSON state file for instant local restoration

@@ -122,6 +122,65 @@ async function startServer() {
     res.json({ message: 'Notificações limpas.' });
   });
 
+  // ============================================================================
+  // Backup REAL do banco (pg_dump plain SQL). Restaura com:
+  //   psql "$DATABASE_URL" < backup.sql
+  // Requer pg_dump presente no PATH do servidor (instalado junto com o Postgres).
+  // ADMIN-only: o dump contém hashes de senha e toda a base.
+  // ============================================================================
+  app.get('/api/backup/database', requireSystemRole('ADMIN'), async (req, res) => {
+    const connectionString = process.env.DATABASE_URL;
+    if (!connectionString) {
+      return res.status(503).json({ error: 'DATABASE_URL não configurada no servidor.' });
+    }
+
+    const { spawn } = await import('child_process');
+    const dumpArgs = ['--dbname', connectionString, '--format', 'plain', '--no-owner', '--no-privileges'];
+
+    let pgDump;
+    try {
+      pgDump = spawn('pg_dump', dumpArgs);
+    } catch {
+      return res.status(503).json({ error: 'pg_dump não encontrado no servidor. Instale o cliente PostgreSQL (postgresql-client).' });
+    }
+
+    // pg_dump ausente no PATH → spawn emite 'error' assincronamente
+    let dumpFailed = false;
+    pgDump.on('error', (err: NodeJS.ErrnoException) => {
+      dumpFailed = true;
+      if (!res.headersSent) {
+        const msg = err.code === 'ENOENT'
+          ? 'pg_dump não encontrado no servidor. Instale o cliente PostgreSQL (postgresql-client).'
+          : `Falha ao executar pg_dump: ${err.message}`;
+        res.status(503).json({ error: msg });
+      }
+    });
+
+    const dateTag = new Date().toISOString().slice(0, 10);
+    res.setHeader('Content-Type', 'application/sql; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="Backup_Agenda_Docas_${dateTag}.sql"`);
+    res.setHeader('Cache-Control', 'no-store');
+
+    pgDump.stdout.pipe(res);
+
+    let stderrBuf = '';
+    pgDump.stderr.on('data', (chunk: Buffer) => { stderrBuf += chunk.toString(); });
+    pgDump.on('close', code => {
+      if (code !== 0 && !res.headersSent) {
+        res.status(500).json({ error: `pg_dump falhou (código ${code}).`, detail: stderrBuf.slice(0, 500) });
+      } else if (code !== 0 && dumpFailed === false) {
+        // Falha após o stream ter começado: encerra com aviso no log
+        console.error('[Backup] pg_dump terminou com erro:', stderrBuf.slice(0, 500));
+        res.end();
+      }
+    });
+
+    // Timeout de segurança: dump não pode segurar a conexão indefinidamente
+    req.on('close', () => {
+      if (!pgDump.killed) pgDump.kill();
+    });
+  });
+
 
   // API Routes
   app.get('/api/health', (_req, res) => {

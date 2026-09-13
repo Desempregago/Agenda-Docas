@@ -12,7 +12,8 @@ import {
   Download
 } from 'lucide-react';
 import { Appointment, Dock } from '../types';
-import { exportAppointmentsToExcelCSV, exportAppointmentsToSQL } from '../services/localExportService';
+import { exportAppointmentsToExcelCSV } from '../services/localExportService';
+import { authFetch } from '../services/api';
 
 interface SystemMaintenancePanelProps {
   appointments?: Appointment[];
@@ -46,18 +47,43 @@ export const SystemMaintenancePanel: React.FC<SystemMaintenancePanelProps> = ({
     }
   };
 
-  const handleExportSQL = () => {
+  // Backup REAL do banco: baixa o pg_dump completo (restaurável com psql < arquivo.sql)
+  const handleExportSQL = async () => {
+    setExportNotification({ message: 'Gerando backup do banco de dados...' });
     try {
-      const res = exportAppointmentsToSQL(appointments, docks);
+      const res = await authFetch('/api/backup/database');
+      if (!res.ok) {
+        let detail = '';
+        try {
+          const data = await res.json();
+          detail = data?.error ? ` — ${data.error}` : '';
+        } catch {
+          // resposta sem JSON (stream corrompido etc.)
+        }
+        throw new Error(`Falha no backup (HTTP ${res.status})${detail}`);
+      }
+      const blob = await res.blob();
+      const disposition = res.headers.get('Content-Disposition') || '';
+      const match = disposition.match(/filename="?([^";]+)"?/);
+      const filename = match?.[1] || `Backup_Agenda_Docas_${new Date().toISOString().slice(0, 10)}.sql`;
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
       setExportNotification({
-        message: `Exportação SQL gerada e baixada com sucesso! Arquivo: ${res.filename} (${res.count} registros). Para backup restaurável do sistema, use pg_dump no servidor.`,
+        message: `Backup do banco baixado com sucesso! Arquivo: ${filename}. Restaure com: psql "$DATABASE_URL" < ${filename}`,
       });
-      setTimeout(() => setExportNotification(null), 5000);
+      setTimeout(() => setExportNotification(null), 8000);
     } catch (err: any) {
       setExportNotification({
-        message: err.message || 'Erro ao gerar exportação SQL.',
+        message: err.message || 'Erro ao gerar backup do banco.',
         isError: true,
       });
+      setTimeout(() => setExportNotification(null), 8000);
     }
   };
 
@@ -190,10 +216,10 @@ export const SystemMaintenancePanel: React.FC<SystemMaintenancePanelProps> = ({
           <button
             onClick={handleExportSQL}
             className="flex items-center justify-center gap-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs sm:text-sm font-bold p-3.5 rounded-2xl shadow-xs transition-all cursor-pointer"
-            title="Exportar agendamentos como SQL genérico (.sql) para análise ou outro banco. Para backup restaurável do sistema, use pg_dump no servidor."
+            title="Baixar backup completo do banco (pg_dump). Restaure com: psql $DATABASE_URL < arquivo.sql"
           >
             <Download className="w-4 h-4" />
-            <span>Exportar SQL (.sql)</span>
+            <span>Backup do Banco (.sql)</span>
           </button>
 
           {(onOpenResetModal || onClearAllAppointments) && (
