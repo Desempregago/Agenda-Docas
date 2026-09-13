@@ -29,6 +29,7 @@ export const SystemMaintenancePanel: React.FC<SystemMaintenancePanelProps> = ({
   onOpenResetModal
 }) => {
   const [healthData, setHealthData] = useState<any>(null);
+  const [dbStats, setDbStats] = useState<any>(null);
   const [loadingHealth, setLoadingHealth] = useState(false);
   const [exportNotification, setExportNotification] = useState<{ message: string; isError?: boolean } | null>(null);
 
@@ -100,11 +101,39 @@ export const SystemMaintenancePanel: React.FC<SystemMaintenancePanelProps> = ({
     }
   };
 
+  // Estatísticas reais do banco (tamanho, linhas por tabela, versão) — ADMIN
+  const fetchDbStats = async () => {
+    try {
+      const res = await authFetch('/api/db/stats');
+      if (res.ok) setDbStats(await res.json());
+    } catch (_) {
+      // silencioso: o card apenas não mostra dados
+    }
+  };
+
   useEffect(() => {
     fetchHealth();
+    fetchDbStats();
   }, []);
 
-  const totalVolumes = appointments.reduce((acc, a) => acc + (Number(a.volumes) || 0), 0);
+  const formatDbSize = (bytes: number | null | undefined): string => {
+    if (!bytes || bytes <= 0) return 'N/D';
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} kB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  const formatUptime = (seconds: number | null | undefined): string => {
+    if (!seconds || seconds <= 0) return 'recém-iniciado';
+    if (seconds < 60) return `${seconds}s`;
+    const m = Math.floor(seconds / 60);
+    if (m < 60) return `${m} min`;
+    const h = Math.floor(m / 60);
+    if (h < 24) return `${h}h ${m % 60}min`;
+    return `${Math.floor(h / 24)}d ${h % 24}h`;
+  };
+
+  const totalVolumes = appointments.reduce((acc, a) => acc + (Number(a.totalVolumes) || 0), 0);
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto w-full">
@@ -134,7 +163,13 @@ export const SystemMaintenancePanel: React.FC<SystemMaintenancePanelProps> = ({
             </div>
             <div className="text-[11px] text-slate-300 flex items-center justify-between">
               <span>Porta Ativa:</span>
-              <strong className="text-white font-mono">3000</strong>
+              <strong className="text-white font-mono">{healthData?.port ?? '—'}</strong>
+            </div>
+            <div className="text-[11px] text-slate-300 flex items-center justify-between">
+              <span>Uptime do Processo:</span>
+              <strong className="text-white font-mono" title={healthData?.bootedAt ? `Iniciado em ${new Date(healthData.bootedAt).toLocaleString('pt-BR')}` : undefined}>
+                {healthData?.status === 'ok' ? formatUptime(healthData?.uptimeSeconds) : '—'}
+              </strong>
             </div>
             <button
               onClick={fetchHealth}
@@ -186,10 +221,39 @@ export const SystemMaintenancePanel: React.FC<SystemMaintenancePanelProps> = ({
           </div>
           <div>
             <div className="text-xs text-slate-500 font-medium">Armazenamento</div>
-            <div className="text-xs sm:text-sm font-bold text-emerald-600">Pastas de CNPJ (/data)</div>
+            <div className="text-xs sm:text-sm font-bold text-emerald-600" title={dbStats?.version ? `PostgreSQL: ${dbStats.version}` : undefined}>
+              PostgreSQL (Drizzle ORM)
+            </div>
+            {dbStats?.databaseSizeBytes ? (
+              <div className="text-[10px] text-slate-400 font-mono">{formatDbSize(dbStats.databaseSizeBytes)}</div>
+            ) : null}
           </div>
         </div>
       </div>
+
+      {/* Estatísticas do Banco (linhas por tabela) */}
+      {dbStats?.tableCounts?.length > 0 && (
+        <div className="bg-white rounded-3xl p-5 sm:p-6 border border-slate-200 shadow-sm">
+          <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2 mb-3">
+            <Database className="w-4 h-4 text-indigo-600" /> Banco de Dados — Linhas por Tabela
+          </h2>
+          <div className="flex flex-wrap gap-2">
+            {dbStats.tableCounts.map((t: { table: string; rows: number }) => (
+              <span
+                key={t.table}
+                className="inline-flex items-center gap-1.5 bg-slate-50 border border-slate-200 text-slate-700 text-[11px] font-semibold px-2.5 py-1 rounded-lg font-mono"
+                title={`${t.rows.toLocaleString('pt-BR')} linhas em ${t.table}`}
+              >
+                {t.table}
+                <span className="text-indigo-600 font-bold">{t.rows.toLocaleString('pt-BR')}</span>
+              </span>
+            ))}
+          </div>
+          {dbStats.version && (
+            <p className="mt-3 text-[10px] text-slate-400 font-mono">{dbStats.version}</p>
+          )}
+        </div>
+      )}
 
       {/* Operações de Dados & Backups */}
       <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm space-y-5">
@@ -267,9 +331,9 @@ export const SystemMaintenancePanel: React.FC<SystemMaintenancePanelProps> = ({
       <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-4 sm:p-5 flex items-start gap-3 text-xs text-slate-600">
         <HardDrive className="w-5 h-5 text-indigo-600 shrink-0 mt-0.5" />
         <div className="space-y-1">
-          <span className="font-semibold text-slate-900">Armazenamento em Disco & Processo PM2 Ativo</span>
+          <span className="font-semibold text-slate-900">Armazenamento PostgreSQL & Processo PM2 Ativo</span>
           <p>
-            Todos os agendamentos são armazenados individualmente em arquivos JSON organizados por pasta de CNPJ dentro do diretório <code className="bg-slate-200/80 px-1.5 py-0.5 rounded font-mono text-slate-800 font-bold">data/cnpjs/</code> no servidor, gerenciados pelo PM2.
+            Todos os dados (agendamentos, unidades, docas, usuários, fornecedores e notificações) vivem no banco PostgreSQL via Drizzle ORM, gerenciado pelo PM2. Arquivos locais restam apenas para o logo personalizado e o segredo de sessão. O feed de notificações é retido por 30 dias / 500 entradas.
           </p>
         </div>
       </div>

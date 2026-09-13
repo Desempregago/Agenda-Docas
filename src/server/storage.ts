@@ -581,6 +581,25 @@ export const StorageService = {
   },
 
   // ---------------------------------------------------------------
+  // Retenção do feed: remove notificações mais antigas que N dias
+  // (complementa o teto de 500 linhas). Retorna quantas foram removidas.
+  // ---------------------------------------------------------------
+  pruneNotifications: async (olderThanDays = 30): Promise<number> => {
+    try {
+      await ensureMigrated();
+      const cutoff = new Date(Date.now() - olderThanDays * 24 * 60 * 60 * 1000);
+      const removed = await db
+        .delete(notifications)
+        .where(sql`${notifications.createdAt} < ${cutoff.toISOString()}`)
+        .returning({ id: notifications.id });
+      return removed.length;
+    } catch (e) {
+      console.error('[Storage] Erro ao podar notificações antigas:', e);
+      return 0;
+    }
+  },
+
+  // ---------------------------------------------------------------
   // Diagnósticos
   // ---------------------------------------------------------------
 
@@ -600,6 +619,43 @@ export const StorageService = {
       files: [] as Array<{ file: string; exists: boolean; sizeBytes: number; updatedAt: string | null }>,
       timestamp: new Date().toISOString(),
     };
+  },
+
+  // ---------------------------------------------------------------
+  // Estatísticas reais do banco (tamanho, linhas por tabela, versão)
+  // ---------------------------------------------------------------
+  getDbStats: async (): Promise<{
+    databaseSizeBytes: number | null;
+    version: string | null;
+    tableCounts: Array<{ table: string; rows: number }>;
+  }> => {
+    const tableCounts: Array<{ table: string; rows: number }> = [];
+    let databaseSizeBytes: number | null = null;
+    let version: string | null = null;
+    try {
+      await ensureMigrated();
+      const meta = await db.execute<{ size: string; ver: string }>(
+        sql`SELECT pg_size_pretty(pg_database_size(current_database())) AS size, version() AS ver`
+      );
+      const metaRow = (meta.rows?.[0] ?? {}) as { size?: string; ver?: string };
+      version = metaRow.ver?.split(' on ')[0] ?? null;
+      const sizeResult = await db.execute<{ bytes: string }>(
+        sql`SELECT pg_database_size(current_database())::text AS bytes`
+      );
+      databaseSizeBytes = Number((sizeResult.rows?.[0] as { bytes?: string } | undefined)?.bytes ?? 0) || null;
+
+      const counts = await db.execute<{ table_name: string; row_count: string }>(sql`
+        SELECT relname AS table_name, n_live_tup::text AS row_count
+        FROM pg_stat_user_tables
+        ORDER BY n_live_tup DESC
+      `);
+      for (const row of (counts.rows ?? []) as Array<{ table_name: string; row_count: string }>) {
+        tableCounts.push({ table: row.table_name, rows: Number(row.row_count) || 0 });
+      }
+    } catch (e) {
+      console.error('[Storage] Erro ao coletar estatísticas do banco:', e);
+    }
+    return { databaseSizeBytes, version, tableCounts };
   },
 };
 

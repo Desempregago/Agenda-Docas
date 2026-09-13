@@ -68,6 +68,13 @@ async function startServer() {
   console.log(`[Storage] Agendamentos: ${appointments.length} | Destinos: ${destinations.length} | Docas: ${docks.length} | Janelas: ${timeSlots.length} | Usuários: ${users.length} | Fornecedores: ${suppliers.length}`);
   console.log(`[Auth] Session secret source: ${sessionSecretSource} (env | file | memory)`);
 
+  // Retenção do feed de notificações: remove entradas com mais de 30 dias.
+  // (o teto de 500 linhas já existe a cada gravação; isto limpa o acúmulo antigo)
+  try {
+    const pruned = await StorageService.pruneNotifications(30);
+    if (pruned > 0) console.log(`[Notifications] Feed podado no boot: ${pruned} entradas >30d removidas.`);
+  } catch (_) {}
+
   // -------------------------------------------------------------------
   // Notificações operacionais — criadas no SERVIDOR, compartilhadas entre
   // todos os dispositivos. Sem isto, cada navegador gera as próprias
@@ -189,9 +196,11 @@ async function startServer() {
       service: 'Agenda-docas API',
       timestamp: new Date().toISOString(),
       version: '1.1.0',
+      port: PORT,
+      uptimeSeconds: Math.floor(process.uptime()),
+      bootedAt: new Date(Date.now() - process.uptime() * 1000).toISOString(),
       storage: {
         type: 'PostgreSQL (Drizzle ORM)',
-        legacyDirectory: StorageService.getDataDir(),
         appointmentsCount: appointments.length,
         docksCount: docks.length,
         usersCount: users.length
@@ -202,6 +211,11 @@ async function startServer() {
   // Storage Diagnostics & Stats
   app.get('/api/storage/status', requireSystemRole('ADMIN', 'OPERATOR'), async (_req, res) => {
     res.json(await StorageService.getStats());
+  });
+
+  // Estatísticas reais do banco (tamanho, linhas por tabela, versão) — ADMIN
+  app.get('/api/db/stats', requireSystemRole('ADMIN'), async (_req, res) => {
+    res.json(await StorageService.getDbStats());
   });
 
   // List & Search Appointments
