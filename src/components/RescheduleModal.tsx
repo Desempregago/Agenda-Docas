@@ -167,11 +167,12 @@ export const RescheduleModal: React.FC<RescheduleModalProps> = ({
 
   const canPerformReschedule = isOperator || isMatchingSupplier;
 
-  const getSlotLimit = (slot: string) => {
+  const getSlotLimit = (slot: string): number | undefined => {
     if (apptDest?.slotSupplierLimits?.[slot] !== undefined) {
       return apptDest.slotSupplierLimits[slot];
     }
-    return slotLimits[slot] ?? 3;
+    // undefined = janela ilimitada (sem limite declarado pelo dono)
+    return slotLimits[slot];
   };
 
   // Calculate supplier count per slot for the newDate and this specific branch.
@@ -541,7 +542,7 @@ export const RescheduleModal: React.FC<RescheduleModalProps> = ({
                     {branchAvailableSlots.map((slot, sIdx) => {
                       const limit = getSlotLimit(slot);
                       const count = slotOccupancy[slot] || 0;
-                      const isFull = count >= limit;
+                      const isFull = limit !== undefined && count >= limit;
                       return (
                         <option key={`resched-slot-${slot}-${sIdx}`} value={slot} disabled={isFull}>
                           {slot} {isFull ? '(Indisponível)' : ''}

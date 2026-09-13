@@ -67,8 +67,8 @@ export const TimeSlotConfigModal: React.FC<TimeSlotConfigModalProps> = ({
 
   // Formulário de nova janela
   const [newSlotTime, setNewSlotTime] = useState('');
-  const [newSlotLimit, setNewSlotLimit] = useState(3);
-  const [bulkLimit, setBulkLimit] = useState<number>(3);
+  const [newSlotLimit, setNewSlotLimit] = useState<number | ''>('');
+  const [bulkLimit, setBulkLimit] = useState<number | ''>(3);
 
   // Formulário de cópia rápida entre lojas
   const [copySourceBranchId, setCopySourceBranchId] = useState<string>('');
@@ -161,30 +161,40 @@ export const TimeSlotConfigModal: React.FC<TimeSlotConfigModalProps> = ({
       alert(`A janela "${trimmed}" já está cadastrada para esta loja.`);
       return;
     }
-    const limitNum = Number(newSlotLimit) > 0 ? Number(newSlotLimit) : 3;
+    // Campo vazio = janela ilimitada (não grava limite na config)
+    const limitNum = newSlotLimit === '' || Number(newSlotLimit) <= 0 ? undefined : Math.max(1, Number(newSlotLimit));
 
-    updateSelectedBranch(b => ({
-      ...b,
-      timeSlots: [...(b.timeSlots || []), trimmed].sort(),
-      slotSupplierLimits: {
-        ...(b.slotSupplierLimits || {}),
-        [trimmed]: limitNum,
-      },
-    }));
+    updateSelectedBranch(b => {
+      const limits = { ...(b.slotSupplierLimits || {}) };
+      if (limitNum === undefined) {
+        delete limits[trimmed];
+      } else {
+        limits[trimmed] = limitNum;
+      }
+      return {
+        ...b,
+        timeSlots: [...(b.timeSlots || []), trimmed].sort(),
+        slotSupplierLimits: limits,
+      };
+    });
 
     setNewSlotTime('');
-    setNewSlotLimit(3);
+    setNewSlotLimit('');
   };
 
-  const handleUpdateSlotLimit = (slot: string, newLimit: number) => {
-    const val = Math.max(1, newLimit);
-    updateSelectedBranch(b => ({
-      ...b,
-      slotSupplierLimits: {
-        ...(b.slotSupplierLimits || {}),
-        [slot]: val,
-      },
-    }));
+  const handleUpdateSlotLimit = (slot: string, newLimit: number | undefined) => {
+    updateSelectedBranch(b => {
+      const limits = { ...(b.slotSupplierLimits || {}) };
+      if (newLimit === undefined) {
+        delete limits[slot];
+      } else {
+        limits[slot] = Math.max(1, newLimit);
+      }
+      return {
+        ...b,
+        slotSupplierLimits: limits,
+      };
+    });
   };
 
   const handleRemoveSlot = (slotToRemove: string) => {
@@ -201,14 +211,15 @@ export const TimeSlotConfigModal: React.FC<TimeSlotConfigModalProps> = ({
   };
 
   const handleApplyBulkLimit = () => {
-    const val = Math.max(1, bulkLimit);
+    const val = bulkLimit === '' || Number(bulkLimit) <= 0 ? undefined : Math.max(1, Number(bulkLimit));
     updateSelectedBranch(b => {
       const updatedLimits: Record<string, number> = {};
       (b.timeSlots || []).forEach(slot => {
-        updatedLimits[slot] = val;
+        if (val !== undefined) updatedLimits[slot] = val;
       });
       return {
         ...b,
+        // Sem valor: limpa TODOS os limites → todas as janelas ficam ilimitadas
         slotSupplierLimits: updatedLimits,
       };
     });
@@ -649,8 +660,10 @@ export const TimeSlotConfigModal: React.FC<TimeSlotConfigModalProps> = ({
                       type="number"
                       min={1}
                       max={50}
+                      placeholder="Sem limite"
+                      title="Vazio = janela ilimitada"
                       value={newSlotLimit}
-                      onChange={e => setNewSlotLimit(parseInt(e.target.value) || 1)}
+                      onChange={e => setNewSlotLimit(e.target.value === '' ? '' : Math.max(1, parseInt(e.target.value) || 1))}
                       className="w-20 px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs sm:text-sm font-bold text-slate-800 text-center focus:ring-2 focus:ring-blue-500 focus:outline-none"
                     />
                   </div>
@@ -677,8 +690,10 @@ export const TimeSlotConfigModal: React.FC<TimeSlotConfigModalProps> = ({
                       type="number"
                       min={1}
                       max={50}
+                      placeholder="Sem limite"
+                      title="Vazio = remove o limite de todas as janelas"
                       value={bulkLimit}
-                      onChange={e => setBulkLimit(parseInt(e.target.value) || 1)}
+                      onChange={e => setBulkLimit(e.target.value === '' ? '' : Math.max(1, parseInt(e.target.value) || 1))}
                       className="w-16 px-2 py-1 bg-white border border-blue-300 rounded-lg text-xs font-bold text-center text-blue-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
                     />
                     <span className="text-xs text-blue-800 font-medium">vagas</span>
@@ -730,8 +745,10 @@ export const TimeSlotConfigModal: React.FC<TimeSlotConfigModalProps> = ({
                             type="number"
                             min={1}
                             max={50}
-                            value={currentLimits[slot] ?? 3}
-                            onChange={e => handleUpdateSlotLimit(slot, parseInt(e.target.value) || 1)}
+                            placeholder="Sem limite"
+                            title="Vazio = janela ilimitada"
+                            value={currentLimits[slot] ?? ''}
+                            onChange={e => handleUpdateSlotLimit(slot, e.target.value === '' ? undefined : Math.max(1, parseInt(e.target.value) || 1))}
                             className="w-16 px-2 py-1 bg-slate-50 border border-slate-300 rounded-lg text-xs font-bold text-center text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none"
                           />
                           <span className="text-xs text-slate-500">vagas</span>

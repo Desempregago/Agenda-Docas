@@ -345,12 +345,13 @@ export const ClientNewAppointmentModal: React.FC<ClientNewAppointmentModalProps>
     }
   }, [branchAvailableSlots, formData.timeSlot]);
 
-  // Helper para obter limite máximo de uma janela na filial selecionada
-  const getSlotMaxSuppliers = (slot: string) => {
+  // Helper para obter limite máximo de uma janela na filial selecionada.
+  // undefined = janela ilimitada (sem limite declarado pelo dono).
+  const getSlotMaxSuppliers = (slot: string): number | undefined => {
     if (selectedBranch?.slotSupplierLimits?.[slot] !== undefined) {
       return selectedBranch.slotSupplierLimits[slot];
     }
-    return 3;
+    return propSlotLimits[slot];
   };
 
   useEffect(() => {
@@ -458,10 +459,10 @@ export const ClientNewAppointmentModal: React.FC<ClientNewAppointmentModalProps>
       return;
     }
 
-    // Validação de Limite de Fornecedores por Janela na Filial
+    // Validação de Limite de Fornecedores por Janela na Filial (undefined = ilimitada)
     const maxSuppliers = getSlotMaxSuppliers(formData.timeSlot);
     const currentCount = slotOccupancy[formData.timeSlot] || 0;
-    if (currentCount >= maxSuppliers) {
+    if (maxSuppliers !== undefined && currentCount >= maxSuppliers) {
       const branchName = selectedBranch?.name ? ` na unidade "${selectedBranch.name}"` : '';
       setError(`A janela de horário ${formData.timeSlot}${branchName} para a data selecionada já está indisponível. Por favor, selecione outro horário ou data.`);
       return;
@@ -1349,7 +1350,7 @@ export const ClientNewAppointmentModal: React.FC<ClientNewAppointmentModalProps>
                       {branchAvailableSlots.map((slot, sIdx) => {
                         const count = slotOccupancy[slot] || 0;
                         const max = getSlotMaxSuppliers(slot);
-                        const isFull = count >= max;
+                        const isFull = max !== undefined && count >= max;
                         return (
                           <option key={`client-new-slot-${slot}-${sIdx}`} value={slot} disabled={isFull}>
                             {slot} {isFull ? '(Indisponível)' : ''}

@@ -288,10 +288,12 @@ async function startServer() {
       }
     }
 
-    // Validação de limite de fornecedores por janela de horário (respeitando limite específico da filial se configurado)
-    const maxSuppliersForSlot = targetDest?.slotSupplierLimits?.[body.timeSlot] !== undefined
+    // Validação de limite de fornecedores por janela de horário. Janela SEM limite
+    // declarado (nem na filial, nem globalmente) é ILIMITADA — o dono decide quando
+    // restringir; o sistema não impõe tetos que ninguém configurou.
+    const maxSuppliersForSlot: number | undefined = targetDest?.slotSupplierLimits?.[body.timeSlot] !== undefined
       ? targetDest.slotSupplierLimits[body.timeSlot]
-      : (slotSupplierLimits[body.timeSlot] ?? 3);
+      : slotSupplierLimits[body.timeSlot];
 
     // Contagem de agendamentos concorrentes EXCLUSIVAMENTE NA FILIAL SELECIONADA
     const currentSuppliersInSlot = appointments.filter(
@@ -303,7 +305,7 @@ async function startServer() {
       }
     ).length;
 
-    if (!isWalkIn && currentSuppliersInSlot >= maxSuppliersForSlot) {
+    if (!isWalkIn && maxSuppliersForSlot !== undefined && currentSuppliersInSlot >= maxSuppliersForSlot) {
       const branchLabel = targetDest?.name ? ` na unidade "${targetDest.name}"` : '';
       return res.status(400).json({
         error: `A janela de horário ${body.timeSlot}${branchLabel} na data selecionada já está com a capacidade esgotada. Por favor, escolha outro horário ou data.`
@@ -584,10 +586,10 @@ async function startServer() {
       });
     }
 
-    // Validação de limite de fornecedores por janela de horário no reagendamento
-    const maxSuppliersForSlot = targetDest?.slotSupplierLimits?.[newSlot] !== undefined
+    // Validação de limite por janela no reagendamento — sem limite declarado, ilimitado.
+    const maxSuppliersForSlot: number | undefined = targetDest?.slotSupplierLimits?.[newSlot] !== undefined
       ? targetDest.slotSupplierLimits[newSlot]
-      : (slotSupplierLimits[newSlot] ?? 3);
+      : slotSupplierLimits[newSlot];
 
     const currentSuppliersInSlot = appointments.filter(
       a => {
@@ -598,7 +600,7 @@ async function startServer() {
       }
     ).length;
 
-    if (currentSuppliersInSlot >= maxSuppliersForSlot) {
+    if (maxSuppliersForSlot !== undefined && currentSuppliersInSlot >= maxSuppliersForSlot) {
       const branchLabel = targetDest?.name ? ` na unidade "${targetDest.name}"` : '';
       return res.status(400).json({
         error: `A janela de horário ${newSlot}${branchLabel} na data selecionada já está com a capacidade esgotada. Por favor, selecione outro horário ou data.`
@@ -893,11 +895,12 @@ async function startServer() {
       ? targetDest.timeSlots
       : timeSlots;
     const counts: Record<string, number> = {};
-    const maxSuppliers: Record<string, number> = {};
+    const maxSuppliers: Record<string, number | null> = {};
     for (const slot of branchSlots) {
+      // null = janela ilimitada (nenhum limite declarado pelo dono)
       maxSuppliers[slot] = targetDest.slotSupplierLimits?.[slot] !== undefined
         ? targetDest.slotSupplierLimits[slot]
-        : (slotSupplierLimits[slot] ?? 3);
+        : (slotSupplierLimits[slot] ?? null);
       counts[slot] = appointments.filter(
         a => {
           if (excludeId && typeof excludeId === 'string' && a.id === excludeId) return false;
