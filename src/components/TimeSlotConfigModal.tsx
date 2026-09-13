@@ -78,7 +78,7 @@ export const TimeSlotConfigModal: React.FC<TimeSlotConfigModalProps> = ({
   const [newDockName, setNewDockName] = useState('');
   const [newDockType, setNewDockType] = useState('PALETIZADA');
   const [newDockCapacity, setNewDockCapacity] = useState(2);
-  const [newDockDailyLimit, setNewDockDailyLimit] = useState<number>(140);
+  const [newDockDailyLimit, setNewDockDailyLimit] = useState<number | ''>(140);
   const [newDockLimitUnit, setNewDockLimitUnit] = useState<'pallets' | 'volumes'>('pallets');
 
   // Edição de doca existente
@@ -252,7 +252,9 @@ export const TimeSlotConfigModal: React.FC<TimeSlotConfigModalProps> = ({
       type: newDockType,
       capacityPerSlot: Math.max(1, Number(newDockCapacity) || 1),
       isOperational: true,
-      dailyLimit: Math.max(1, Number(newDockDailyLimit) || 100),
+      // Campo vazio = doca SEM limite diário (o servidor não bloqueia capacidade;
+      // o dashboard exibe o estado "sem limite" explicitamente).
+      dailyLimit: newDockDailyLimit === '' ? undefined : Math.max(1, Number(newDockDailyLimit) || 100),
       limitUnit: newDockLimitUnit,
       destinationBranchId: selectedBranch.id,
     };
@@ -890,14 +892,15 @@ export const TimeSlotConfigModal: React.FC<TimeSlotConfigModalProps> = ({
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
                   <div>
                     <label className="block text-[11px] font-bold text-slate-600 mb-1">
-                      Limite Diário Máximo
+                      Limite Diário Máximo <span className="font-normal text-slate-400">(vazio = sem limite)</span>
                     </label>
                     <input
                       type="number"
                       min={1}
                       max={9999}
+                      placeholder="Sem limite"
                       value={newDockDailyLimit}
-                      onChange={e => setNewDockDailyLimit(parseInt(e.target.value) || 100)}
+                      onChange={e => setNewDockDailyLimit(e.target.value === '' ? '' : Math.max(1, parseInt(e.target.value) || 1))}
                       className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none"
                     />
                   </div>
@@ -1072,9 +1075,10 @@ export const TimeSlotConfigModal: React.FC<TimeSlotConfigModalProps> = ({
                             type="number"
                             min={1}
                             max={9999}
-                            value={dock.dailyLimit || 100}
+                            placeholder="—"
+                            value={dock.dailyLimit ?? ''}
                             onChange={e =>
-                              handleUpdateDockField(dock.id, 'dailyLimit', Math.max(1, parseInt(e.target.value) || 1))
+                              handleUpdateDockField(dock.id, 'dailyLimit', e.target.value === '' ? undefined : Math.max(1, parseInt(e.target.value) || 1))
                             }
                             className="w-16 px-2 py-0.5 bg-white border border-slate-300 rounded text-center font-bold text-slate-800"
                           />
