@@ -1166,6 +1166,29 @@ async function startServer() {
     });
   });
 
+  // Operator recognition for the staged login: reveals only whether the login
+  // exists and which secret (password and/or PIN) it expects — never hashes.
+  app.get('/api/auth/lookup-operator/:login', (req, res) => {
+    const inputLogin = (req.params.login || '').trim().toLowerCase();
+    if (!inputLogin) {
+      return res.status(400).json({ error: 'Informe o usuário para consulta.' });
+    }
+    const user = users.find(
+      u =>
+        (u.username.toLowerCase() === inputLogin || (u.email && u.email.toLowerCase() === inputLogin)) &&
+        u.active !== false
+    );
+    if (!user) {
+      return res.status(404).json({ found: false });
+    }
+    return res.json({
+      found: true,
+      name: user.name,
+      hasPin: Boolean(user.pin),
+      hasPassword: Boolean(user.password)
+    });
+  });
+
   // Verify Admin Password Endpoint
   app.post('/api/auth/verify-admin-password', (req, res) => {
     const { password, adminPassword } = req.body || {};
@@ -1269,11 +1292,17 @@ async function startServer() {
     return res.status(401).json({ error: 'Tipo de sessão desconhecido.' });
   });
 
-  // User Login Authentication
+  // User Login Authentication — username is always required: the secret (password
+  // or PIN) is only ever checked against the identified user, never scanned
+  // across the whole user base.
   app.post('/api/auth/login', async (req, res) => {
     const { username, login, password, pin } = req.body || {};
     const inputLogin = (username || login || '').trim().toLowerCase();
     const inputSecret = (password || pin || '').trim();
+
+    if (!inputLogin) {
+      return res.status(400).json({ error: 'Informe o usuário para autenticar.' });
+    }
 
     if (!inputSecret) {
       return res.status(400).json({ error: 'Informe a senha ou PIN de acesso.' });
@@ -1287,24 +1316,13 @@ async function startServer() {
       });
     }
 
-    // Find matching user
-    let user: SystemUser | undefined;
-
-    if (inputLogin) {
-      user = users.find(
-        u =>
-          (u.username.toLowerCase() === inputLogin || (u.email && u.email.toLowerCase() === inputLogin)) &&
-          u.active !== false
-      );
-    } else {
-      // If only password/PIN was provided (quick PIN station / inline re-auth mode).
-      // Stored secrets are scrypt-hashed, so compare via verifySecret — never ===.
-      user = users.find(
-        u =>
-          u.active !== false &&
-          (verifySecret(u.password, inputSecret) || verifySecret(u.pin, inputSecret))
-      );
-    }
+    // Find the identified user. Stored secrets are scrypt-hashed — compare via
+    // verifySecret, never ===.
+    const user: SystemUser | undefined = users.find(
+      u =>
+        (u.username.toLowerCase() === inputLogin || (u.email && u.email.toLowerCase() === inputLogin)) &&
+        u.active !== false
+    );
 
     if (!user) {
       return res.status(401).json({ error: 'Usuário ou credenciais não encontrados.' });

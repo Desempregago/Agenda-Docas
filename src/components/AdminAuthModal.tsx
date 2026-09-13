@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ShieldCheck, Lock, KeyRound, AlertCircle, X, CheckCircle2, User, UserPlus, Sparkles, Building2 } from 'lucide-react';
+import { ShieldCheck, Lock, KeyRound, AlertCircle, X, CheckCircle2, User, UserPlus, Sparkles, Building2, Loader2 } from 'lucide-react';
 import { SystemUser } from '../types';
 import { authFetch, setAuthToken } from '../services/api';
 
@@ -22,6 +22,8 @@ export const AdminAuthModal: React.FC<AdminAuthModalProps> = ({
   // Login form fields
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [recognized, setRecognized] = useState<{ name: string; hasPin: boolean; hasPassword: boolean } | null>(null);
+  const [checkingLogin, setCheckingLogin] = useState(false);
 
   // Setup form fields (for initial admin setup if no users exist in database)
   const [setupName, setSetupName] = useState('');
@@ -35,7 +37,9 @@ export const AdminAuthModal: React.FC<AdminAuthModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       setErrorMessage(null);
+      setUsername('');
       setPassword('');
+      setRecognized(null);
       setLoading(true);
 
       authFetch('/api/auth/status')
@@ -56,11 +60,45 @@ export const AdminAuthModal: React.FC<AdminAuthModalProps> = ({
     }
   }, [isOpen]);
 
+  // Stage 2 gate: the secret field only appears after the server recognizes the
+  // username. Debounced so typing doesn't spam the API; the password is cleared
+  // whenever the login changes so a secret is never typed against a different identity.
+  useEffect(() => {
+    const login = username.trim();
+    if (!login) {
+      setRecognized(null);
+      setCheckingLogin(false);
+      return;
+    }
+    setPassword('');
+    setRecognized(null);
+    setCheckingLogin(true);
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      fetch(`/api/auth/lookup-operator/${encodeURIComponent(login)}`)
+        .then(res => (res.ok ? res.json() : Promise.reject(new Error('not-found'))))
+        .then(data => {
+          if (!cancelled) setRecognized({ name: data.name, hasPin: Boolean(data.hasPin), hasPassword: Boolean(data.hasPassword) });
+        })
+        .catch(() => {
+          if (!cancelled) setRecognized(null);
+        })
+        .finally(() => {
+          if (!cancelled) setCheckingLogin(false);
+        });
+    }, 350);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [username]);
+
   if (!isOpen) return null;
 
   // Handle Login Authentication
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!recognized || !password.trim()) return;
     setSubmitting(true);
     setErrorMessage(null);
 
@@ -69,7 +107,7 @@ export const AdminAuthModal: React.FC<AdminAuthModalProps> = ({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          username: username.trim() || undefined,
+          username: username.trim(),
           password: password.trim(),
           pin: password.trim(),
         }),
@@ -84,6 +122,7 @@ export const AdminAuthModal: React.FC<AdminAuthModalProps> = ({
         setErrorMessage(null);
         setPassword('');
         setUsername('');
+        setRecognized(null);
         onAuthenticate(data.user, data.token);
         onClose();
       } else {
@@ -169,7 +208,7 @@ export const AdminAuthModal: React.FC<AdminAuthModalProps> = ({
               <p className="text-xs text-slate-300">
                 {isSetupMode
                   ? 'Cadastre o primeiro Administrador no banco de dados'
-                  : 'Autentique-se com seu login de operador ou PIN cadastrado'}
+                  : 'Identifique-se pelo usuário — a senha será solicitada em seguida'}
               </p>
             </div>
           </div>
@@ -196,6 +235,7 @@ export const AdminAuthModal: React.FC<AdminAuthModalProps> = ({
               <input
                 type="text"
                 autoFocus
+                autoComplete="username"
                 placeholder="Ex: joao.silva ou 10240"
                 value={username}
                 onChange={e => {
@@ -204,25 +244,56 @@ export const AdminAuthModal: React.FC<AdminAuthModalProps> = ({
                 }}
                 className="w-full px-4 py-2.5 text-sm border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-slate-50"
               />
+              {username.trim() && !recognized && (
+                <p className="mt-1.5 text-[11px] text-slate-500 flex items-center gap-1.5">
+                  {checkingLogin ? (
+                    <>
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                      Verificando usuário...
+                    </>
+                  ) : (
+                    'Usuário não reconhecido. Confira o login digitado.'
+                  )}
+                </p>
+              )}
             </div>
 
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center gap-1.5">
-                <KeyRound className="w-4 h-4 text-indigo-600" />
-                Senha de Acesso ou PIN Cadastrado *
-              </label>
-              <input
-                type="password"
-                required
-                placeholder="Digite a senha ou PIN..."
-                value={password}
-                onChange={e => {
-                  setPassword(e.target.value);
-                  setErrorMessage(null);
-                }}
-                className="w-full px-4 py-2.5 text-sm border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-slate-50"
-              />
-            </div>
+            {recognized && (
+              <div className="space-y-1.5 animate-in fade-in slide-in-from-bottom-1 duration-200">
+                <div className="p-2.5 bg-emerald-50 border border-emerald-200 text-emerald-800 text-[11px] rounded-xl font-medium flex items-center gap-1.5">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                  <span>
+                    {recognized.name} identificado
+                    {recognized.hasPin && recognized.hasPassword
+                      ? ' — use a senha ou o PIN'
+                      : recognized.hasPin
+                        ? ' — use o PIN cadastrado'
+                        : ''}
+                  </span>
+                </div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center gap-1.5">
+                  <KeyRound className="w-4 h-4 text-indigo-600" />
+                  {recognized.hasPin && recognized.hasPassword
+                    ? 'Senha ou PIN Cadastrado *'
+                    : recognized.hasPin
+                      ? 'PIN Cadastrado *'
+                      : 'Senha de Acesso *'}
+                </label>
+                <input
+                  type="password"
+                  required
+                  autoFocus
+                  autoComplete="current-password"
+                  placeholder={recognized.hasPin && !recognized.hasPassword ? 'Digite o PIN...' : 'Digite a senha ou PIN...'}
+                  value={password}
+                  onChange={e => {
+                    setPassword(e.target.value);
+                    setErrorMessage(null);
+                  }}
+                  className="w-full px-4 py-2.5 text-sm border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-slate-50"
+                />
+              </div>
+            )}
 
             <div className="pt-2 flex items-center gap-2">
               <button
@@ -234,7 +305,7 @@ export const AdminAuthModal: React.FC<AdminAuthModalProps> = ({
               </button>
               <button
                 type="submit"
-                disabled={submitting}
+                disabled={submitting || !recognized}
                 className="w-1/2 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-1.5 disabled:opacity-50 cursor-pointer"
               >
                 <Lock className="w-4 h-4" />
