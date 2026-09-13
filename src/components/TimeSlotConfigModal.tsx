@@ -77,7 +77,6 @@ export const TimeSlotConfigModal: React.FC<TimeSlotConfigModalProps> = ({
   // Formulário de nova doca física
   const [newDockName, setNewDockName] = useState('');
   const [newDockType, setNewDockType] = useState('PALETIZADA');
-  const [newDockCapacity, setNewDockCapacity] = useState(2);
   const [newDockDailyLimit, setNewDockDailyLimit] = useState<number | ''>(140);
   const [newDockLimitUnit, setNewDockLimitUnit] = useState<'pallets' | 'volumes'>('pallets');
 
@@ -261,7 +260,6 @@ export const TimeSlotConfigModal: React.FC<TimeSlotConfigModalProps> = ({
       id: newId,
       name: newDockName.trim(),
       type: newDockType,
-      capacityPerSlot: Math.max(1, Number(newDockCapacity) || 1),
       isOperational: true,
       // Campo vazio = doca SEM limite diário (o servidor não bloqueia capacidade;
       // o dashboard exibe o estado "sem limite" explicitamente).
@@ -276,7 +274,6 @@ export const TimeSlotConfigModal: React.FC<TimeSlotConfigModalProps> = ({
     }));
 
     setNewDockName('');
-    setNewDockCapacity(2);
     handleTypeChange('PALETIZADA');
   };
 
@@ -889,19 +886,6 @@ export const TimeSlotConfigModal: React.FC<TimeSlotConfigModalProps> = ({
                     </select>
                   </div>
 
-                  <div>
-                    <label className="block text-[11px] font-bold text-slate-600 mb-1">
-                      Veículos / Janela
-                    </label>
-                    <input
-                      type="number"
-                      min={1}
-                      max={10}
-                      value={newDockCapacity}
-                      onChange={e => setNewDockCapacity(parseInt(e.target.value) || 1)}
-                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-800 text-center focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                    />
-                  </div>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
@@ -1066,21 +1050,6 @@ export const TimeSlotConfigModal: React.FC<TimeSlotConfigModalProps> = ({
 
                       {/* Configurações Modulares da Doca */}
                       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 bg-slate-50 p-2.5 rounded-xl border border-slate-200/80 text-xs">
-                        <div className="flex items-center gap-2">
-                          <Truck className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-                          <span className="text-slate-600">Veículos / Janela:</span>
-                          <input
-                            type="number"
-                            min={1}
-                            max={20}
-                            value={dock.capacityPerSlot}
-                            onChange={e =>
-                              handleUpdateDockField(dock.id, 'capacityPerSlot', Math.max(1, parseInt(e.target.value) || 1))
-                            }
-                            className="w-14 px-2 py-0.5 bg-white border border-slate-300 rounded text-center font-bold text-slate-800"
-                          />
-                        </div>
-
                         <div className="flex items-center gap-2">
                           <Layers className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
                           <span className="text-slate-600">Limite Diário:</span>

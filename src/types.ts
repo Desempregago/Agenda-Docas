@@ -146,7 +146,8 @@ export interface Dock {
   id: string;
   name: string; // Ex: "Doca 01 - Cargas Paletizadas"
   type: string;
-  capacityPerSlot: number;
+  /** @deprecated Campo decorativo nunca lido pelo servidor. Novas docas não o gravam. */
+  capacityPerSlot?: number;
   isOperational: boolean;
   dailyLimit?: number; // Limite diário máximo (ex: 140, 40, 200, 50)
   limitUnit?: 'pallets' | 'volumes'; // Unidade do limite ('pallets' ou 'volumes')
