@@ -824,8 +824,11 @@ export const AdminDockDashboard: React.FC<AdminDockDashboardProps> = ({
               return primaryDock?.id === dock.id;
             });
 
-            // Calculate dock volume/pallet load for the day
-            const dailyLimit = dock.dailyLimit || (dock.type === 'REFRIGERADA' ? 40 : dock.type === 'BATIDA' ? 200 : dock.type === 'FRACIONADA' ? 50 : 140);
+            // Calculate dock volume/pallet load for the day. Sem dailyLimit configurado,
+            // a doca NÃO tem limite aplicado no servidor — exibimos isso explicitamente
+            // em vez de inventar um teto padrão (140/40/200/50 eram chutes genéricos).
+            const hasConfiguredLimit = Boolean(dock.dailyLimit);
+            const dailyLimit = dock.dailyLimit || 0;
             const limitUnit = dock.limitUnit || (dock.type === 'BATIDA' || dock.type === 'FRACIONADA' ? 'volumes' : 'pallets');
             
             const explicitlyAssignedTotal = dockAppts
@@ -837,8 +840,8 @@ export const AdminDockDashboard: React.FC<AdminDockDashboardProps> = ({
 
             const occupiedTotal = explicitlyAssignedTotal + unallocatedTotal;
 
-            const occupancyPercent = Math.min(100, Math.round((occupiedTotal / dailyLimit) * 100));
-            const isFull = occupiedTotal >= dailyLimit;
+            const occupancyPercent = hasConfiguredLimit ? Math.min(100, Math.round((occupiedTotal / dailyLimit) * 100)) : 0;
+            const isFull = hasConfiguredLimit && occupiedTotal >= dailyLimit;
             const isDropTarget = dragOverTargetId === dock.id;
 
             return (
@@ -898,21 +901,32 @@ export const AdminDockDashboard: React.FC<AdminDockDashboardProps> = ({
                     <span className={`font-mono font-bold text-[11px] ${
                       isFull ? 'text-rose-700' : occupancyPercent > 80 ? 'text-amber-700' : 'text-slate-800'
                     }`}>
-                      {occupiedTotal} / {dailyLimit} {limitUnit}
+                      {hasConfiguredLimit ? (
+                        <>{occupiedTotal} / {dailyLimit} {limitUnit}</>
+                      ) : (
+                        <>{occupiedTotal} {limitUnit} hoje</>
+                      )}
                     </span>
                   </div>
-                  <div className="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
-                    <div
-                      className={`h-full rounded-full transition-all duration-300 ${
-                        isFull
-                          ? 'bg-rose-500'
-                          : occupancyPercent > 80
-                          ? 'bg-amber-500'
-                          : 'bg-emerald-500'
-                      }`}
-                      style={{ width: `${occupancyPercent}%` }}
-                    />
-                  </div>
+                  {hasConfiguredLimit ? (
+                    <div className="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all duration-300 ${
+                          isFull
+                            ? 'bg-rose-500'
+                            : occupancyPercent > 80
+                            ? 'bg-amber-500'
+                            : 'bg-emerald-500'
+                        }`}
+                        style={{ width: `${occupancyPercent}%` }}
+                      />
+                    </div>
+                  ) : (
+                    <div className="text-[10px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1 font-medium flex items-center gap-1">
+                      <AlertTriangle className="w-3 h-3 shrink-0" />
+                      Sem limite diário configurado — capacidade não é bloqueada no servidor. Defina em Configurar Janelas & Docas.
+                    </div>
+                  )}
                   {unallocatedMatchingAppts.length > 0 && (
                     <div className="text-[10px] text-amber-700 font-medium flex items-center justify-between pt-0.5">
                       <span>Previstos sem doca:</span>
@@ -1368,7 +1382,7 @@ export const AdminDockDashboard: React.FC<AdminDockDashboardProps> = ({
                     const occupied = dockAppts
                       .filter(a => a.status !== 'CANCELADO' && a.status !== 'NO_SHOW')
                       .reduce((sum, a) => sum + getApptVolume(a), 0);
-                    const limit = dock.dailyLimit || (dock.type === 'REFRIGERADA' ? 40 : dock.type === 'BATIDA' ? 200 : dock.type === 'FRACIONADA' ? 50 : 140);
+                    const limit = dock.dailyLimit || 0;
                     const unit = dock.limitUnit || (dock.type === 'BATIDA' || dock.type === 'FRACIONADA' ? 'vol' : 'pal');
 
                     return (
@@ -1390,7 +1404,7 @@ export const AdminDockDashboard: React.FC<AdminDockDashboardProps> = ({
                         </div>
                         <div className="flex items-center justify-between text-[11px]">
                           <span className="font-mono text-slate-600 font-medium">
-                            {occupied} / {limit} {unit}
+                            {limit > 0 ? `${occupied} / ${limit} ${unit}` : `${occupied} ${unit} • sem limite`}
                           </span>
                           {isCurrent ? (
                             <span className="text-[10px] font-bold text-blue-700 bg-blue-100 px-1.5 py-0.5 rounded">
