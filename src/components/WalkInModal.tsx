@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, ShieldCheck, Truck, FileText, CheckCircle2, AlertTriangle, Zap, MapPin, KeyRound, Plus, Trash2, DollarSign, User, Building2, Sparkles, Loader2, Lock, Unlock, RotateCcw } from 'lucide-react';
-import { Appointment, Dock, DestinationBranch } from '../types';
+import { Appointment, Dock, DestinationBranch, ACTIVE_CARGO_TYPES, CARGO_TYPE_LABELS } from '../types';
 import { MapPin as DockIcon } from 'lucide-react';
 import { formatCpf, formatCnpj, formatPhone, parseCurrencyInput, cleanNfeAccessKey, extractNfeKeysFromText, extractInvoiceNumberFromNfeKey, extractUniqueCnpjsFromNfeKeys } from '../utils/formatters';
 import { businessToday } from '../utils/dateUtils';
@@ -854,10 +854,9 @@ export const WalkInModal: React.FC<WalkInModalProps> = ({
                 onChange={e => setFormData({ ...formData, cargoType: e.target.value as any })}
                 className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-amber-500 bg-white"
               >
-                <option value="PALETIZADA">Paletizada (PBR)</option>
-                <option value="BATIDA">Carga Batida</option>
-                <option value="FRACIONADA">Fracionada / Express</option>
-                <option value="REFRIGERADA">Refrigerada</option>
+                {ACTIVE_CARGO_TYPES.map(ct => (
+                  <option key={`walkin-cargo-${ct}`} value={ct}>{CARGO_TYPE_LABELS[ct]}</option>
+                ))}
               </select>
             </div>
 

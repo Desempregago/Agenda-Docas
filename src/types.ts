@@ -201,3 +201,22 @@ export interface ServerNotification {
   operatorName?: string;
   timestamp: string;
 }
+
+/**
+ * Tipos de carga ativos para NOVOS agendamentos e docas. A união CargoType acima
+ * permanece para ler dados legados; esta lista é a fonte única dos seletores de
+ * carga (agendamento, encaixe, cadastro/edição de docas).
+ *
+ * Layout atual: PALETIZADA (carga seca) + REFRIGERADA (carga refrigerada).
+ * Cada cliente gerencia seus próprios tipos — para reativar BATIDA, FRACIONADA
+ * ou PERIGOSA, adicione o valor aqui e ele reaparece em todos os formulários.
+ */
+export const ACTIVE_CARGO_TYPES = ['PALETIZADA', 'REFRIGERADA'] as const;
+
+export const CARGO_TYPE_LABELS: Record<string, string> = {
+  PALETIZADA: 'Paletizada (PBR)',
+  BATIDA: 'Carga Batida (Caixas)',
+  REFRIGERADA: 'Refrigerada / Climatizada',
+  PERIGOSA: 'Carga Perigosa (Hazmat)',
+  FRACIONADA: 'Fracionada / Express',
+};

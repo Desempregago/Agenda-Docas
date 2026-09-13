@@ -312,13 +312,21 @@ async function startServer() {
       });
     }
 
-    // Lista de Docas Físicas (Centralizada em docks.json)
+    // Lista de Docas Físicas (agregada das unidades — IDs globalmente únicos)
     const branchDocks = docks;
 
-    // Find target dock based on dockId or cargoType
+    // Resolve a doca alvo: explícita (walk-in com doca sugerida) ou por tipo de carga.
+    // Sem doca compatível na unidade, o agendamento é RECUSADO — nunca mais cair
+    // silenciosamente na primeira doca da lista contando volume no lugar errado.
     let targetDock = branchDocks.find(d => d.id === body.dockId);
     if (!targetDock) {
-      targetDock = branchDocks.find(d => d.type === cargoType) || branchDocks[0];
+      targetDock = branchDocks.find(d => d.type === cargoType);
+    }
+    if (!targetDock) {
+      const branchLabel = targetDest?.name ? ` na unidade "${targetDest.name}"` : '';
+      return res.status(400).json({
+        error: `Nenhuma doca do tipo ${cargoType} está configurada${branchLabel}. O administrador deve cadastrar uma doca compatível com este tipo de carga antes de receber agendamentos.`
+      });
     }
 
     // Check daily limit for target dock if configured

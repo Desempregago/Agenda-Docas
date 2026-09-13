@@ -20,7 +20,7 @@ import {
   Lock,
   RefreshCw,
 } from 'lucide-react';
-import { DestinationBranch, Dock } from '../types';
+import { DestinationBranch, Dock, ACTIVE_CARGO_TYPES, CARGO_TYPE_LABELS } from '../types';
 import {
   DAY_NAMES_PT,
   DAY_SHORT_NAMES_PT,
@@ -883,11 +883,9 @@ export const TimeSlotConfigModal: React.FC<TimeSlotConfigModalProps> = ({
                       onChange={e => handleTypeChange(e.target.value)}
                       className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none"
                     >
-                      <option value="PALETIZADA">PALETIZADA</option>
-                      <option value="BATIDA">BATIDA</option>
-                      <option value="REFRIGERADA">REFRIGERADA</option>
-                      <option value="FRACIONADA">FRACIONADA</option>
-                      <option value="PERIGOSA">PERIGOSA</option>
+                      {ACTIVE_CARGO_TYPES.map(ct => (
+                        <option key={`newdock-cargo-${ct}`} value={ct}>{CARGO_TYPE_LABELS[ct]}</option>
+                      ))}
                     </select>
                   </div>
 
@@ -1008,11 +1006,9 @@ export const TimeSlotConfigModal: React.FC<TimeSlotConfigModalProps> = ({
                                   onChange={e => handleUpdateDockField(dock.id, 'type', e.target.value)}
                                   className="px-2 py-1 bg-white border border-blue-400 rounded-lg text-xs font-bold"
                                 >
-                                  <option value="PALETIZADA">PALETIZADA</option>
-                                  <option value="BATIDA">BATIDA</option>
-                                  <option value="REFRIGERADA">REFRIGERADA</option>
-                                  <option value="FRACIONADA">FRACIONADA</option>
-                                  <option value="PERIGOSA">PERIGOSA</option>
+                                  {ACTIVE_CARGO_TYPES.map(ct => (
+                                    <option key={`dock-cargo-${ct}`} value={ct}>{CARGO_TYPE_LABELS[ct]}</option>
+                                  ))}
                                 </select>
                                 <button
                                   onClick={() => {

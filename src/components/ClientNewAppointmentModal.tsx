@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Calendar, Clock, Truck, FileText, CheckCircle2, Copy, AlertCircle, Lock, Unlock, RotateCcw, MapPin, Building2, Info, Sparkles, KeyRound, Plus, Trash2, DollarSign, User, ShieldCheck, AlertTriangle } from 'lucide-react';
-import { Appointment, Dock, DestinationBranch } from '../types';
+import { Appointment, Dock, DestinationBranch, ACTIVE_CARGO_TYPES, CARGO_TYPE_LABELS } from '../types';
 import { SupplierSession } from './SupplierLoginModal';
 import { formatCpf, formatCnpj, formatPhone, formatCurrencyBRL, parseCurrencyInput, formatNfeAccessKey, cleanNfeAccessKey, extractNfeKeysFromText, extractInvoiceNumberFromNfeKey, extractUniqueCnpjsFromNfeKeys } from '../utils/formatters';
 import {
@@ -1235,11 +1235,9 @@ export const ClientNewAppointmentModal: React.FC<ClientNewAppointmentModalProps>
                       onChange={e => setFormData({ ...formData, cargoType: e.target.value as any })}
                       className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"
                     >
-                      <option value="PALETIZADA">Paletizada (PBR)</option>
-                      <option value="BATIDA">Carga Batida (Caixas)</option>
-                      <option value="REFRIGERADA">Refrigerada / Climatizada</option>
-                      <option value="FRACIONADA">Fracionada / Express</option>
-                      <option value="PERIGOSA">Carga Perigosa (Hazmat)</option>
+                      {ACTIVE_CARGO_TYPES.map(ct => (
+                        <option key={`cargo-${ct}`} value={ct}>{CARGO_TYPE_LABELS[ct]}</option>
+                      ))}
                     </select>
                   </div>
 
