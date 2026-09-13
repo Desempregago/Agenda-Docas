@@ -176,9 +176,10 @@ async function startServer() {
       if (code !== 0 && !res.headersSent) {
         res.status(500).json({ error: `pg_dump falhou (código ${code}).`, detail: stderrBuf.slice(0, 500) });
       } else if (code !== 0 && dumpFailed === false) {
-        // Falha após o stream ter começado: encerra com aviso no log
+        // Falha após o stream ter começado: encerra a conexão em vez de
+        // entregar um dump truncado como se fosse um backup completo.
         console.error('[Backup] pg_dump terminou com erro:', stderrBuf.slice(0, 500));
-        res.end();
+        res.destroy();
       }
     });
 
@@ -377,6 +378,15 @@ async function startServer() {
         return targetDest?.isDefault;
       }
     ).length;
+
+    // Teto absoluto de segurança por agendamento: impede que um valor digitado
+    // errado (ou malicioso) monopole toda a capacidade diária de uma doca.
+    const MAX_VOLUMES_PER_APPOINTMENT = 5000;
+    if (requestedVolumes > MAX_VOLUMES_PER_APPOINTMENT) {
+      return res.status(400).json({
+        error: `Quantidade de volumes/paletes inválida (máximo ${MAX_VOLUMES_PER_APPOINTMENT} por agendamento).`
+      });
+    }
 
     if (!isWalkIn && maxSuppliersForSlot !== undefined && currentSuppliersInSlot >= maxSuppliersForSlot) {
       const branchLabel = targetDest?.name ? ` na unidade "${targetDest.name}"` : '';
@@ -579,6 +589,11 @@ async function startServer() {
     // Auto-register/sync supplier if CNPJ and Name are provided
     if (newAppointment.supplierCnpj && newAppointment.supplierName) {
       const cleanDigits = newAppointment.supplierCnpj.replace(/\D/g, '');
+      // Sessão de fornecedor agenda exclusivamente para o próprio CNPJ —
+      // o campo vem da sessão (forçado no topo do handler), nunca do body.
+      if (session?.type === 'supplier' && cleanDigits !== session.supplierCnpj.replace(/\D/g, '')) {
+        return res.status(403).json({ error: 'Fornecedor autenticado só pode agendar para o próprio CNPJ.' });
+      }
       if (cleanDigits.length >= 11) {
         const existingIndex = suppliers.findIndex(s => s.cnpj.replace(/\D/g, '') === cleanDigits);
         if (existingIndex === -1) {
@@ -869,6 +884,19 @@ async function startServer() {
     if (normalizedStatus && normalizedStatus !== current.status && (current.status === 'ENTREGUE_SEM_DIVERGENCIA' || current.status === 'ENTREGUE_COM_DIVERGENCIA')) {
       return res.status(409).json({ error: 'Agendamentos concluídos não podem voltar para um status anterior.' });
     }
+    // Fechamentos operacionais (NO_SHOW / CANCELADO) são terminais: um NO_SHOW
+    // reaberto silenciosamente esconderia a falta real de um veículo agendado.
+    if (
+      normalizedStatus && normalizedStatus !== current.status &&
+      (current.status === 'NO_SHOW' || current.status === 'CANCELADO') &&
+      !['NO_SHOW', 'CANCELADO'].includes(normalizedStatus)
+    ) {
+      return res.status(409).json({
+        error: current.status === 'NO_SHOW'
+          ? 'Agendamento marcado como No Show é terminal. Registre um encaixe (walk-in) para o veículo que chegou.'
+          : 'Agendamentos cancelados não podem voltar para a fila. Solicite um novo agendamento ou registre um encaixe (walk-in).'
+      });
+    }
     const nowIso = new Date().toISOString();
 
     const updatedTimestamps = {
@@ -950,7 +978,7 @@ async function startServer() {
 
   // Save Slot Supplier Limits
   app.put('/api/slot-limits', requireSystemRole('ADMIN', 'SUPERVISOR', 'OPERATOR'), async (req, res) => {
-    if (req.body && typeof req.body === 'object') {
+    if (req.body && typeof req.body === 'object' && !Array.isArray(req.body)) {
       slotSupplierLimits = req.body;
       await StorageService.saveSlotSupplierLimits(slotSupplierLimits);
     }
@@ -1078,8 +1106,12 @@ async function startServer() {
   app.put('/api/timeslots', requireSystemRole('ADMIN', 'SUPERVISOR', 'OPERATOR'), async (req, res) => {
     const updated = req.body;
     if (Array.isArray(updated)) {
-      timeSlots = updated;
-      await StorageService.saveTimeSlots(timeSlots);
+      // Sanitiza: apenas strings não-vazias, únicas, com teto de 100 janelas.
+      const sanitized = Array.from(new Set(updated.filter((s: unknown): s is string => typeof s === 'string' && s.trim().length > 0).map((s: string) => s.trim())));
+      if (sanitized.length <= 100) {
+        timeSlots = sanitized;
+        await StorageService.saveTimeSlots(timeSlots);
+      }
     }
     res.json(timeSlots);
   });
@@ -1093,7 +1125,9 @@ async function startServer() {
   app.put('/api/operating-days', requireSystemRole('ADMIN', 'SUPERVISOR', 'OPERATOR'), async (req, res) => {
     const updated = req.body;
     if (Array.isArray(updated)) {
-      operatingDays = updated;
+      // Sanitiza: apenas inteiros 0–6 (dias da semana), únicos.
+      const sanitized = Array.from(new Set(updated.filter((d: unknown): d is number => Number.isInteger(d) && (d as number) >= 0 && (d as number) <= 6)));
+      operatingDays = sanitized;
       await StorageService.saveOperatingDays(operatingDays);
     }
     res.json(operatingDays);
@@ -1225,11 +1259,19 @@ async function startServer() {
   });
 
   app.put('/api/settings/branding', requireSystemRole('ADMIN'), async (req, res) => {
-    const newSettings = req.body as BrandSettings;
-    if (newSettings && typeof newSettings === 'object') {
+    const newSettings = req.body as Partial<BrandSettings>;
+    if (newSettings && typeof newSettings === 'object' && !Array.isArray(newSettings)) {
+      // Allowlist: apenas campos de branding conhecidos são aceitos.
       brandSettings = {
         ...brandSettings,
-        ...newSettings
+        ...(typeof newSettings.appName === 'string' ? { appName: newSettings.appName.slice(0, 120) } : {}),
+        ...(typeof newSettings.appSubtitle === 'string' ? { appSubtitle: newSettings.appSubtitle.slice(0, 200) } : {}),
+        ...(typeof newSettings.primaryColor === 'string' ? { primaryColor: newSettings.primaryColor.slice(0, 30) } : {}),
+        ...(newSettings.logoUrl === undefined || newSettings.logoUrl === ''
+          ? { logoUrl: '' }
+          : typeof newSettings.logoUrl === 'string' && (newSettings.logoUrl.startsWith('data:image/') || newSettings.logoUrl.startsWith('http'))
+            ? { logoUrl: newSettings.logoUrl.slice(0, 3_000_000) }
+            : {}),
       };
       await StorageService.saveBranding(brandSettings);
     }
@@ -1324,6 +1366,17 @@ async function startServer() {
       return res.status(400).json({ error: 'Informe Nome, Usuário/E-mail e uma Senha ou PIN de acesso.' });
     }
 
+    const setupPassword = password ? String(password).trim() : '';
+    const setupPin = pin ? String(pin).trim() : '';
+    // O primeiro administrador controla o sistema inteiro: sem mínimo de força,
+    // qualquer pessoa que abrir o site primeiro assumiria o painel com "1".
+    if (setupPassword && setupPassword.length < 8) {
+      return res.status(400).json({ error: 'A senha do administrador inicial deve ter no mínimo 8 caracteres.' });
+    }
+    if (setupPin && !/^\d{4,8}$/.test(setupPin)) {
+      return res.status(400).json({ error: 'O PIN deve conter de 4 a 8 dígitos numéricos.' });
+    }
+
     const newAdmin: SystemUser = {
       id: `USR-${randomUUID()}`,
       name: String(name).trim(),
@@ -1331,8 +1384,8 @@ async function startServer() {
       email: email ? String(email).trim().toLowerCase() : undefined,
       department: department ? String(department).trim() : 'Coordenação de Logística',
       role: 'ADMIN',
-      password: password ? hashSecret(String(password).trim()) : undefined,
-      pin: pin ? hashSecret(String(pin).trim()) : undefined,
+      password: setupPassword ? hashSecret(setupPassword) : undefined,
+      pin: setupPin ? hashSecret(setupPin) : undefined,
       active: true,
       createdAt: new Date().toISOString(),
       lastLogin: new Date().toISOString()
@@ -1459,6 +1512,15 @@ async function startServer() {
       return res.status(409).json({ error: 'Já existe um usuário cadastrado com este login/usuário.' });
     }
 
+    const cleanPassword = password ? String(password).trim() : '';
+    const cleanPin = pin ? String(pin).trim() : '';
+    if (cleanPassword && cleanPassword.length < 6) {
+      return res.status(400).json({ error: 'A senha deve ter no mínimo 6 caracteres.' });
+    }
+    if (cleanPin && !/^\d{4,8}$/.test(cleanPin)) {
+      return res.status(400).json({ error: 'O PIN deve conter de 4 a 8 dígitos numéricos.' });
+    }
+
     const newUser: SystemUser = {
       id: `USR-${randomUUID()}`,
       name: String(name).trim(),
@@ -1466,8 +1528,8 @@ async function startServer() {
       email: email ? String(email).trim().toLowerCase() : undefined,
       department: department ? String(department).trim() : 'Operação de Pátio / Recebimento',
       role: (role as SystemUserRole) || 'OPERATOR',
-      password: password ? hashSecret(String(password).trim()) : undefined,
-      pin: pin ? hashSecret(String(pin).trim()) : undefined,
+      password: cleanPassword ? hashSecret(cleanPassword) : undefined,
+      pin: cleanPin ? hashSecret(cleanPin) : undefined,
       active: true,
       createdAt: new Date().toISOString()
     };
@@ -1497,8 +1559,8 @@ async function startServer() {
       role: role !== undefined ? role : current.role,
       department: department !== undefined ? String(department).trim() : current.department,
       active: active !== undefined ? Boolean(active) : current.active,
-      ...(password ? { password: String(password).trim() } : {}),
-      ...(pin ? { pin: String(pin).trim() } : {})
+      ...((password && String(password).trim().length >= 6) ? { password: hashSecret(String(password).trim()) } : {}),
+      ...((pin && /^\d{4,8}$/.test(String(pin).trim())) ? { pin: hashSecret(String(pin).trim()) } : {})
     };
 
     users[userIndex] = updated;

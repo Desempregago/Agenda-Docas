@@ -135,13 +135,6 @@ export function clearSessionCookie(res: Response, req?: Request): void {
 export function requireAuth(): RequestHandler {
   return (req: Request, res: Response, next: NextFunction) => {
     (async () => {
-      try {
-        const users = await StorageService.loadUsers();
-        if (users.length === 0) {
-          return next();
-        }
-      } catch (_) {}
-
       if (!getSession(req)) return res.status(401).json({ error: 'Autenticação necessária. Faça login para continuar.' });
       next();
     })().catch(() => res.status(500).json({ error: 'Erro interno de autenticação.' }));
@@ -151,13 +144,6 @@ export function requireAuth(): RequestHandler {
 export function requireSystemRole(...roles: SystemUserRole[]): RequestHandler {
   return (req: Request, res: Response, next: NextFunction) => {
     (async () => {
-      try {
-        const users = await StorageService.loadUsers();
-        if (users.length === 0) {
-          return next();
-        }
-      } catch (_) {}
-
       const session = getSession(req);
       if (!session) return res.status(401).json({ error: 'Autenticação necessária. Por favor, acesse com seu login de Administrador ou Operador.' });
       if (session.type !== 'system' || !roles.includes(session.role)) {
