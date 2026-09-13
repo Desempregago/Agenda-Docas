@@ -215,6 +215,8 @@
     .dark .border-emerald-200\/80 { border-color: #065f46; }
     .dark .border-emerald-300\/80, .dark .border-emerald-300\/90 { border-color: #047857; }
     .dark .border-orange-200\/60, .dark .border-orange-200\/80 { border-color: #9a3412; }
+    .dark .border-blue-300\/80 { border-color: #1d4ed8; }
+    .dark .border-amber-300\/40 { border-color: #b45309; }
 
     /* Textos escuros com opacidade sobre chips pastéis */
     .dark .text-amber-900\/90 { color: #fde68a; }
@@ -242,6 +244,38 @@
     .dark .bg-teal-600 { background-color: #0d9488; }
     .dark .bg-teal-700 { background-color: #0f766e; }
     .dark .text-teal-800 { color: #99f6e4; }
+  }
+}
+
+/* ============================================================
+   Gradientes claros no tema escuro (Tailwind v4 define --tw-gradient-*;
+   sem o @property, .dark .from-x não sobrescreve a var registrada no :root)
+   Uso real no app: comprovante (from-blue-50 via-slate-50 to-indigo-50)
+   ============================================================ */
+@property --tw-gradient-from {
+  syntax: "*";
+  inherits: false;
+  initial-value: #0000;
+}
+@property --tw-gradient-via {
+  syntax: "*";
+  inherits: false;
+  initial-value: #0000;
+}
+@property --tw-gradient-to {
+  syntax: "*";
+  inherits: false;
+  initial-value: #0000;
+}
+
+@media screen {
+  .dark .from-blue-50 { --tw-gradient-from: #172554; }
+  .dark .via-slate-50 { --tw-gradient-via: #111a2e; }
+  .dark .to-indigo-50 { --tw-gradient-to: #1e1b4b; }
+
+  /* Fallback direto para a combinação exata do comprovante (independe das vars) */
+  .dark .bg-gradient-to-br.from-blue-50 {
+    background-image: linear-gradient(to bottom right, #172554, #1e1b4b);
   }
 }
 
