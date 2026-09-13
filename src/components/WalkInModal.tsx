@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, ShieldCheck, Truck, FileText, CheckCircle2, AlertTriangle, Zap, MapPin, KeyRound, Plus, Trash2, DollarSign, User, Building2, Sparkles, Loader2, Lock, Unlock, RotateCcw } from 'lucide-react';
 import { Appointment, Dock, DestinationBranch } from '../types';
+import { MapPin as DockIcon } from 'lucide-react';
 import { formatCpf, formatCnpj, formatPhone, parseCurrencyInput, cleanNfeAccessKey, extractNfeKeysFromText, extractInvoiceNumberFromNfeKey, extractUniqueCnpjsFromNfeKeys } from '../utils/formatters';
 import { businessToday } from '../utils/dateUtils';
 
@@ -17,6 +18,7 @@ export const WalkInModal: React.FC<WalkInModalProps> = ({
   onClose,
   onSuccess,
   destinations = [],
+  docks = [],
 }) => {
   const todayStr = businessToday();
   const activeDestinations = destinations.filter(d => d.active);
@@ -59,6 +61,7 @@ export const WalkInModal: React.FC<WalkInModalProps> = ({
     cargoType: draft?.formData?.cargoType || 'PALETIZADA',
     weightKg: draft?.formData?.weightKg ?? ('' as number | ''),
     totalVolumes: draft?.formData?.totalVolumes ?? ('' as number | ''),
+    dockId: draft?.formData?.dockId || '',
     notes: draft?.formData?.notes ?? 'REGISTRO DE PORTARIA - ENCAIXE DE VEÍCULO NÃO AGENDADO',
   }));
 
@@ -280,6 +283,12 @@ export const WalkInModal: React.FC<WalkInModalProps> = ({
     }
   }, [defaultDestination, formData.destinationBranchId]);
 
+  // Docas disponíveis na unidade selecionada (operação da unidade define a alocação
+  // final; a escolha aqui registra a intenção no protocolo do encaixe).
+  const selectedBranchDocks = docks.filter(d => !formData.destinationBranchId || d.destinationBranchId === formData.destinationBranchId);
+  const fallbackBranchDocks = formData.destinationBranchId && selectedBranchDocks.length === 0 ? docks : selectedBranchDocks;
+  const availableWalkInDocks = fallbackBranchDocks.filter(d => d.isOperational !== false);
+
   const [loading, setLoading] = useState(false);
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -319,9 +328,9 @@ export const WalkInModal: React.FC<WalkInModalProps> = ({
       return;
     }
 
-    // Quantidade de volumes/paletes é obrigatória para o controle de capacidade das docas
+    // Quantidade de volumes/paletes declarada pelo motorista é obrigatória para o controle de capacidade das docas
     if (!Number(formData.totalVolumes) || Number(formData.totalVolumes) < 1) {
-      setError('Informe a quantidade de volumes/paletes entregues (usada no limite diário das docas).');
+      setError('Informe a quantidade de volumes/paletes que o veículo está trazendo (declarada pelo motorista).');
       return;
     }
 
@@ -423,12 +432,33 @@ export const WalkInModal: React.FC<WalkInModalProps> = ({
                 </label>
                 <select
                   value={formData.destinationBranchId}
-                  onChange={e => setFormData({ ...formData, destinationBranchId: e.target.value })}
+                  onChange={e => setFormData({ ...formData, destinationBranchId: e.target.value, dockId: '' })}
                   className="w-full px-3 py-2 text-xs sm:text-sm font-semibold bg-white border border-amber-300 rounded-lg text-slate-900 focus:ring-2 focus:ring-amber-500 focus:outline-none"
                 >
                   {activeDestinations.map((branch, bIdx) => (
                     <option key={`walkin-dest-${branch.id || ''}-${bIdx}`} value={branch.id}>
                       {branch.name} {branch.code ? `(${branch.code})` : ''} {branch.city ? `- ${branch.city}/${branch.state || ''}` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {availableWalkInDocks.length > 0 && (
+              <div className="sm:col-span-2 bg-amber-50/60 border border-amber-200 rounded-xl p-3">
+                <label className="block text-xs font-bold text-amber-950 mb-1 flex items-center gap-1">
+                  <DockIcon className="w-3.5 h-3.5 text-amber-700" />
+                  Doca sugerida (opcional):
+                </label>
+                <select
+                  value={formData.dockId}
+                  onChange={e => setFormData({ ...formData, dockId: e.target.value })}
+                  className="w-full px-3 py-2 text-xs sm:text-sm font-semibold bg-white border border-amber-300 rounded-lg text-slate-900 focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                >
+                  <option value="">-- Alocação definida pela operação --</option>
+                  {availableWalkInDocks.map((d, dIdx) => (
+                    <option key={`walkin-dock-${d.id || ''}-${dIdx}`} value={d.id}>
+                      {d.name} — {d.type}
                     </option>
                   ))}
                 </select>
@@ -834,8 +864,8 @@ export const WalkInModal: React.FC<WalkInModalProps> = ({
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1">
                 {formData.cargoType === 'BATIDA' || formData.cargoType === 'FRACIONADA'
-                  ? 'Total de Volumes (Caixas)'
-                  : 'Total de Paletes (PBR)'}
+                  ? 'Carga Trazida — Total de Volumes (Caixas)'
+                  : 'Carga Trazida — Total de Paletes (PBR)'}
                 <span className="text-rose-500"> *</span>
               </label>
               <input
@@ -848,7 +878,7 @@ export const WalkInModal: React.FC<WalkInModalProps> = ({
                 className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-amber-500"
               />
               <p className="text-[10px] text-slate-500 mt-1">
-                Usado para o controle de capacidade diária das docas. Encaixes podem exceder o limite do dia — o excesso fica registrado no protocolo (KPI).
+                Carga declarada pelo motorista na guarita. Usada no controle de capacidade diária das docas — encaixes podem exceder o limite do dia, e o excesso fica registrado no protocolo (KPI).
               </p>
             </div>
 

@@ -193,17 +193,16 @@ export const AdminDockDashboard: React.FC<AdminDockDashboardProps> = ({
     return defBranch && defBranch.id === selectedBranchFilter;
   });
 
-  // Branch-specific docks or fallback
+  // Branch-specific docks or fallback. Sem unidade selecionada ("Todas"), nenhuma
+  // doca é exibida — a visão mistura unidades diferentes e a alocação só faz sentido
+  // no contexto de uma unidade.
   const selectedBranchObj = activeDestinations.find(d => d.id === selectedBranchFilter);
-  // Filtro "Todas as Unidades": exibe as docas de TODAS as unidades (config descentralizada).
-  // Filtro por unidade: apenas as docas daquela unidade, com fallback para a lista global.
-  const allBranchDocks = activeDestinations.flatMap(d => (d.docks && d.docks.length > 0 ? d.docks : []));
-  const activeDocksToDisplay = !selectedBranchObj
-    ? (allBranchDocks.length > 0 ? allBranchDocks : docks)
-    : (selectedBranchObj.docks && selectedBranchObj.docks.length > 0)
-    ? selectedBranchObj.docks
-    : docks;
-  // Nome da unidade por doca, para identificar docas de unidades diferentes no modo "Todas"
+  const activeDocksToDisplay: Dock[] = selectedBranchObj
+    ? (selectedBranchObj.docks && selectedBranchObj.docks.length > 0)
+      ? selectedBranchObj.docks
+      : docks
+    : [];
+  // Nome da unidade por doca (usado em contextos que ainda precisam do mapa)
   const branchNameByDockId = new Map<string, string>();
   activeDestinations.forEach(d => (d.docks || []).forEach(dk => branchNameByDockId.set(dk.id, d.name)));
 
@@ -802,10 +801,16 @@ export const AdminDockDashboard: React.FC<AdminDockDashboardProps> = ({
               <span>Configurar Janelas & Docas da Loja</span>
             </button>
           )}
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3.5 sm:gap-4">
-          {activeDocksToDisplay.map((dock, dIdx) => {
+        </div>            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3.5 sm:gap-4">
+          {activeDocksToDisplay.length === 0 ? (
+            <div className="col-span-full bg-white rounded-2xl border-2 border-dashed border-slate-300 p-8 text-center space-y-2">
+              <MapPin className="w-8 h-8 text-slate-300 mx-auto" />
+              <p className="text-sm font-bold text-slate-700">Selecione uma unidade para ver as docas</p>
+              <p className="text-xs text-slate-500">
+                Cada unidade tem docas, janelas e limites próprios. Escolha uma unidade no filtro acima (ou registre um encaixe direto na portaria).
+              </p>
+            </div>
+          ) : activeDocksToDisplay.map((dock, dIdx) => {
             const dockAppts = dayAppointments.filter(a => isAppointmentAssignedToDock(a, dock));
             const activeAtDock = dockAppts.find(a => a.status === 'AGUARDANDO_DESCARGA' || a.status === 'NO_PATIO');
 
@@ -1248,6 +1253,7 @@ export const AdminDockDashboard: React.FC<AdminDockDashboardProps> = ({
       <WalkInModal
         isOpen={isWalkInModalOpen}
         destinations={destinations}
+        docks={selectedBranchObj?.docks && selectedBranchObj.docks.length > 0 ? selectedBranchObj.docks : docks}
         onClose={() => setIsWalkInModalOpen(false)}
         onSuccess={newAppt => {
           setIsWalkInModalOpen(false);
