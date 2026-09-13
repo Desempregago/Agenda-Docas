@@ -148,10 +148,12 @@
     .dark .hover\:bg-slate-50:hover { background-color: #1e2a44; }
     .dark .hover\:bg-slate-100:hover { background-color: #253352; }
     .dark .hover\:bg-slate-200:hover { background-color: #2e3d60; }
+    .dark .hover\:bg-slate-300:hover { background-color: #33415c; }
     .dark .hover\:bg-gray-50:hover { background-color: #1e2a44; }
     .dark .hover\:bg-gray-100:hover { background-color: #253352; }
     .dark .hover\:bg-blue-50:hover { background-color: #172554; }
     .dark .hover\:bg-blue-100:hover { background-color: #1e3a8a; }
+    .dark .hover\:bg-blue-200:hover { background-color: #1e40af; }
     .dark .hover\:bg-indigo-50:hover { background-color: #1e1b4b; }
     .dark .hover\:bg-indigo-100:hover { background-color: #312e81; }
     .dark .hover\:bg-emerald-50:hover { background-color: #022c22; }
@@ -160,6 +162,15 @@
     .dark .hover\:bg-amber-100:hover { background-color: #78350f; }
     .dark .hover\:bg-rose-50:hover { background-color: #4c0519; }
     .dark .hover\:bg-rose-100:hover { background-color: #881337; }
+    .dark .hover\:bg-purple-100:hover { background-color: #3b0764; }
+    .dark .hover\:bg-orange-100:hover { background-color: #7c2d12; }
+
+    /* Hovers com opacidade (hover:bg-x-NN/80 etc.) — classes compiladas distintas */
+    .dark .hover\:bg-slate-50\/80:hover { background-color: #182438; }
+    .dark .hover\:bg-blue-50\/20:hover, .dark .hover\:bg-blue-50\/30:hover { background-color: #1a2a5a; }
+    .dark .hover\:bg-blue-100\/70:hover { background-color: #1e3a8a; }
+    .dark .hover\:bg-blue-200\/60:hover { background-color: #1e40af; }
+    .dark .hover\:bg-amber-100\/70:hover { background-color: #78350f; }
 
     /* Placeholders de inputs */
     .dark .placeholder\:text-slate-400::placeholder { color: #64748b; }
