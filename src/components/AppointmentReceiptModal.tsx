@@ -15,9 +15,7 @@ import {
   Phone,
   AlertCircle,
   QrCode,
-  Share2,
   ImageIcon,
-  Download,
   Loader2,
   KeyRound,
   DollarSign,
@@ -43,7 +41,7 @@ export const AppointmentReceiptModal: React.FC<AppointmentReceiptModalProps> = (
   const [copied, setCopied] = useState(false);
   const [copiedImage, setCopiedImage] = useState(false);
   const [isCapturing, setIsCapturing] = useState(false);
-  const [copiedSummaryText, setCopiedSummaryText] = useState(false);
+  const [copiedKeyIdx, setCopiedKeyIdx] = useState<number | null>(null);
 
   if (!isOpen || !appointment) return null;
 
@@ -86,10 +84,40 @@ export const AppointmentReceiptModal: React.FC<AppointmentReceiptModalProps> = (
     }
   })();
 
-  const handleCopyProtocol = () => {
-    navigator.clipboard.writeText(appointment.protocol);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  // Clipboard que funciona fora de HTTPS (navigator.clipboard só existe em
+  // contexto seguro; em HTTP usamos o fallback clássico com textarea).
+  const copyTextToClipboard = async (text: string): Promise<boolean> => {
+    try {
+      if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+        await navigator.clipboard.writeText(text);
+        return true;
+      }
+    } catch {
+      // cai para o fallback abaixo
+    }
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.setAttribute('readonly', '');
+      ta.style.position = 'fixed';
+      ta.style.top = '-9999px';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      ta.setSelectionRange(0, text.length);
+      const ok = document.execCommand('copy');
+      document.body.removeChild(ta);
+      return ok;
+    } catch {
+      return false;
+    }
+  };
+
+  const handleCopyProtocol = async () => {
+    if (await copyTextToClipboard(appointment.protocol)) {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
   };
 
   // Filter function to ensure buttons and interactive controls are completely excluded from the captured image
@@ -178,76 +206,13 @@ export const AppointmentReceiptModal: React.FC<AppointmentReceiptModalProps> = (
     }
   };
 
-  // Download PNG file directly
-  const handleDownloadReceiptImage = async () => {
-    if (!receiptCardRef.current || isCapturing) return;
-
-    try {
-      setIsCapturing(true);
-      const node = receiptCardRef.current;
-      const width = node.offsetWidth || 640;
-      const height = node.scrollHeight;
-      const dataUrl = await toPng(node, {
-        backgroundColor: '#ffffff',
-        pixelRatio: 2,
-        filter: imageFilter,
-        cacheBust: true,
-        width: width,
-        height: height,
-        canvasWidth: width * 2,
-        canvasHeight: height * 2,
-      });
-      const a = document.createElement('a');
-      a.href = dataUrl;
-      a.download = `Comprovante-Agendamento-${appointment.protocol}.png`;
-      a.click();
-    } catch (err) {
-      console.error('Erro ao baixar imagem:', err);
-    } finally {
-      setIsCapturing(false);
+  const handleCopyKey = async (key: string, idx: number) => {
+    if (await copyTextToClipboard(key)) {
+      setCopiedKeyIdx(idx);
+      setTimeout(() => setCopiedKeyIdx(null), 2000);
     }
   };
 
-  const handleCopyTextSummary = () => {
-    const nfeKeysText = appointment.nfeAccessKeys && appointment.nfeAccessKeys.length > 0
-      ? `\nChave(s) de Acesso NF-e (44 dígitos):\n${appointment.nfeAccessKeys.map((k, i) => `  #${i + 1}: ${k}`).join('\n')}`
-      : appointment.nfeAccessKey ? `\nChave de Acesso NF-e: ${appointment.nfeAccessKey}` : '';
-
-    const summary = `==============================
-COMPROVANTE DE AGENDAMENTO DE CARGA
-==============================
-Protocolo: ${appointment.protocol}
-Status: ${appointment.status}
-Data Agendada: ${shortDate}
-Janela de Horário: ${appointment.timeSlot}
-Doca: ${appointment.dockId || 'A ser definida na portaria'}
-Unidade de Destino: ${appointment.destinationBranchName || 'Matriz - Centro de Distribuição Principal'}
-Endereço de Descarga: ${appointment.destinationBranchAddress || 'Não informado'}
-
---- DADOS DA CARGA & PEDIDO DE COMPRA ---
-Pedido(s) de Compra (PO): ${purchaseOrderList.length > 0 ? purchaseOrderList.join(', ') : (appointment.purchaseOrder || 'Não informado')}
-Notas Fiscais: ${invoiceList.length > 0 ? invoiceList.join(', ') : (appointment.invoiceNumber || 'Não informada')}
-${appointment.invoiceTotalValue !== undefined && appointment.invoiceTotalValue !== null ? `Valor Total das NFs: ${formatCurrencyBRL(appointment.invoiceTotalValue)}\n` : ''}Fornecedor: ${appointment.supplierName}
-CNPJ: ${appointment.supplierCnpj || 'Não informado'}${nfeKeysText}
-Tipo de Carga: ${appointment.cargoType}
-Volumes / Paletes: ${appointment.totalVolumes}
-Peso Total: ${appointment.weightKg.toLocaleString('pt-BR')} KG
-
---- DADOS DO TRANSPORTE ---
-Transportadora: ${appointment.carrierName || 'Própria'}
-Motorista: ${appointment.driverName || 'Não informado'}${appointment.driverCpf ? ` (CPF: ${appointment.driverCpf})` : ''}
-Telefone: ${appointment.driverPhone || 'Não informado'}
-Placa do Veículo: ${appointment.vehiclePlate || 'Não informada'}
-Tipo de Veículo: ${appointment.vehicleType}
-
---- OBSERVAÇÕES ---
-${appointment.notes || 'Nenhuma observação informada.'}
-==============================`;
-
-    navigator.clipboard.writeText(summary);
-    setCopiedSummaryText(true);
-    setTimeout(() => setCopiedSummaryText(false), 2500);
-  };
 
   const handlePrint = () => {
     window.print();
@@ -467,12 +432,12 @@ ${appointment.notes || 'Nenhuma observação informada.'}
                           </span>
                           <button
                             type="button"
-                            onClick={() => navigator.clipboard.writeText(key)}
+                            onClick={() => handleCopyKey(key, idx)}
                             data-no-image="true"
-                            className="text-[10px] text-blue-600 hover:text-blue-800 font-sans font-semibold shrink-0 cursor-pointer hide-in-receipt-image"
+                            className={`text-[10px] font-sans font-semibold shrink-0 cursor-pointer hide-in-receipt-image ${copiedKeyIdx === idx ? 'text-emerald-600' : 'text-blue-600 hover:text-blue-800'}`}
                             title="Copiar Chave"
                           >
-                            Copiar
+                            {copiedKeyIdx === idx ? '✓ Copiada' : 'Copiar'}
                           </button>
                         </div>
                       ))}
@@ -643,7 +608,7 @@ ${appointment.notes || 'Nenhuma observação informada.'}
         {/* Modal Action Buttons Footer (Excluded from Print and Image Capture) */}
         <div className="bg-slate-100/90 border-t border-slate-200 px-6 py-4 flex flex-col sm:flex-row items-center justify-between gap-3 print:hidden" data-no-image="true">
           
-          {/* Left Actions: Copy Image & Download PNG */}
+          {/* Left Actions: Copy Image */}
           <div className="flex items-center gap-2 w-full sm:w-auto flex-wrap">
             <button
               onClick={handleCopyReceiptAsImage}
@@ -671,25 +636,6 @@ ${appointment.notes || 'Nenhuma observação informada.'}
                   <span>Copiar como Imagem</span>
                 </>
               )}
-            </button>
-
-            <button
-              onClick={handleDownloadReceiptImage}
-              disabled={isCapturing}
-              className="inline-flex items-center justify-center gap-1 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 text-xs font-semibold px-3 py-2.5 rounded-xl transition-all shadow-2xs cursor-pointer disabled:opacity-50"
-              title="Baixar arquivo de imagem PNG do comprovante"
-            >
-              <Download className="w-3.5 h-3.5 text-slate-600" />
-              <span className="hidden sm:inline">Baixar PNG</span>
-            </button>
-
-            <button
-              onClick={handleCopyTextSummary}
-              className="inline-flex items-center justify-center gap-1 bg-white hover:bg-slate-50 text-slate-500 hover:text-slate-700 border border-slate-200 text-xs font-medium px-2.5 py-2.5 rounded-xl transition-all cursor-pointer"
-              title="Copiar texto simples"
-            >
-              <Share2 className="w-3.5 h-3.5 text-slate-500" />
-              <span className="text-[11px]">{copiedSummaryText ? 'Texto Copiado' : 'Texto'}</span>
             </button>
           </div>
 
