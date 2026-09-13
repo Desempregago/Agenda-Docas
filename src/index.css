@@ -279,6 +279,84 @@
   }
 }
 
+/* ============================================================
+   IMPRESSÃO DO COMPROVANTE — imprime SOMENTE o cartão.
+   O modal vive num portal em <body>; com <html class="receipt-printing">
+   escondemos o app (#root) e achatamos o overlay para o papel.
+   O resto do sistema (ex.: relatório logístico) imprime como antes.
+   ============================================================ */
+@media print {
+  html.receipt-printing #root { display: none !important; }
+
+  html.receipt-printing body > *:not(.receipt-print-overlay) {
+    display: none !important;
+  }
+
+  .receipt-print-overlay {
+    position: static !important;
+    overflow: visible !important;
+    background: #fff !important;
+    backdrop-filter: none !important;
+    padding: 0 !important;
+    display: block !important;
+    z-index: auto !important;
+  }
+
+  .receipt-print-shell {
+    max-width: none !important;
+    max-height: none !important;
+    border: none !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    overflow: visible !important;
+    display: block !important;
+    margin: 0 !important;
+  }
+
+  .receipt-print-scroll {
+    overflow: visible !important;
+    padding: 0 !important;
+    background: #fff !important;
+  }
+
+  /* Impressão sempre clara, mesmo com tema escuro ativo */
+  html.receipt-printing {
+    --tw-gradient-from: #0000;
+    --tw-gradient-via: #0000;
+    --tw-gradient-to: #0000;
+  }
+  html.receipt-printing .bg-white { background-color: #fff !important; }
+  html.receipt-printing .bg-slate-50 { background-color: #f8fafc !important; }
+  html.receipt-printing .bg-slate-100 { background-color: #f1f5f9 !important; }
+  html.receipt-printing .bg-slate-100\/60, html.receipt-printing .bg-slate-100\/90 { background-color: #f1f5f9 !important; }
+  html.receipt-printing .bg-blue-50 { background-color: #eff6ff !important; }
+  html.receipt-printing .bg-blue-50\/70 { background-color: #eff6ff !important; }
+  html.receipt-printing .bg-emerald-50 { background-color: #ecfdf5 !important; }
+  html.receipt-printing .bg-amber-50 { background-color: #fffbeb !important; }
+  html.receipt-printing .text-slate-900 { color: #0f172a !important; }
+  html.receipt-printing .text-slate-800 { color: #1e293b !important; }
+  html.receipt-printing .text-slate-700 { color: #334155 !important; }
+  html.receipt-printing .text-slate-600 { color: #475569 !important; }
+  html.receipt-printing .text-slate-500 { color: #64748b !important; }
+  html.receipt-printing .text-slate-400 { color: #94a3b8 !important; }
+  html.receipt-printing .text-blue-700 { color: #1d4ed8 !important; }
+  html.receipt-printing .text-blue-800 { color: #1e40af !important; }
+  html.receipt-printing .text-blue-950 { color: #172554 !important; }
+  html.receipt-printing .text-emerald-600 { color: #059669 !important; }
+  html.receipt-printing .text-emerald-700 { color: #047857 !important; }
+  html.receipt-printing .text-emerald-800 { color: #065f46 !important; }
+  html.receipt-printing .text-amber-800 { color: #92400e !important; }
+  html.receipt-printing .border-slate-200 { border-color: #e2e8f0 !important; }
+  html.receipt-printing .border-slate-200\/80 { border-color: #e2e8f0 !important; }
+  html.receipt-printing .border-slate-100 { border-color: #f1f5f9 !important; }
+  html.receipt-printing .border-blue-300\/80 { border-color: #93c5fd !important; }
+  html.receipt-printing .border-blue-200 { border-color: #bfdbfe !important; }
+  html.receipt-printing .border-blue-200\/60 { border-color: #bfdbfe !important; }
+  html.receipt-printing .border-emerald-200 { border-color: #a7f3d0 !important; }
+  html.receipt-printing .border-emerald-300 { border-color: #6ee7b7 !important; }
+  html.receipt-printing .bg-gradient-to-br { background-image: linear-gradient(to bottom right, #eff6ff, #eef2ff) !important; }
+}
+
 /* Hide all scrollbars globally while preserving scroll functionality */
 * {
   -ms-overflow-style: none;  /* IE and Edge */

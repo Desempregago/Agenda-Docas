@@ -1,4 +1,5 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import {
   X,
   CheckCircle2,
@@ -42,6 +43,14 @@ export const AppointmentReceiptModal: React.FC<AppointmentReceiptModalProps> = (
   const [copiedImage, setCopiedImage] = useState(false);
   const [isCapturing, setIsCapturing] = useState(false);
   const [copiedKeyIdx, setCopiedKeyIdx] = useState<number | null>(null);
+
+  // Enquanto o comprovante está aberto, marca <html> para o CSS de impressão
+  // imprimir SOMENTE o cartão (o CSS esconde #root e achata o modal no papel).
+  useEffect(() => {
+    if (!isOpen) return;
+    document.documentElement.classList.add('receipt-printing');
+    return () => document.documentElement.classList.remove('receipt-printing');
+  }, [isOpen]);
 
   if (!isOpen || !appointment) return null;
 
@@ -218,9 +227,11 @@ export const AppointmentReceiptModal: React.FC<AppointmentReceiptModalProps> = (
     window.print();
   };
 
-  return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/75 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 print:p-0 print:bg-white print:static">
-      <div className="bg-white rounded-3xl shadow-2xl max-w-2xl w-full max-h-[92vh] flex flex-col overflow-hidden border border-slate-200 animate-in fade-in zoom-in-95 duration-200 my-auto print:border-none print:shadow-none print:max-w-none print:w-full print:max-h-none">
+  // Portal para <body>: fora do #root, o CSS de impressão pode esconder o app
+  // inteiro (#root) e imprimir apenas o comprovante.
+  return createPortal(
+    <div className="receipt-print-overlay fixed inset-0 z-50 overflow-y-auto bg-slate-900/75 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 print:p-0 print:bg-white print:static">
+      <div className="receipt-print-shell bg-white rounded-3xl shadow-2xl max-w-2xl w-full max-h-[92vh] flex flex-col overflow-hidden border border-slate-200 animate-in fade-in zoom-in-95 duration-200 my-auto print:border-none print:shadow-none print:max-w-none print:w-full print:max-h-none">
         
         {/* Modal Top Header (Hidden on Print and Captured Image) */}
         <div className="bg-slate-900 text-white px-6 py-4 flex items-center justify-between shrink-0 print:hidden" data-no-image="true">
@@ -243,11 +254,11 @@ export const AppointmentReceiptModal: React.FC<AppointmentReceiptModalProps> = (
         </div>
 
         {/* Scrollable Container for Modal View */}
-        <div className="overflow-y-auto flex-1 p-2 sm:p-5 bg-slate-100/60 print:max-h-none print:overflow-visible print:p-0 print:bg-white">
+        <div className="receipt-print-scroll overflow-y-auto flex-1 p-2 sm:p-5 bg-slate-100/60 print:max-h-none print:overflow-visible print:p-0 print:bg-white">
           {/* Printable / Image Captured Card (Ref Container) */}
           <div
             ref={receiptCardRef}
-            className="bg-white rounded-2xl p-5 sm:p-8 space-y-6 shadow-xs border border-slate-200/80 w-full print:border-none print:shadow-none print:p-4"
+            className="receipt-print-root bg-white rounded-2xl p-5 sm:p-8 space-y-6 shadow-xs border border-slate-200/80 w-full print:border-none print:shadow-none print:p-4"
           >
             
             {/* Voucher Header Banner */}
@@ -658,6 +669,7 @@ export const AppointmentReceiptModal: React.FC<AppointmentReceiptModalProps> = (
         </div>
 
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
