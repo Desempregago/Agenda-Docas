@@ -50,12 +50,12 @@ export const SystemMaintenancePanel: React.FC<SystemMaintenancePanelProps> = ({
     try {
       const res = exportAppointmentsToSQL(appointments, docks);
       setExportNotification({
-        message: `Backup SQL gerado e baixado com sucesso! Arquivo: ${res.filename} (${res.count} registros).`,
+        message: `Exportação SQL gerada e baixada com sucesso! Arquivo: ${res.filename} (${res.count} registros). Para backup restaurável do sistema, use pg_dump no servidor.`,
       });
       setTimeout(() => setExportNotification(null), 5000);
     } catch (err: any) {
       setExportNotification({
-        message: err.message || 'Erro ao gerar backup SQL.',
+        message: err.message || 'Erro ao gerar exportação SQL.',
         isError: true,
       });
     }
@@ -190,10 +190,10 @@ export const SystemMaintenancePanel: React.FC<SystemMaintenancePanelProps> = ({
           <button
             onClick={handleExportSQL}
             className="flex items-center justify-center gap-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs sm:text-sm font-bold p-3.5 rounded-2xl shadow-xs transition-all cursor-pointer"
-            title="Gerar e baixar arquivo de backup SQL (.sql) com todos os agendamentos"
+            title="Exportar agendamentos como SQL genérico (.sql) para análise ou outro banco. Para backup restaurável do sistema, use pg_dump no servidor."
           >
             <Download className="w-4 h-4" />
-            <span>Backup SQL (.sql)</span>
+            <span>Exportar SQL (.sql)</span>
           </button>
 
           {(onOpenResetModal || onClearAllAppointments) && (

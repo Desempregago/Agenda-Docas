@@ -84,7 +84,7 @@ export function exportAppointmentsToExcelCSV(appointments: Appointment[], dateFi
       escapeCSV(a.status),
       escapeCSV(a.supplierName),
       escapeCSV(a.supplierCnpj),
-      escapeCSV(a.destinationBranchName || 'Matriz / CD Principal'),
+      escapeCSV(a.destinationBranchName || ''),
       escapeCSV(a.carrierName || ''),
       escapeCSV(a.driverName || ''),
       escapeCSV(a.driverCpf || ''),
@@ -135,12 +135,15 @@ export function exportAppointmentsToSQL(appointments: Appointment[], docks: Dock
   };
 
   let sql = `-- ============================================================================
--- BACKUP EXPORTADO LOCALMENTE - AGENDA-DOCAS
--- Data do Backup: ${new Date().toLocaleString('pt-BR')}
+-- EXPORTAÇÃO DE DADOS - AGENDA-DOCAS
+-- Data: ${new Date().toLocaleString('pt-BR')}
 -- Quantidade de Agendamentos: ${appointments.length}
+--
+-- ATENÇÃO: este arquivo NÃO é um backup restaurável do banco PostgreSQL do
+-- sistema (para isso, use pg_dump no servidor). É uma exportação genérica
+-- (tabelas docas/agendamentos) para análise ou importação em outro banco SQL.
 -- ============================================================================
 
--- Desativar verificação temporária de chaves estrangeiras se necessário
 `;
 
   // Insert Docks
@@ -149,7 +152,9 @@ export function exportAppointmentsToSQL(appointments: Appointment[], docks: Dock
     docks.forEach(d => {
       const docNum = parseInt(d.id.replace(/\D/g, '')) || 1;
       const statusStr = d.isOperational ? 'AVAILABLE' : 'MAINTENANCE';
-      sql += `INSERT INTO docas (id, numero, nome, tipo, status, daily_limit, limit_unit) VALUES (${escapeSQL(d.id)}, ${docNum}, ${escapeSQL(d.name)}, ${escapeSQL(d.type)}, ${escapeSQL(statusStr)}, ${Number(d.dailyLimit || 5000)}, ${escapeSQL(d.limitUnit || 'volumes')}) ON CONFLICT (id) DO UPDATE SET status = EXCLUDED.status, daily_limit = EXCLUDED.daily_limit;\n`;
+      // Doca sem limite configurado → NULL (não inventar um teto)
+      const limitSql = d.dailyLimit !== undefined && d.dailyLimit !== null ? Number(d.dailyLimit) : 'NULL';
+      sql += `INSERT INTO docas (id, numero, nome, tipo, status, daily_limit, limit_unit) VALUES (${escapeSQL(d.id)}, ${docNum}, ${escapeSQL(d.name)}, ${escapeSQL(d.type)}, ${escapeSQL(statusStr)}, ${limitSql}, ${escapeSQL(d.limitUnit || 'volumes')}) ON CONFLICT (id) DO UPDATE SET status = EXCLUDED.status, daily_limit = EXCLUDED.daily_limit;\n`;
     });
   }
 

@@ -276,7 +276,7 @@ export const LogisticsReportModal: React.FC<LogisticsReportModalProps> = ({
         escapeCSV(a.isWalkIn ? 'Encaixe de Emergência' : 'Agendado Previamente'),
         escapeCSV(a.supplierName),
         escapeCSV(a.supplierCnpj),
-        escapeCSV(a.destinationBranchName || 'Matriz / CD Principal'),
+        escapeCSV(a.destinationBranchName || ''),
         escapeCSV(a.dockId || 'Não Alocada'),
         escapeCSV(nfList),
         escapeCSV(keysJoined),
