@@ -224,6 +224,17 @@ export const AppointmentReceiptModal: React.FC<AppointmentReceiptModalProps> = (
 
 
   const handlePrint = () => {
+    // Encaixa o comprovante em UMA folha A4: mede a altura do cartão e define
+    // o fator de escala usado pelo CSS de impressão (@page A4, margens 8mm →
+    // ~281mm úteis ≈ 1062px). Não comprime além de 0.55 para não ilegibilizar.
+    const node = receiptCardRef.current;
+    if (node) {
+      const A4_PRINTABLE_PX = 1040;
+      const scale = node.scrollHeight > A4_PRINTABLE_PX
+        ? Math.max(0.55, A4_PRINTABLE_PX / node.scrollHeight)
+        : 1;
+      document.documentElement.style.setProperty('--receipt-print-scale', scale.toFixed(3));
+    }
     window.print();
   };
 

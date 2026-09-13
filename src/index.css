@@ -285,6 +285,11 @@
    escondemos o app (#root) e achatamos o overlay para o papel.
    O resto do sistema (ex.: relatório logístico) imprime como antes.
    ============================================================ */
+@page {
+  size: A4 portrait;
+  margin: 8mm;
+}
+
 @media print {
   html.receipt-printing #root { display: none !important; }
 
@@ -317,6 +322,15 @@
     overflow: visible !important;
     padding: 0 !important;
     background: #fff !important;
+  }
+
+  /* Encaixe em 1 folha A4: escala medida no clique (var --receipt-print-scale)
+     + respiros reduzidos entre seções */
+  html.receipt-printing .receipt-print-root {
+    zoom: var(--receipt-print-scale, 1);
+  }
+  html.receipt-printing .receipt-print-root > * + * {
+    margin-top: 10px !important;
   }
 
   /* Impressão sempre clara, mesmo com tema escuro ativo */
