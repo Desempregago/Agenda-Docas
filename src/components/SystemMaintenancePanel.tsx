@@ -9,7 +9,8 @@ import {
   Calendar,
   Layers,
   ShieldCheck,
-  Download
+  Download,
+  Settings
 } from 'lucide-react';
 import { Appointment, Dock } from '../types';
 import { exportAppointmentsToExcelCSV } from '../services/localExportService';
@@ -20,13 +21,15 @@ interface SystemMaintenancePanelProps {
   docks?: Dock[];
   onClearAllAppointments?: () => void;
   onOpenResetModal?: () => void;
+  onOpenBrandingModal?: () => void;
 }
 
 export const SystemMaintenancePanel: React.FC<SystemMaintenancePanelProps> = ({
   appointments = [],
   docks = [],
   onClearAllAppointments,
-  onOpenResetModal
+  onOpenResetModal,
+  onOpenBrandingModal
 }) => {
   const [healthData, setHealthData] = useState<any>(null);
   const [dbStats, setDbStats] = useState<any>(null);
@@ -252,6 +255,27 @@ export const SystemMaintenancePanel: React.FC<SystemMaintenancePanelProps> = ({
           {dbStats.version && (
             <p className="mt-3 text-[10px] text-slate-400 font-mono">{dbStats.version}</p>
           )}
+        </div>
+      )}
+
+      {/* Identidade Visual (Marca) — movida do cabeçalho para o Sistema */}
+      {onOpenBrandingModal && (
+        <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+              <Settings className="w-5 h-5 text-blue-600" /> Identidade Visual da Empresa
+            </h2>
+            <p className="text-xs sm:text-sm text-slate-500 mt-1">
+              Personalize nome, logotipo e cores exibidos no portal para toda a equipe e fornecedores.
+            </p>
+          </div>
+          <button
+            onClick={onOpenBrandingModal}
+            className="shrink-0 inline-flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-xs sm:text-sm font-bold px-4 py-2.5 rounded-2xl shadow-xs transition-all cursor-pointer"
+          >
+            <Settings className="w-4 h-4" />
+            <span>Personalizar Marca</span>
+          </button>
         </div>
       )}
 

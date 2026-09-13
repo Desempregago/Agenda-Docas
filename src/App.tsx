@@ -778,7 +778,6 @@ export default function App() {
           }
         }}
         onOpenNewModal={() => setIsNewModalOpen(true)}
-        onOpenBrandingModal={isUserAdmin ? handleOpenBrandingModal : undefined}
         onOpenUsersModal={isUserAdmin ? handleOpenUsersModal : undefined}
         onOpenDestinationsModal={isUserAdmin ? handleOpenDestinationsModal : undefined}
         onOpenReportsModal={isStaff ? () => setIsReportsModalOpen(true) : undefined}
@@ -849,6 +848,7 @@ export default function App() {
               docks={docks}
               onClearAllAppointments={handleClearAllAppointments}
               onOpenResetModal={handleOpenResetModal}
+              onOpenBrandingModal={handleOpenBrandingModal}
             />
           ) : (
             <div className="bg-slate-900 border border-slate-800 rounded-3xl p-8 sm:p-12 text-center text-white max-w-lg mx-auto my-12 shadow-2xl">

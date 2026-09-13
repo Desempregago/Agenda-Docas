@@ -20,7 +20,6 @@ interface HeaderProps {
   onLogoutAdmin?: () => void;
   onRequestAdminAccess: () => void;
   onOpenNewModal: () => void;
-  onOpenBrandingModal: () => void;
   onOpenUsersModal?: () => void;
   onOpenDestinationsModal?: () => void;
   onOpenReportsModal?: () => void;
@@ -39,7 +38,6 @@ export const Header: React.FC<HeaderProps> = ({
   onLogoutAdmin,
   onRequestAdminAccess,
   onOpenNewModal,
-  onOpenBrandingModal,
   onOpenUsersModal,
   onOpenDestinationsModal,
   onOpenReportsModal,
@@ -226,15 +224,6 @@ export const Header: React.FC<HeaderProps> = ({
                 >
                   <Users className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
                   <span className="hidden 2xl:inline">Usuários</span>
-                </button>
-
-                <button
-                  onClick={onOpenBrandingModal}
-                  className="flex items-center gap-1 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-medium p-1.5 sm:px-2 sm:py-1.5 rounded-xl border border-slate-700 transition-colors shadow-xs"
-                  title="Personalizar nome e logotipo da empresa"
-                >
-                  <Settings className="w-3.5 h-3.5 text-blue-400 shrink-0" />
-                  <span className="hidden 2xl:inline">Marca</span>
                 </button>
               </div>
             )}
@@ -461,22 +450,6 @@ export const Header: React.FC<HeaderProps> = ({
                     <div className="flex items-center gap-2.5">
                       <Users className="w-4 h-4 text-indigo-400 shrink-0" />
                       <span>Gerenciar Usuários & Operadores</span>
-                    </div>
-                    <ChevronRight className="w-4 h-4 text-slate-500 shrink-0" />
-                  </button>
-                )}
-
-                {onOpenBrandingModal && (
-                  <button
-                    onClick={() => {
-                      setIsMobileMenuOpen(false);
-                      onOpenBrandingModal();
-                    }}
-                    className="w-full flex items-center justify-between p-2.5 rounded-xl bg-slate-800/80 hover:bg-slate-800 text-slate-200 text-xs font-medium border border-slate-700/80 transition-all"
-                  >
-                    <div className="flex items-center gap-2.5">
-                      <Settings className="w-4 h-4 text-blue-400 shrink-0" />
-                      <span>Personalizar Marca da Empresa</span>
                     </div>
                     <ChevronRight className="w-4 h-4 text-slate-500 shrink-0" />
                   </button>
