@@ -25,6 +25,148 @@
   }
 }
 
+/* ============================================================
+   TEMA ESCURO — estratégia em CSS (nenhuma classe de componente alterada)
+   - Escopo: <html class="dark">, ativado pelo ThemeToggle (claro/escuro/sistema)
+     e pré-aplicado antes do primeiro paint pelo script inline em index.html.
+   - Só sobrescreve os utilitários CLAROS (bg-white, slate/gray 50..300, chips
+     pastéis); o cromo já-escuro do app (slate-700/800/900, text-slate-100..400)
+     fica intacto — o header e os painéis escuros não mudam de cor.
+   - Bloco em nível superior: sobrescreve utilitários do Tailwind na cascata.
+   - Envolvido em @media screen: a impressão (comprovante) permanece sempre clara.
+   ============================================================ */
+
+@layer utilities {
+  @media screen {
+    html.dark {
+      color-scheme: dark;
+    }
+
+    .dark body {
+      background-color: #0b1220;
+      color: #e2e8f0;
+    }
+
+    /* Superfícies neutras claras → tons de superfície escuros */
+    .dark .bg-white { background-color: #16213a; }
+    .dark .bg-slate-50 { background-color: #111a2e; }
+    .dark .bg-slate-100 { background-color: #1e2a44; }
+    .dark .bg-slate-200 { background-color: #253352; }
+    .dark .bg-slate-300 { background-color: #33415c; }
+    .dark .bg-gray-50 { background-color: #111a2e; }
+    .dark .bg-gray-100 { background-color: #1e2a44; }
+    .dark .bg-gray-200 { background-color: #253352; }
+
+    /* Bordas neutras claras */
+    .dark .border-slate-100 { border-color: #1d2942; }
+    .dark .border-slate-200 { border-color: #26334f; }
+    .dark .border-slate-300 { border-color: #33415c; }
+    .dark .border-gray-200 { border-color: #26334f; }
+    .dark .border-gray-300 { border-color: #33415c; }
+
+    /* Divide (border-color vai nos filhos do utilitário divide-*) */
+    .dark .divide-slate-200 > :not([hidden]) ~ :not([hidden]) { border-color: #26334f; }
+    .dark .divide-slate-100 > :not([hidden]) ~ :not([hidden]) { border-color: #1d2942; }
+    .dark .divide-gray-200 > :not([hidden]) ~ :not([hidden]) { border-color: #26334f; }
+
+    /* Texto neutro escuro → tons claros (slate-100..400 já são claros: intactos) */
+    .dark .text-slate-900 { color: #f1f5f9; }
+    .dark .text-slate-800 { color: #e2e8f0; }
+    .dark .text-slate-700 { color: #cbd5e1; }
+    .dark .text-slate-600 { color: #94a3b8; }
+    .dark .text-slate-500 { color: #94a3b8; }
+    .dark .text-gray-600 { color: #94a3b8; }
+    .dark .text-gray-700 { color: #cbd5e1; }
+    .dark .text-gray-900 { color: #f1f5f9; }
+
+    /* Chips pastéis → versões escuras da mesma cor (padrão bg-50/100 + border-200/300 + text-700..900) */
+    .dark .bg-blue-50 { background-color: #172554; }
+    .dark .bg-blue-100 { background-color: #1e3a8a; }
+    .dark .border-blue-200 { border-color: #1e40af; }
+    .dark .border-blue-300 { border-color: #1d4ed8; }
+    .dark .text-blue-600 { color: #60a5fa; }
+    .dark .text-blue-700 { color: #93c5fd; }
+    .dark .text-blue-800 { color: #bfdbfe; }
+    .dark .text-blue-900 { color: #bfdbfe; }
+
+    .dark .bg-indigo-50 { background-color: #1e1b4b; }
+    .dark .bg-indigo-100 { background-color: #312e81; }
+    .dark .border-indigo-200 { border-color: #3730a3; }
+    .dark .border-indigo-300 { border-color: #4338ca; }
+    .dark .text-indigo-600 { color: #818cf8; }
+    .dark .text-indigo-700 { color: #a5b4fc; }
+    .dark .text-indigo-800 { color: #c7d2fe; }
+    .dark .text-indigo-900 { color: #c7d2fe; }
+
+    .dark .bg-emerald-50 { background-color: #022c22; }
+    .dark .bg-emerald-100 { background-color: #064e3b; }
+    .dark .border-emerald-200 { border-color: #065f46; }
+    .dark .border-emerald-300 { border-color: #047857; }
+    .dark .text-emerald-600 { color: #34d399; }
+    .dark .text-emerald-700 { color: #6ee7b7; }
+    .dark .text-emerald-800 { color: #a7f3d0; }
+    .dark .text-emerald-900 { color: #a7f3d0; }
+
+    .dark .bg-amber-50 { background-color: #451a03; }
+    .dark .bg-amber-100 { background-color: #78350f; }
+    .dark .border-amber-200 { border-color: #92400e; }
+    .dark .border-amber-300 { border-color: #b45309; }
+    .dark .text-amber-600 { color: #fbbf24; }
+    .dark .text-amber-700 { color: #fcd34d; }
+    .dark .text-amber-800 { color: #fde68a; }
+    .dark .text-amber-900 { color: #fde68a; }
+
+    .dark .bg-rose-50 { background-color: #4c0519; }
+    .dark .bg-rose-100 { background-color: #881337; }
+    .dark .border-rose-200 { border-color: #9f1239; }
+    .dark .border-rose-300 { border-color: #be123c; }
+    .dark .text-rose-500 { color: #fb7185; }
+    .dark .text-rose-600 { color: #fb7185; }
+    .dark .text-rose-700 { color: #fda4af; }
+    .dark .text-rose-800 { color: #fecdd3; }
+    .dark .text-rose-900 { color: #fecdd3; }
+
+    .dark .bg-purple-50 { background-color: #2e1065; }
+    .dark .bg-purple-100 { background-color: #3b0764; }
+    .dark .text-purple-600 { color: #c084fc; }
+    .dark .text-purple-700 { color: #d8b4fe; }
+    .dark .text-purple-800 { color: #e9d5ff; }
+
+    .dark .bg-orange-50 { background-color: #431407; }
+    .dark .bg-orange-100 { background-color: #7c2d12; }
+    .dark .text-orange-600 { color: #fb923c; }
+    .dark .text-orange-700 { color: #fdba74; }
+    .dark .text-orange-800 { color: #fed7aa; }
+
+    .dark .bg-cyan-50 { background-color: #083344; }
+    .dark .bg-cyan-100 { background-color: #155e75; }
+    .dark .text-cyan-600 { color: #22d3ee; }
+    .dark .text-cyan-700 { color: #67e8f9; }
+    .dark .text-cyan-800 { color: #a5f3fc; }
+
+    /* Hovers de superfície clara → mesma escala escura */
+    .dark .hover\:bg-slate-50:hover { background-color: #1e2a44; }
+    .dark .hover\:bg-slate-100:hover { background-color: #253352; }
+    .dark .hover\:bg-slate-200:hover { background-color: #2e3d60; }
+    .dark .hover\:bg-gray-50:hover { background-color: #1e2a44; }
+    .dark .hover\:bg-gray-100:hover { background-color: #253352; }
+    .dark .hover\:bg-blue-50:hover { background-color: #172554; }
+    .dark .hover\:bg-blue-100:hover { background-color: #1e3a8a; }
+    .dark .hover\:bg-indigo-50:hover { background-color: #1e1b4b; }
+    .dark .hover\:bg-indigo-100:hover { background-color: #312e81; }
+    .dark .hover\:bg-emerald-50:hover { background-color: #022c22; }
+    .dark .hover\:bg-emerald-100:hover { background-color: #064e3b; }
+    .dark .hover\:bg-amber-50:hover { background-color: #451a03; }
+    .dark .hover\:bg-amber-100:hover { background-color: #78350f; }
+    .dark .hover\:bg-rose-50:hover { background-color: #4c0519; }
+    .dark .hover\:bg-rose-100:hover { background-color: #881337; }
+
+    /* Placeholders de inputs */
+    .dark .placeholder\:text-slate-400::placeholder { color: #64748b; }
+    .dark .placeholder\:text-slate-500::placeholder { color: #64748b; }
+  }
+}
+
 /* Hide all scrollbars globally while preserving scroll functionality */
 * {
   -ms-overflow-style: none;  /* IE and Edge */

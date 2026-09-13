@@ -7,6 +7,16 @@
     <meta name="format-detection" content="telephone=no" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" id="app-favicon" />
     <title>Agenda-docas</title>
+    <script>
+      // Aplica o tema ANTES do primeiro paint (sem flash branco na carga escura).
+      (function () {
+        try {
+          var pref = localStorage.getItem('agendadocas_theme') || 'system';
+          var dark = pref === 'dark' || (pref === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+          if (dark) document.documentElement.classList.add('dark');
+        } catch (_) {}
+      })();
+    </script>
     <meta name="description" content="Plataforma de agendamento de entregas e gestão de recebimento com rastreamento de status, divergências e reagendamentos." />
     <meta property="og:title" content="Agenda-docas" />
     <meta property="og:description" content="Plataforma de agendamento de entregas e gestão de recebimento com rastreamento de status, divergências e reagendamentos." />

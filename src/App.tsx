@@ -20,6 +20,7 @@ import { LogisticsReportModal } from './components/LogisticsReportModal';
 import { Appointment, AppointmentStatus, DiscrepancyReport, Dock, SystemUser, DestinationBranch, ServerNotification } from './types';
 import { Bell, CheckCircle2, AlertCircle, ShieldAlert, X } from 'lucide-react';
 import { authFetch, getAuthToken, setAuthToken } from './services/api';
+import { initTheme } from './services/themeService';
 
 export default function App() {
   const [currentView, setCurrentView] = useState<AppViewMode>('CLIENT');
@@ -90,6 +91,10 @@ export default function App() {
   const readIdsRef = useRef<Set<string>>(readIds);
   const dismissedIdsRef = useRef<Set<string>>(dismissedIds);
   const lastNotifPayloadRef = useRef<string>('');
+
+  // Tema: aplica a preferência salva (padrão 'system') e reage ao SO.
+  useEffect(() => { initTheme(); }, []);
+
   useEffect(() => { readIdsRef.current = readIds; }, [readIds]);
   useEffect(() => { dismissedIdsRef.current = dismissedIds; }, [dismissedIds]);
 

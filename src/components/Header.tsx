@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
-import { Calendar, Search, LayoutDashboard, Server, Plus, UserCheck, ShieldAlert, ChevronRight, Settings, Bell, Lock, LogOut, Users, User, Menu, X, Database, MapPin, FileSpreadsheet } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Calendar, Search, LayoutDashboard, Server, Plus, UserCheck, ShieldAlert, ChevronRight, Settings, Bell, Lock, LogOut, Users, User, Menu, X, Database, MapPin, FileSpreadsheet, Sun, Moon, MonitorSmartphone } from 'lucide-react';
 import { BrandSettings, getBrandTheme } from './BrandingSettingsModal';
 import { SystemUser } from '../types';
+import { applyTheme, getStoredTheme, nextTheme, setTheme, type ThemePreference } from '../services/themeService';
 
 export type AppViewMode = 'CLIENT' | 'TRACKING' | 'ADMIN' | 'SYSTEM';
 export type UserRole = 'CLIENT' | 'ADMIN';
@@ -45,6 +46,7 @@ export const Header: React.FC<HeaderProps> = ({
 }) => {
   const brandTheme = getBrandTheme(brandSettings.primaryColor);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [theme, setThemeState] = useState<ThemePreference>(() => getStoredTheme());
   const isStaff = userRole === 'ADMIN' || Boolean(currentSystemUser);
   const isUserAdmin = Boolean(currentSystemUser ? currentSystemUser.role === 'ADMIN' : userRole === 'ADMIN');
   const isLoggedIn = isStaff || Boolean(currentSupplierSession);
@@ -155,6 +157,26 @@ export const Header: React.FC<HeaderProps> = ({
           {/* Action Buttons & Controls - Right Section */}
           <div className="flex-1 flex items-center justify-end min-w-0 gap-1 sm:gap-1.5 shrink-0">
             
+            {/* Theme Toggle (claro / escuro / sistema) */}
+            <button
+              onClick={() => {
+                const next = nextTheme(theme);
+                setThemeState(next);
+                setTheme(next);
+              }}
+              className="p-1.5 sm:p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700/80 transition-colors shadow-xs"
+              title={theme === 'dark' ? 'Tema: Escuro (clique para Sistema)' : theme === 'light' ? 'Tema: Claro (clique para Escuro)' : 'Tema: Sistema (clique para Claro)'}
+              aria-label="Alternar tema"
+            >
+              {theme === 'dark' ? (
+                <Sun className="w-4 h-4 text-amber-300" />
+              ) : theme === 'light' ? (
+                <Moon className="w-4 h-4 text-blue-300" />
+              ) : (
+                <MonitorSmartphone className="w-4 h-4 text-slate-300" />
+              )}
+            </button>
+
             {/* Notification Bell Button (Exibido apenas após autenticação do operador ou fornecedor) */}
             {isLoggedIn && onOpenNotifications && (
               <button
@@ -461,6 +483,34 @@ export const Header: React.FC<HeaderProps> = ({
                 )}
               </div>
             )}
+
+            {/* Theme (Mobile Drawer) */}
+            <div className="pt-2 border-t border-slate-800">
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-1 mb-1.5">Aparência</p>
+              <div className="grid grid-cols-3 gap-1.5">
+                {([
+                  { pref: 'light' as ThemePreference, label: 'Claro', Icon: Sun, active: theme === 'light' },
+                  { pref: 'dark' as ThemePreference, label: 'Escuro', Icon: Moon, active: theme === 'dark' },
+                  { pref: 'system' as ThemePreference, label: 'Sistema', Icon: MonitorSmartphone, active: theme === 'system' },
+                ]).map(({ pref, label, Icon, active }) => (
+                  <button
+                    key={pref}
+                    onClick={() => {
+                      setThemeState(pref);
+                      setTheme(pref);
+                    }}
+                    className={`flex flex-col items-center gap-1 p-2.5 rounded-xl text-[11px] font-semibold border transition-all ${
+                      active
+                        ? 'bg-blue-600 text-white border-blue-500'
+                        : 'bg-slate-800/80 text-slate-300 border-slate-700 hover:bg-slate-700/60'
+                    }`}
+                  >
+                    <Icon className="w-4 h-4" />
+                    <span>{label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
 
             {/* Access Mode Switch */}
             <div className="pt-2 border-t border-slate-800">
