@@ -169,9 +169,9 @@ export const Header: React.FC<HeaderProps> = ({
               aria-label="Alternar tema"
             >
               {theme === 'dark' ? (
-                <Sun className="w-4 h-4 text-amber-300" />
-              ) : theme === 'light' ? (
                 <Moon className="w-4 h-4 text-blue-300" />
+              ) : theme === 'light' ? (
+                <Sun className="w-4 h-4 text-amber-500" />
               ) : (
                 <MonitorSmartphone className="w-4 h-4 text-slate-300" />
               )}

@@ -164,6 +164,51 @@
     /* Placeholders de inputs */
     .dark .placeholder\:text-slate-400::placeholder { color: #64748b; }
     .dark .placeholder\:text-slate-500::placeholder { color: #64748b; }
+
+    /* ===== Variantes com opacidade (bg-x-50/80 etc.) — classes compiladas distintas ===== */
+    /* Superfícies neutras */
+    .dark .bg-slate-50\/50, .dark .bg-slate-50\/60, .dark .bg-slate-50\/70 { background-color: #121c31; }
+    .dark .bg-slate-50\/80 { background-color: #152136; }
+    .dark .bg-slate-100\/60, .dark .bg-slate-100\/70 { background-color: #1c2740; }
+    .dark .bg-slate-100\/80, .dark .bg-slate-100\/90 { background-color: #1e2a44; }
+    .dark .bg-slate-200\/60, .dark .bg-slate-200\/70 { background-color: #253352; }
+
+    /* Pastéis com opacidade — mesmas famílias dos sólidos; opacidade baixa = tom um pouco mais claro */
+    .dark .bg-blue-50\/20, .dark .bg-blue-50\/30, .dark .bg-blue-50\/40 { background-color: #1b2a5e; }
+    .dark .bg-blue-50\/50, .dark .bg-blue-50\/60, .dark .bg-blue-50\/70, .dark .bg-blue-50\/80 { background-color: #172554; }
+    .dark .bg-blue-100\/70, .dark .bg-blue-100\/80 { background-color: #1e3a8a; }
+    .dark .bg-blue-200\/60 { background-color: #1e40af; }
+    .dark .bg-indigo-50\/20 { background-color: #232059; }
+    .dark .bg-indigo-50\/60, .dark .bg-indigo-50\/70, .dark .bg-indigo-50\/80 { background-color: #1e1b4b; }
+    .dark .bg-indigo-600\/10 { background-color: rgba(79, 70, 229, 0.15); }
+    .dark .bg-emerald-50\/20, .dark .bg-emerald-50\/30, .dark .bg-emerald-50\/40 { background-color: #06382b; }
+    .dark .bg-emerald-50\/50, .dark .bg-emerald-50\/60, .dark .bg-emerald-50\/70, .dark .bg-emerald-50\/80 { background-color: #022c22; }
+    .dark .bg-emerald-200\/80 { background-color: #065f46; }
+    .dark .bg-amber-50\/30, .dark .bg-amber-50\/40, .dark .bg-amber-50\/50 { background-color: #4d1e08; }
+    .dark .bg-amber-50\/60, .dark .bg-amber-50\/70, .dark .bg-amber-50\/80 { background-color: #451a03; }
+    .dark .bg-amber-100\/70 { background-color: #78350f; }
+    .dark .bg-rose-50\/40 { background-color: #551022; }
+    .dark .bg-rose-50\/80 { background-color: #4c0519; }
+    .dark .bg-purple-50\/40 { background-color: #351670; }
+    .dark .bg-purple-50\/80 { background-color: #2e1065; }
+    .dark .bg-orange-50\/80, .dark .bg-orange-50\/90 { background-color: #431407; }
+    .dark .bg-orange-200\/80 { background-color: #9a3412; }
+    .dark .bg-blue-600\/10, .dark .bg-blue-600\/30 { background-color: rgba(37, 99, 235, 0.25); }
+
+    /* Bordas com opacidade */
+    .dark .border-slate-200\/70, .dark .border-slate-200\/80 { border-color: #26334f; }
+    .dark .border-blue-200\/60, .dark .border-blue-200\/70, .dark .border-blue-200\/80 { border-color: #1e40af; }
+    .dark .border-indigo-200\/80, .dark .border-indigo-200\/90 { border-color: #3730a3; }
+    .dark .border-purple-200\/80 { border-color: #6d28d9; }
+    .dark .border-amber-200\/80 { border-color: #92400e; }
+    .dark .border-emerald-200\/80 { border-color: #065f46; }
+    .dark .border-emerald-300\/80, .dark .border-emerald-300\/90 { border-color: #047857; }
+    .dark .border-orange-200\/60, .dark .border-orange-200\/80 { border-color: #9a3412; }
+
+    /* Textos escuros com opacidade sobre chips pastéis */
+    .dark .text-amber-900\/90 { color: #fde68a; }
+    .dark .text-indigo-900\/80, .dark .text-indigo-800\/80, .dark .text-indigo-800\/90 { color: #c7d2fe; }
+    .dark .text-orange-900\/90 { color: #fed7aa; }
   }
 }
 
