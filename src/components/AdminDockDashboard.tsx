@@ -1,5 +1,6 @@
-import React, { useState, useRef } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
+import { useStickyState } from '../hooks/useStickyState';
 import {
   LayoutDashboard,
   Calendar,
@@ -87,7 +88,18 @@ export const AdminDockDashboard: React.FC<AdminDockDashboardProps> = ({
     return getTodayDateString();
   });
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
-  const [selectedBranchFilter, setSelectedBranchFilter] = useState<string>('ALL');
+  // Persiste o filtro de unidade entre trocas de aba (e recargas) na mesma aba do navegador.
+  const [selectedBranchFilter, setSelectedBranchFilter] = useStickyState<string>(
+    'agendadocas_dock_branch_filter',
+    'ALL'
+  );
+  // Filtro apontando para uma unidade removida/desativada volta para "Todas".
+  useEffect(() => {
+    if (selectedBranchFilter === 'ALL') return;
+    if (!destinations.some(d => d.id === selectedBranchFilter)) {
+      setSelectedBranchFilter('ALL');
+    }
+  }, [destinations, selectedBranchFilter, setSelectedBranchFilter]);
   const dateInputRef = useRef<HTMLInputElement>(null);
 
   const activeDestinations = destinations.filter(d => d.active);
