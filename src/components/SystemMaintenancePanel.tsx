@@ -10,23 +10,38 @@ import {
   Layers,
   ShieldCheck,
   Download,
-  Settings
+  Settings,
+  Clock,
+  CalendarRange,
+  AlertTriangle,
+  Save
 } from 'lucide-react';
-import { Appointment, Dock } from '../types';
+import { Appointment, DestinationBranch, Dock } from '../types';
 import { exportAppointmentsToExcelCSV } from '../services/localExportService';
+import { MonthlyReportModal } from './MonthlyReportModal';
 import { authFetch } from '../services/api';
 
 interface SystemMaintenancePanelProps {
   appointments?: Appointment[];
   docks?: Dock[];
+  destinations?: DestinationBranch[];
   onClearAllAppointments?: () => void;
   onOpenResetModal?: () => void;
   onOpenBrandingModal?: () => void;
 }
 
+type BackupStatus = {
+  backupDir: string;
+  retention: number;
+  intervalHours: number;
+  last: { at?: string; ok?: boolean; fileName?: string; fileBytes?: number; error?: string };
+  files: string[];
+};
+
 export const SystemMaintenancePanel: React.FC<SystemMaintenancePanelProps> = ({
   appointments = [],
   docks = [],
+  destinations = [],
   onClearAllAppointments,
   onOpenResetModal,
   onOpenBrandingModal
@@ -35,6 +50,35 @@ export const SystemMaintenancePanel: React.FC<SystemMaintenancePanelProps> = ({
   const [dbStats, setDbStats] = useState<any>(null);
   const [loadingHealth, setLoadingHealth] = useState(false);
   const [exportNotification, setExportNotification] = useState<{ message: string; isError?: boolean } | null>(null);
+  const [backupStatus, setBackupStatus] = useState<BackupStatus | null>(null);
+  const [backupBusy, setBackupBusy] = useState(false);
+  const [isMonthlyOpen, setIsMonthlyOpen] = useState(false);
+
+  const loadBackupStatus = async () => {
+    try {
+      const res = await authFetch('/api/backup/status');
+      if (res.ok) setBackupStatus(await res.json());
+    } catch {
+      // silencioso: o card só fica sem dados
+    }
+  };
+
+  const runBackupNow = async () => {
+    setBackupBusy(true);
+    try {
+      const res = await authFetch('/api/backup/run', { method: 'POST' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || `Falha no backup (HTTP ${res.status})`);
+      setExportNotification({ message: `Backup gravado em disco: ${data.fileName || 'arquivo'} (${Math.round((data.fileBytes || 0) / 1024)} KB).` });
+      setTimeout(() => setExportNotification(null), 5000);
+    } catch (err: any) {
+      setExportNotification({ message: err.message || 'Erro ao executar backup em disco.', isError: true });
+      setTimeout(() => setExportNotification(null), 7000);
+    } finally {
+      setBackupBusy(false);
+      loadBackupStatus();
+    }
+  };
 
   const handleExportCSV = () => {
     try {
@@ -113,6 +157,10 @@ export const SystemMaintenancePanel: React.FC<SystemMaintenancePanelProps> = ({
       // silencioso: o card apenas não mostra dados
     }
   };
+
+  useEffect(() => {
+    loadBackupStatus();
+  }, []);
 
   useEffect(() => {
     fetchHealth();
@@ -258,6 +306,67 @@ export const SystemMaintenancePanel: React.FC<SystemMaintenancePanelProps> = ({
         </div>
       )}
 
+      {/* Backups Automáticos em Disco — status da rotina noturna */}
+      <div className="bg-white rounded-3xl p-5 sm:p-6 border border-slate-200 shadow-sm">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+              <Clock className="w-4 h-4 text-indigo-600" /> Backups Automáticos em Disco
+            </h2>
+            <p className="text-xs text-slate-500 mt-1">
+              Rotina diária do servidor grava o dump SQL em <span className="font-mono">{backupStatus?.backupDir || './backups'}</span>
+              {' '}e mantém os <span className="font-bold">{backupStatus?.retention ?? 10}</span> mais recentes.
+            </p>
+          </div>
+          <button
+            onClick={runBackupNow}
+            disabled={backupBusy}
+            className="shrink-0 inline-flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white text-xs font-bold px-4 py-2.5 rounded-2xl shadow-xs transition-all cursor-pointer"
+            title="Executar o pg_dump agora e gravar em disco (além do download)"
+          >
+            <Save className="w-4 h-4" />
+            {backupBusy ? 'Executando…' : 'Backup em Disco Agora'}
+          </button>
+        </div>
+        {backupStatus?.last?.at ? (
+          <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px]">
+            <span className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-lg font-semibold border ${backupStatus.last.ok ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-rose-50 text-rose-700 border-rose-200'}`}>
+              {backupStatus.last.ok ? <CheckCircle2 className="w-3.5 h-3.5" /> : <AlertTriangle className="w-3.5 h-3.5" />}
+              {backupStatus.last.ok ? 'Último backup OK' : 'Falha no último backup'}
+            </span>
+            <span className="text-slate-500 font-mono">{new Date(backupStatus.last.at).toLocaleString('pt-BR')}</span>
+            {backupStatus.last.fileName && <span className="text-slate-400 font-mono">{backupStatus.last.fileName}</span>}
+            {backupStatus.last.error && <span className="text-rose-600 font-medium">{backupStatus.last.error}</span>}
+          </div>
+        ) : (
+          <p className="mt-3 text-[11px] text-slate-400">A primeira execução automática ocorre ~20s após o boot do servidor; o status aparece aqui.</p>
+        )}
+        {backupStatus?.files?.length > 0 && (
+          <p className="mt-2 text-[10px] text-slate-400 font-mono">
+            {backupStatus.files.length} arquivo(s) em disco — mais recente: {backupStatus.files[0]}
+          </p>
+        )}
+      </div>
+
+      {/* Relatório Mensal — agregados de entregas por fornecedor e unidade */}
+      <div className="bg-white rounded-3xl p-5 sm:p-6 border border-slate-200 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+            <CalendarRange className="w-4 h-4 text-purple-600" /> Relatório Mensal de Operação
+          </h2>
+          <p className="text-xs text-slate-500 mt-1">
+            Entregas, no-shows, divergências, volumes e pontualidade por fornecedor e por unidade em um mês.
+          </p>
+        </div>
+        <button
+          onClick={() => setIsMonthlyOpen(true)}
+          className="shrink-0 inline-flex items-center justify-center gap-2 bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold px-4 py-2.5 rounded-2xl shadow-xs transition-all cursor-pointer"
+        >
+          <CalendarRange className="w-4 h-4" />
+          <span>Abrir Relatório Mensal</span>
+        </button>
+      </div>
+
       {/* Identidade Visual (Marca) — movida do cabeçalho para o Sistema */}
       {onOpenBrandingModal && (
         <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -277,6 +386,15 @@ export const SystemMaintenancePanel: React.FC<SystemMaintenancePanelProps> = ({
             <span>Personalizar Marca</span>
           </button>
         </div>
+      )}
+
+      {isMonthlyOpen && (
+        <MonthlyReportModal
+          isOpen={isMonthlyOpen}
+          onClose={() => setIsMonthlyOpen(false)}
+          appointments={appointments}
+          destinations={destinations}
+        />
       )}
 
       {/* Operações de Dados & Backups */}

@@ -43,6 +43,26 @@ export interface RescheduleHistory {
 }
 
 /**
+ * Trilha de auditoria do agendamento: uma entrada por transição de status
+ * (quem mudou, quando, de qual dock). Apensada no servidor; nunca editável
+ * pelo cliente. Entradas mais recentes primeiro (mesma convenção do rescheduleHistory).
+ */
+export interface StatusHistoryEntry {
+  id: string;
+  from: AppointmentStatus | null; // null na criação (status inicial)
+  to: AppointmentStatus;
+  at: string; // ISO
+  by: string; // nome do operador/sistema/fornecedor
+  byRole?: 'ADMIN' | 'OPERATOR' | 'SUPERVISOR' | 'SECURITY_GATE' | 'SUPPLIER' | 'SYSTEM';
+  note?: string; // ex.: motivo do reagendamento, resumo da divergência
+}
+
+export interface MonthlyReportQuery {
+  month: string; // YYYY-MM
+  branchId?: string;
+}
+
+/**
  * Identidade pura de uma unidade — é o que persiste em destinations.json.
  */
 export interface DestinationBranchIdentity {
@@ -130,6 +150,7 @@ export interface Appointment {
   
   discrepancy?: DiscrepancyReport;
   rescheduleHistory: RescheduleHistory[];
+  statusHistory?: StatusHistoryEntry[]; // Trilha de auditoria (nova; opcional p/ registros legados)
   
   // Double Check da Prevenção de Perdas na Liberação de Descarga
   preventionDoubleChecked?: boolean; // Se passou pelo double check da Prevenção de Perdas

@@ -22,6 +22,7 @@ import {
   KeyRound,
   DollarSign,
   User,
+  History,
 } from 'lucide-react';
 import { toBlob, toPng } from 'html-to-image';
 import { Appointment } from '../types';
@@ -606,6 +607,36 @@ useBodyScrollLock(isOpen);
             {/* 4. Notes & Operational Instructions */}
             <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-2">
               <span className="text-slate-700 font-bold block text-xs">
+                {(() => {
+                  const hist = appointment.statusHistory || [];
+                  if (hist.length === 0) return null;
+                  return (
+                    <div className="mt-3 bg-slate-50 border border-slate-200 rounded-xl p-3">
+                      <h4 className="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5 mb-2">
+                        <History className="w-3.5 h-3.5" /> Histórico de Status
+                      </h4>
+                      <ol className="space-y-1.5">
+                        {hist.slice(0, 12).map(entry => (
+                          <li key={entry.id} className="flex items-start gap-2 text-[11px] leading-snug">
+                            <span className="mt-1 w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0" aria-hidden="true" />
+                            <span className="text-slate-700">
+                              <strong className="font-semibold">
+                                {entry.from ? entry.from.replace(/_/g, ' ') + ' → ' : ''}
+                                {entry.to.replace(/_/g, ' ')}
+                              </strong>
+                              {' — '}
+                              <span className="font-mono">{new Date(entry.at).toLocaleString('pt-BR')}</span>
+                              {' • '}
+                              {entry.by}
+                              {entry.byRole ? ` (${entry.byRole})` : ''}
+                              {entry.note ? ` — ${entry.note}` : ''}
+                            </span>
+                          </li>
+                        ))}
+                      </ol>
+                    </div>
+                  );
+                })()}
                 Observações do Agendamento & Requisitos de Acesso:
               </span>
               <p className="text-xs text-slate-600 leading-relaxed bg-white p-3 rounded-xl border border-slate-200">

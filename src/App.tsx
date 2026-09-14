@@ -849,6 +849,7 @@ export default function App() {
             <SystemMaintenancePanel
               appointments={appointments}
               docks={docks}
+              destinations={destinations}
               onClearAllAppointments={handleClearAllAppointments}
               onOpenResetModal={handleOpenResetModal}
               onOpenBrandingModal={handleOpenBrandingModal}

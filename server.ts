@@ -3,10 +3,14 @@ import express from 'express';
 import path from 'path';
 import { randomUUID } from 'crypto';
 import { createServer as createViteServer } from 'vite';
-import { Appointment, AppointmentStatus, DiscrepancyReport, Dock, RescheduleHistory, SystemUser, SystemUserRole, RegisteredSupplier, DestinationBranch } from './src/types';
+import { Appointment, AppointmentStatus, DiscrepancyReport, Dock, RescheduleHistory, StatusHistoryEntry, SystemUser, SystemUserRole, RegisteredSupplier, DestinationBranch } from './src/types';
 import { StorageService, BrandSettings } from './src/server/storage';
 import { businessToday, dayOfWeekForDate, isAppointmentStatus, isValidDateOnly, normalizeNfeKeys, extractInvoiceNumberFromNfeKey } from './src/server/validation';
 import { clearSessionCookie, getSession, hashSecret, needsSecretMigration, requireAuth, requireSystemRole, sessionSecretSource, setSessionCookie, verifySecret } from './src/server/security';
+import { checkRateLimit, clearRateLimit, clientIpFromRequest, recordRateLimitFailure } from './src/server/rateLimit';
+import { appendStatusHistory } from './src/server/statusHistory';
+import { buildMonthlyReport } from './src/server/monthlyReport';
+import { BACKUP_DIR, BACKUP_RETENTION_COUNT, listBackupFiles, runDatabaseBackup } from './src/server/backup';
 import { closeDb } from './src/server/db';
 
 async function startServer() {
@@ -105,6 +109,34 @@ async function startServer() {
     return s?.type === 'system' ? { operatorId: s.userId, operatorName: s.username } : {};
   };
 
+  // Identidade do ator para a trilha de auditoria de status.
+  const operatorNameForHistory = (req: express.Request): string => {
+    const s = getSession(req);
+    return s?.type === 'system' ? s.username : '';
+  };
+  const historyRoleForSession = (req: express.Request): StatusHistoryEntry['byRole'] => {
+    const s = getSession(req);
+    if (!s) return 'SYSTEM';
+    if (s.type === 'supplier') return 'SUPPLIER';
+    return s.role;
+  };
+  const newAppointmentActorName = (body: Record<string, unknown>): string =>
+    body && typeof body.supplierName === 'string' ? body.supplierName.trim() : '';
+
+  // Anti-força-bruta: chave por IP + contexto de login (operador ou fornecedor).
+  const authGuard = (req: express.Request, res: express.Response, context: string) => {
+    const key = `${context}:${clientIpFromRequest(req)}`;
+    const blockedMessage = checkRateLimit(key);
+    if (blockedMessage) {
+      res.status(429).json({ error: blockedMessage });
+      return null;
+    }
+    return {
+      fail: () => recordRateLimitFailure(key),
+      succeed: () => clearRateLimit(key),
+    };
+  };
+
   // Feed compartilhado (requer login; fornecedor vê apenas o próprio CNPJ)
   app.get('/api/notifications', requireAuth(), async (req, res) => {
     const session = getSession(req);
@@ -120,6 +152,52 @@ async function startServer() {
       );
     }
     res.json(all);
+  });
+
+  // ============================================================================
+  // Backups agendados: roda o pg_dump para ./backups (retenção configurável)
+  // todas as madrugadas. /api/backup/status mostra o estado da rotina.
+  // ============================================================================
+  let lastBackup: { at?: string; ok?: boolean; fileName?: string; fileBytes?: number; error?: string } = {};
+  const runScheduledBackup = async () => {
+    const result = await runDatabaseBackup();
+    lastBackup = {
+      at: new Date().toISOString(),
+      ok: result.ok,
+      fileName: result.fileName,
+      fileBytes: result.fileBytes,
+      error: result.error,
+    };
+    if (result.ok) {
+      console.log(`[Backup] OK: ${result.fileName} (${Math.round((result.fileBytes || 0) / 1024)} KB)` +
+        (result.pruned?.length ? ` — retenção removeu ${result.pruned.length} antigo(s).` : ` (retenção: ${BACKUP_RETENTION_COUNT})`));
+    } else {
+      console.error(`[Backup] Falhou: ${result.error}`);
+    }
+  };
+  // Primeira execução 20s após o boot, depois a cada 24h.
+  const BACKUP_INTERVAL_MS = 24 * 60 * 60 * 1000;
+  const backupTimer = setTimeout(() => {
+    runScheduledBackup();
+    setInterval(runScheduledBackup, BACKUP_INTERVAL_MS);
+  }, 20 * 1000);
+
+  // Status da rotina de backup (ADMIN) — sem expor conteúdo dos dumps.
+  app.get('/api/backup/status', requireSystemRole('ADMIN'), (_req, res) => {
+    res.json({
+      backupDir: BACKUP_DIR,
+      retention: BACKUP_RETENTION_COUNT,
+      intervalHours: BACKUP_INTERVAL_MS / 3600000,
+      last: lastBackup,
+      files: listBackupFiles().slice(0, 30).map(f => f),
+    });
+  });
+
+  // Disparo manual do backup em disco (ADMIN), complementar ao download via pg_dump.
+  app.post('/api/backup/run', requireSystemRole('ADMIN'), async (_req, res) => {
+    const result = await runDatabaseBackup();
+    if (!result.ok) return res.status(503).json({ error: result.error });
+    res.json({ message: 'Backup gravado em disco.', ...result });
   });
 
   // Limpar feed (staff apenas) — afeta todos os dispositivos
@@ -528,6 +606,14 @@ async function startServer() {
       [initialStatus]: nowIso
     };
 
+    const initialHistoryEntry = appendStatusHistory(undefined, {
+      from: null,
+      to: initialStatus,
+      at: nowIso,
+      by: operatorNameForHistory(req) || String(body.supplierName || '').trim() || 'Sistema',
+      byRole: historyRoleForSession(req),
+    });
+
     const newAppointment: Appointment = {
       id: `appt-${randomUUID()}`,
       protocol,
@@ -570,7 +656,8 @@ async function startServer() {
       createdAt: nowIso,
       updatedAt: nowIso,
       statusTimestamps: initialTimestamps,
-      rescheduleHistory: []
+      rescheduleHistory: [],
+      statusHistory: initialHistoryEntry
     };
 
     if (!(await StorageService.saveAppointment(newAppointment))) {
@@ -747,7 +834,15 @@ async function startServer() {
       status: 'PENDENTE', // Re-enviado para aprovação de doca
       updatedAt: nowIso,
       statusTimestamps: updatedTimestamps,
-      rescheduleHistory: [historyEntry, ...(current.rescheduleHistory || [])]
+      rescheduleHistory: [historyEntry, ...(current.rescheduleHistory || [])],
+      statusHistory: appendStatusHistory(current.statusHistory, {
+        from: current.status,
+        to: 'PENDENTE',
+        at: nowIso,
+        by: requestedBy || current.supplierName,
+        byRole: 'SUPPLIER',
+        note: `Reagendamento: ${historyEntry.previousDate} ${historyEntry.previousSlot} → ${newDate} ${newSlot}`,
+      })
     };
 
     if (!(await StorageService.saveAppointment(updated))) {
@@ -836,6 +931,13 @@ async function startServer() {
         status: 'EM_TRANSITO',
         updatedAt: supplierNowIso,
         statusTimestamps: { ...(supplierAppt.statusTimestamps || {}), EM_TRANSITO: supplierNowIso },
+        statusHistory: appendStatusHistory(supplierAppt.statusHistory, {
+          from: supplierAppt.status,
+          to: 'EM_TRANSITO',
+          at: supplierNowIso,
+          by: supplierAppt.supplierName || 'Fornecedor',
+          byRole: 'SUPPLIER',
+        }),
       };
       if (!(await StorageService.saveAppointment(supplierUpdated))) {
         return res.status(503).json({ error: 'Não foi possível persistir a alteração. Tente novamente.' });
@@ -937,7 +1039,19 @@ async function startServer() {
       carrierName: carrierName !== undefined ? (carrierName.trim() || current.carrierName) : current.carrierName,
       updatedAt: nowIso,
       statusTimestamps: updatedTimestamps,
-      ...(discrepancy ? { discrepancy } : {})
+      ...(discrepancy ? { discrepancy } : {}),
+      ...(normalizedStatus && normalizedStatus !== current.status
+        ? {
+            statusHistory: appendStatusHistory(current.statusHistory, {
+              from: current.status,
+              to: normalizedStatus,
+              at: nowIso,
+              by: operatorNameForHistory(req) || 'Equipe interna',
+              byRole: historyRoleForSession(req),
+              note: discrepancy?.description || notes,
+            }),
+          }
+        : {}),
     };
 
     if (!(await StorageService.saveAppointment(updated))) {
@@ -969,6 +1083,19 @@ async function startServer() {
     }
 
     res.json(updated);
+  });
+
+  // Relatório Mensal (ADMIN): agregados de entregas, no-shows, divergências,
+  // volumes e pontualidade por fornecedor e por unidade.
+  app.get('/api/reports/monthly', requireSystemRole('ADMIN'), (req, res) => {
+    const monthParam = String(req.query.month || '').trim();
+    if (!/^\d{4}-\d{2}$/.test(monthParam)) {
+      return res.status(400).json({ error: 'Parâmetro month inválido. Use o formato YYYY-MM.' });
+    }
+    const branchParam = req.query.branchId ? String(req.query.branchId) : undefined;
+    const branchNames = new Map<string, string>(destinations.map(d => [d.id, d.name]));
+    const report = buildMonthlyReport(appointments, monthParam, branchNames, branchParam);
+    res.json(report);
   });
 
   // Get Slot Supplier Limits
@@ -1437,6 +1564,9 @@ async function startServer() {
     const inputLogin = (username || login || '').trim().toLowerCase();
     const inputSecret = (password || pin || '').trim();
 
+    const guard = authGuard(req, res, 'staff');
+    if (!guard) return; // 429 já enviado
+
     if (!inputLogin) {
       return res.status(400).json({ error: 'Informe o usuário para autenticar.' });
     }
@@ -1462,6 +1592,7 @@ async function startServer() {
     );
 
     if (!user) {
+      guard.fail();
       return res.status(401).json({ error: 'Usuário ou credenciais não encontrados.' });
     }
 
@@ -1470,8 +1601,10 @@ async function startServer() {
     const matchesPin = verifySecret(user.pin, inputSecret);
 
     if (!matchesPassword && !matchesPin) {
+      guard.fail();
       return res.status(401).json({ error: 'Senha de acesso ou PIN incorreto.' });
     }
+    guard.succeed();
 
     if (matchesPassword && needsSecretMigration(user.password)) user.password = hashSecret(inputSecret);
     if (matchesPin && needsSecretMigration(user.pin)) user.pin = hashSecret(inputSecret);
@@ -1698,6 +1831,9 @@ async function startServer() {
       return res.status(400).json({ error: 'CNPJ é obrigatório.' });
     }
 
+    const guard = authGuard(req, res, 'supplier');
+    if (!guard) return; // 429 já enviado
+
     const cleanCnpj = String(cnpj).trim();
     const cleanDigits = cleanCnpj.replace(/\D/g, '');
 
@@ -1736,6 +1872,7 @@ async function startServer() {
       suppliers.push(supplierRecord);
     }
 
+    guard.succeed();
     await StorageService.saveSuppliers(suppliers);
     const token = setSessionCookie(res, { type: 'supplier', supplierCnpj: supplierRecord.cnpj, supplierName: supplierRecord.name }, req);
 

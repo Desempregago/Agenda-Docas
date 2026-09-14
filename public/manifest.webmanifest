@@ -1,0 +1,24 @@
+{
+  "name": "Agenda-docas — Agendamento de Entregas",
+  "short_name": "Agenda-docas",
+  "description": "Plataforma de agendamento de entregas e gestão de recebimento de docas.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#2563eb",
+  "lang": "pt-BR",
+  "icons": [
+    {
+      "src": "/pwa-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
