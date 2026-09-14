@@ -64,10 +64,11 @@
     .dark .border-gray-200 { border-color: #26334f; }
     .dark .border-gray-300 { border-color: #33415c; }
 
-    /* Divide (border-color vai nos filhos do utilitário divide-*) */
-    .dark .divide-slate-200 > :not([hidden]) ~ :not([hidden]) { border-color: #26334f; }
-    .dark .divide-slate-100 > :not([hidden]) ~ :not([hidden]) { border-color: #1d2942; }
-    .dark .divide-gray-200 > :not([hidden]) ~ :not([hidden]) { border-color: #26334f; }
+    /* Divide: Tailwind v4 pinta o separador com border-bottom de cada filho
+       (:not(:last-child)); cobrimos todos os filhos para valer em v3 e v4. */
+    .dark .divide-slate-200 > :not([hidden]) { border-color: #26334f; }
+    .dark .divide-slate-100 > :not([hidden]) { border-color: #1d2942; }
+    .dark .divide-gray-200 > :not([hidden]) { border-color: #26334f; }
 
     /* Texto neutro escuro → tons claros (slate-100..400 já são claros: intactos) */
     .dark .text-slate-900 { color: #f1f5f9; }
@@ -223,12 +224,14 @@
     .dark .text-indigo-900\/80, .dark .text-indigo-800\/80, .dark .text-indigo-800\/90 { color: #c7d2fe; }
     .dark .text-orange-900\/90 { color: #fed7aa; }
 
-    /* Textos -950: quase-pretos usados como rótulos sobre chips escuros → equivalentes claros */
+    /* Textos -900/-950: quase-pretos usados como rótulos sobre chips escuros → equivalentes claros */
     .dark .text-amber-950 { color: #fde68a; }
     .dark .text-blue-950 { color: #bfdbfe; }
     .dark .text-emerald-950 { color: #a7f3d0; }
     .dark .text-indigo-950 { color: #c7d2fe; }
+    .dark .text-orange-900 { color: #fed7aa; }
     .dark .text-orange-950 { color: #fed7aa; }
+    .dark .text-purple-900 { color: #e9d5ff; }
     .dark .text-purple-950 { color: #e9d5ff; }
     .dark .text-rose-950 { color: #fecdd3; }
 
