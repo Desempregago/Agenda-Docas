@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 import { X, AlertTriangle, Camera, Check, Upload, Trash2, Video, CheckCircle2, HardDrive } from 'lucide-react';
 import { DiscrepancyReport, DiscrepancyType } from '../types';
 
@@ -15,6 +16,7 @@ export const DiscrepancyModal: React.FC<DiscrepancyModalProps> = ({
   onSubmit,
   appointmentProtocol,
 }) => {
+  useBodyScrollLock(isOpen);
   if (!isOpen) return null;
 
   const [selectedTypes, setSelectedTypes] = useState<DiscrepancyType[]>(['AVARIA_EMBALAGEM']);

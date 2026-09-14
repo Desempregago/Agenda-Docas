@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 import {
   X,
   FileSpreadsheet,
@@ -51,6 +52,7 @@ export const LogisticsReportModal: React.FC<LogisticsReportModalProps> = ({
   destinations = [],
   docks = [],
 }) => {
+useBodyScrollLock(isOpen);
   // Filtros
   const [startDate, setStartDate] = useState<string>(() => {
     // Primeiro dia do mês atual ou 7 dias atrás

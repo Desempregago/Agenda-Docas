@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 import { X, Calendar, Clock, RefreshCw, AlertCircle, CheckCircle2, History, FilePlus, Package, Weight, Lock, Unlock, RotateCcw, LogIn, Building2, ShieldAlert, AlertTriangle, MapPin, KeyRound, Trash2, FileText } from 'lucide-react';
 import { Appointment, Dock, DestinationBranch } from '../types';
 import { SupplierSession } from './SupplierLoginModal';
@@ -42,6 +43,7 @@ export const RescheduleModal: React.FC<RescheduleModalProps> = ({
   docks = [],
   onOpenSupplierLogin,
 }) => {
+useBodyScrollLock(isOpen);
   const apptDest = appointment
     ? destinations.find(d => d.id === appointment.destinationBranchId)
       || destinations.find(d => d.isDefault)

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 import { Calendar, Search, LayoutDashboard, Server, Plus, UserCheck, ShieldAlert, ChevronRight, Settings, Bell, Lock, LogOut, Users, User, Menu, X, Database, MapPin, FileSpreadsheet, Sun, Moon } from 'lucide-react';
 import { BrandSettings, getBrandTheme } from './BrandingSettingsModal';
 import { SystemUser } from '../types';
@@ -44,6 +45,7 @@ export const Header: React.FC<HeaderProps> = ({
 }) => {
   const brandTheme = getBrandTheme(brandSettings.primaryColor);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  useBodyScrollLock(isMobileMenuOpen);
   const [theme, setThemeState] = useState<ThemePreference>(() => getStoredTheme());
   const isStaff = userRole === 'ADMIN' || Boolean(currentSystemUser);
   const isUserAdmin = Boolean(currentSystemUser ? currentSystemUser.role === 'ADMIN' : userRole === 'ADMIN');

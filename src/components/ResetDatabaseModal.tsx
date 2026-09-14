@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 import {
   X,
   Trash2,
@@ -37,6 +38,7 @@ export const ResetDatabaseModal: React.FC<ResetDatabaseModalProps> = ({
   onResetUsers,
   currentSystemUser,
 }) => {
+useBodyScrollLock(isOpen);
   const [selectedAction, setSelectedAction] = useState<'CLEAR_APPTS' | 'FACTORY_RESET' | 'RESET_USERS' | null>(null);
   const [adminPassword, setAdminPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);

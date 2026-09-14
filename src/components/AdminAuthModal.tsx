@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 import { ShieldCheck, Lock, KeyRound, AlertCircle, X, CheckCircle2, User, UserPlus, Sparkles, Building2, Loader2 } from 'lucide-react';
 import { SystemUser } from '../types';
 import { authFetch, setAuthToken } from '../services/api';
@@ -14,6 +15,7 @@ export const AdminAuthModal: React.FC<AdminAuthModalProps> = ({
   onClose,
   onAuthenticate,
 }) => {
+useBodyScrollLock(isOpen);
   const [isSetupMode, setIsSetupMode] = useState(false);
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);

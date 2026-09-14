@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 import { 
   X, 
   ShieldCheck, 
@@ -55,6 +56,7 @@ export const DoubleCheckUnloadModal: React.FC<DoubleCheckUnloadModalProps> = ({
   currentSystemUser,
   onConfirmRelease,
 }) => {
+  useBodyScrollLock(isOpen);
   if (!isOpen || !appointment) return null;
 
   // Chaves originalmente cadastradas na solicitação de agendamento

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 import { Settings, Image, Upload, RotateCcw, X, Check, Building, Palette, Sparkles, Server, HardDrive } from 'lucide-react';
 
 export interface BrandSettings {
@@ -100,6 +101,7 @@ export const BrandingSettingsModal: React.FC<BrandingSettingsModalProps> = ({
   onClose,
   onSave,
 }) => {
+useBodyScrollLock(isOpen);
   const [form, setForm] = useState<BrandSettings>(settings);
   const [previewLogo, setPreviewLogo] = useState<string>(settings.logoUrl || '');
   const [copiedSuccess, setCopiedSuccess] = useState(false);

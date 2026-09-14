@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 import { createPortal } from 'react-dom';
 import {
   X,
@@ -38,6 +39,7 @@ export const AppointmentReceiptModal: React.FC<AppointmentReceiptModalProps> = (
   appointment,
   onClose,
 }) => {
+useBodyScrollLock(isOpen);
   const receiptCardRef = useRef<HTMLDivElement>(null);
   const [copied, setCopied] = useState(false);
   const [copiedImage, setCopiedImage] = useState(false);

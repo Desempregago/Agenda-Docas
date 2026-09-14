@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 import {
   LayoutDashboard,
   Calendar,
@@ -127,6 +128,7 @@ export const AdminDockDashboard: React.FC<AdminDockDashboardProps> = ({
 
   // Mobile / Touch Quick-Move Modal State
   const [quickMoveAppt, setQuickMoveAppt] = useState<Appointment | null>(null);
+  useBodyScrollLock(Boolean(quickMoveAppt));
 
   const showToast = (text: string, type: 'success' | 'info' | 'warning' = 'success') => {
     if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);

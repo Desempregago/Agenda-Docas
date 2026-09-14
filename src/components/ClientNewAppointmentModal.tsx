@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 import { X, Calendar, Clock, Truck, FileText, CheckCircle2, Copy, AlertCircle, Lock, Unlock, RotateCcw, MapPin, Building2, Info, Sparkles, KeyRound, Plus, Trash2, DollarSign, User, ShieldCheck, AlertTriangle } from 'lucide-react';
 import { Appointment, Dock, DestinationBranch, ACTIVE_CARGO_TYPES, CARGO_TYPE_LABELS } from '../types';
 import { SupplierSession } from './SupplierLoginModal';
@@ -37,6 +38,7 @@ export const ClientNewAppointmentModal: React.FC<ClientNewAppointmentModalProps>
   slotLimits: propSlotLimits = {},
   destinations = [],
 }) => {
+useBodyScrollLock(isOpen);
   const tomorrow = new Date();
   tomorrow.setDate(tomorrow.getDate() + 1);
   const minDateStr = formatLocalDateToYMD(tomorrow);

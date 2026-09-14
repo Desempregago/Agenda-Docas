@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 import { X, ShieldCheck, Truck, FileText, CheckCircle2, AlertTriangle, Zap, MapPin, KeyRound, Plus, Trash2, DollarSign, User, Building2, Sparkles, Loader2, Lock, Unlock, RotateCcw } from 'lucide-react';
 import { Appointment, Dock, DestinationBranch, ACTIVE_CARGO_TYPES, CARGO_TYPE_LABELS } from '../types';
 import { MapPin as DockIcon } from 'lucide-react';
@@ -20,6 +21,7 @@ export const WalkInModal: React.FC<WalkInModalProps> = ({
   destinations = [],
   docks = [],
 }) => {
+useBodyScrollLock(isOpen);
   const todayStr = businessToday();
   const activeDestinations = destinations.filter(d => d.active);
   const defaultDestination = activeDestinations.find(d => d.isDefault) || activeDestinations[0];

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 import {
   X,
   Clock,
@@ -59,6 +60,7 @@ export const TimeSlotConfigModal: React.FC<TimeSlotConfigModalProps> = ({
   onRequestAdminAuth,
   currentSystemUser,
 }) => {
+useBodyScrollLock(isOpen);
   const [activeTab, setActiveTab] = useState<'slots' | 'days' | 'docks'>('slots');
 
   // Cada loja/filial é gerenciada de forma independente

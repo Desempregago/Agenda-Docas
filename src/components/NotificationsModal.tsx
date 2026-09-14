@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 import { X, Bell, CheckCircle2, AlertTriangle, Clock, Truck, ShieldAlert, ArrowRight, Trash2, User, Filter, Calendar } from 'lucide-react';
 
 export interface AppNotification {
@@ -43,6 +44,7 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
   onClearNotifications,
   onSelectProtocol,
 }) => {
+useBodyScrollLock(isOpen);
   const [filterType, setFilterType] = useState<'ALL' | 'APPOINTMENTS' | 'OPERATIONAL'>('ALL');
 
   if (!isOpen) return null;

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 import {
   MapPin,
   Plus,
@@ -35,6 +36,7 @@ export const DestinationsManagementModal: React.FC<DestinationsManagementModalPr
   onSaveDestinations,
   onClose,
 }) => {
+useBodyScrollLock(isOpen);
   const [list, setList] = useState<DestinationBranch[]>(destinations);
   const [searchTerm, setSearchTerm] = useState('');
   const [editingBranch, setEditingBranch] = useState<DestinationBranch | null>(null);

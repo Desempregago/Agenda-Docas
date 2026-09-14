@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 import {
   Users,
   UserPlus,
@@ -35,6 +36,7 @@ export const UsersManagementModal: React.FC<UsersManagementModalProps> = ({
   onUserUpdated,
   onShowToast
 }) => {
+useBodyScrollLock(isOpen);
   const isUserAdmin = !currentUser || currentUser.role === 'ADMIN';
   const [users, setUsers] = useState<SystemUser[]>([]);
   const [loading, setLoading] = useState(false);

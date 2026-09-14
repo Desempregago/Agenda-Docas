@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 import { Lock, ShieldCheck, LogIn, Building2, FileText, CheckCircle2, Loader2, Sparkles } from 'lucide-react';
 
 export interface SupplierSession {
@@ -18,6 +19,7 @@ export const SupplierLoginModal: React.FC<SupplierLoginModalProps> = ({
   onClose,
   onLogin,
 }) => {
+useBodyScrollLock(isOpen);
   const [cnpjInput, setCnpjInput] = useState('');
   const [nameInput, setNameInput] = useState('');
   const [isRecognized, setIsRecognized] = useState(false);
