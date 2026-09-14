@@ -34,6 +34,18 @@ export const SupplierLoginModal: React.FC<SupplierLoginModalProps> = ({
     return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5, 8)}/${digits.slice(8, 12)}-${digits.slice(12, 14)}`;
   };
 
+  // Reinicia o formulário sempre que o modal é aberto — nenhuma credencial
+  // permanece preenchida entre sessões (ex.: após logout de outro fornecedor).
+  useEffect(() => {
+    if (isOpen) {
+      setCnpjInput('');
+      setNameInput('');
+      setIsRecognized(false);
+      setIsSearching(false);
+      setError('');
+    }
+  }, [isOpen]);
+
   // Lookup CNPJ in server database when CNPJ is complete
   useEffect(() => {
     const cleanDigits = cnpjInput.replace(/\D/g, '');

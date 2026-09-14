@@ -263,7 +263,7 @@ export const Header: React.FC<HeaderProps> = ({
                     <span className="hidden sm:inline">Sair</span>
                   </button>
                 </div>
-              ) : (
+              ) : currentSupplierSession ? null : (
                 <button
                   onClick={onRequestAdminAccess}
                   className="flex items-center gap-1 px-2 py-1 rounded-lg font-semibold bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700 transition-all text-xs cursor-pointer shrink-0"
@@ -482,7 +482,8 @@ export const Header: React.FC<HeaderProps> = ({
               </div>
             </div>
 
-            {/* Access Mode Switch */}
+            {/* Access Mode Switch (oculto para fornecedores logados) */}
+            {!currentSupplierSession && (
             <div className="pt-2 border-t border-slate-800">
               {isStaff ? (
                 <button
@@ -513,6 +514,7 @@ export const Header: React.FC<HeaderProps> = ({
                 </button>
               )}
             </div>
+            )}
 
           </div>
         </div>
