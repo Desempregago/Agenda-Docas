@@ -11,9 +11,9 @@
       // Aplica o tema ANTES do primeiro paint (sem flash branco na carga escura).
       (function () {
         try {
-          var pref = localStorage.getItem('agendadocas_theme') || 'system';
-          var dark = pref === 'dark' || (pref === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
-          if (dark) document.documentElement.classList.add('dark');
+          if (localStorage.getItem('agendadocas_theme') === 'dark') {
+            document.documentElement.classList.add('dark');
+          }
         } catch (_) {}
       })();
     </script>
