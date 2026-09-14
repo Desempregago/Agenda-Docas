@@ -719,7 +719,7 @@ export const AdminDockDashboard: React.FC<AdminDockDashboardProps> = ({
               className="inline-flex items-center gap-1.5 bg-amber-500 hover:bg-amber-400 text-amber-950 font-bold text-xs px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl shadow-md transition-all active:scale-95 cursor-pointer"
             >
               <Zap className="w-3.5 h-3.5 fill-amber-950" />
-              <span>⚡ Registrar Encaixe</span>
+              <span>Registrar Encaixe</span>
             </button>
           </div>
         </div>
