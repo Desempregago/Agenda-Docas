@@ -13,6 +13,7 @@ import { NotificationsModal, AppNotification, isAppointmentNotification } from '
 import { TimeSlotConfigModal } from './components/TimeSlotConfigModal';
 import { AdminAuthModal } from './components/AdminAuthModal';
 import { UsersManagementModal } from './components/UsersManagementModal';
+import { MyAccountModal } from './components/MyAccountModal';
 import { ResetDatabaseModal } from './components/ResetDatabaseModal';
 import { AppointmentReceiptModal } from './components/AppointmentReceiptModal';
 import { DestinationsManagementModal } from './components/DestinationsManagementModal';
@@ -48,6 +49,7 @@ export default function App() {
   const [loading, setLoading] = useState<boolean>(false);
   const [isAdminAuthOpen, setIsAdminAuthOpen] = useState<boolean>(false);
   const [isUsersModalOpen, setIsUsersModalOpen] = useState<boolean>(false);
+  const [isMyAccountOpen, setIsMyAccountOpen] = useState(false);
   const [isDestinationsModalOpen, setIsDestinationsModalOpen] = useState<boolean>(false);
 
   // Notificações: o FEED vive no servidor (Postgres) e é compartilhado entre
@@ -778,6 +780,7 @@ export default function App() {
           }
         }}
         onOpenNewModal={() => setIsNewModalOpen(true)}
+        onOpenMyAccount={isStaff ? () => setIsMyAccountOpen(true) : undefined}
         onOpenUsersModal={isUserAdmin ? handleOpenUsersModal : undefined}
         onOpenDestinationsModal={isUserAdmin ? handleOpenDestinationsModal : undefined}
         onOpenReportsModal={isStaff ? () => setIsReportsModalOpen(true) : undefined}
@@ -999,6 +1002,20 @@ export default function App() {
         isOpen={isUsersModalOpen}
         onClose={() => setIsUsersModalOpen(false)}
         currentUser={currentSystemUser}
+        onUserUpdated={(updatedUser) => {
+          setCurrentSystemUser(updatedUser);
+          try {
+            localStorage.setItem('agendadocas_system_user', JSON.stringify(updatedUser));
+          } catch (_) {}
+        }}
+        onShowToast={showToast}
+      />
+
+      {/* Minha Conta — self-service credential change for the logged-in user */}
+      <MyAccountModal
+        isOpen={isMyAccountOpen}
+        currentUser={currentSystemUser}
+        onClose={() => setIsMyAccountOpen(false)}
         onUserUpdated={(updatedUser) => {
           setCurrentSystemUser(updatedUser);
           try {

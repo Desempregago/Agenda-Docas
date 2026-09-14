@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
-import { Calendar, Search, LayoutDashboard, Server, Plus, UserCheck, ShieldAlert, ChevronRight, Settings, Bell, Lock, LogOut, Users, User, Menu, X, Database, MapPin, FileSpreadsheet, Sun, Moon } from 'lucide-react';
+import { Calendar, Search, LayoutDashboard, Server, Plus, UserCheck, ShieldAlert, ChevronRight, Settings, Bell, Lock, LogOut, Users, User, Menu, X, Database, MapPin, FileSpreadsheet, Sun, Moon, KeyRound } from 'lucide-react';
 import { BrandSettings, getBrandTheme } from './BrandingSettingsModal';
 import { SystemUser } from '../types';
 import { getStoredTheme, setTheme, type ThemePreference } from '../services/themeService';
@@ -21,6 +21,7 @@ interface HeaderProps {
   onLogoutAdmin?: () => void;
   onRequestAdminAccess: () => void;
   onOpenNewModal: () => void;
+  onOpenMyAccount?: () => void;
   onOpenUsersModal?: () => void;
   onOpenDestinationsModal?: () => void;
   onOpenReportsModal?: () => void;
@@ -39,6 +40,7 @@ export const Header: React.FC<HeaderProps> = ({
   onLogoutAdmin,
   onRequestAdminAccess,
   onOpenNewModal,
+  onOpenMyAccount,
   onOpenUsersModal,
   onOpenDestinationsModal,
   onOpenReportsModal,
@@ -233,21 +235,23 @@ export const Header: React.FC<HeaderProps> = ({
               {isStaff ? (
                 <div className="flex items-center gap-1">
                   {isUserAdmin ? (
-                    <span 
-                      className="flex items-center gap-1 text-[10px] sm:text-[11px] font-bold text-purple-300 px-1.5 py-0.5 rounded-lg bg-purple-950/80 border border-purple-800" 
-                      title={currentSystemUser ? `${currentSystemUser.name} (Administrador Geral - ${currentSystemUser.department})` : 'Administrador Geral'}
+                    <button
+                      onClick={onOpenMyAccount}
+                      className="flex items-center gap-1 text-[10px] sm:text-[11px] font-bold text-purple-300 px-1.5 py-0.5 rounded-lg bg-purple-950/80 border border-purple-800 hover:border-purple-600 transition-colors cursor-pointer"
+                      title={currentSystemUser ? `${currentSystemUser.name} (Administrador Geral - ${currentSystemUser.department}) — clique para Minha Conta` : 'Minha Conta'}
                     >
                       <ShieldAlert className="w-3 h-3 text-purple-400 shrink-0" />
                       <span className="max-w-[45px] sm:max-w-[80px] truncate">{currentSystemUser ? currentSystemUser.name.split(' ')[0] : 'Admin'}</span>
-                    </span>
+                    </button>
                   ) : (
-                    <span 
-                      className="flex items-center gap-1 text-[10px] sm:text-[11px] font-bold text-cyan-300 px-1.5 py-0.5 rounded-lg bg-cyan-950/80 border border-cyan-800" 
-                      title={currentSystemUser ? `${currentSystemUser.name} (Operador - ${currentSystemUser.department})` : 'Operador de Docas'}
+                    <button
+                      onClick={onOpenMyAccount}
+                      className="flex items-center gap-1 text-[10px] sm:text-[11px] font-bold text-cyan-300 px-1.5 py-0.5 rounded-lg bg-cyan-950/80 border border-cyan-800 hover:border-cyan-600 transition-colors cursor-pointer"
+                      title={currentSystemUser ? `${currentSystemUser.name} (Operador - ${currentSystemUser.department}) — clique para Minha Conta` : 'Minha Conta'}
                     >
                       <UserCheck className="w-3 h-3 text-cyan-400 shrink-0" />
                       <span className="max-w-[45px] sm:max-w-[80px] truncate">{currentSystemUser ? currentSystemUser.name.split(' ')[0] : 'Operador'}</span>
-                    </span>
+                    </button>
                   )}
                   <button
                     onClick={() => {
@@ -487,6 +491,21 @@ export const Header: React.FC<HeaderProps> = ({
             {/* Access Mode Switch (oculto para fornecedores logados) */}
             {!currentSupplierSession && (
             <div className="pt-2 border-t border-slate-800">
+              {isStaff && onOpenMyAccount && (
+                <button
+                  onClick={() => {
+                    setIsMobileMenuOpen(false);
+                    onOpenMyAccount();
+                  }}
+                  className="w-full flex items-center justify-between p-2.5 mb-2 rounded-xl bg-slate-800/80 hover:bg-slate-800 text-slate-200 text-xs font-medium border border-slate-700/80 transition-all"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <KeyRound className="w-4 h-4 text-amber-400 shrink-0" />
+                    <span>Minha Conta — Alterar Senha / PIN</span>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-slate-500 shrink-0" />
+                </button>
+              )}
               {isStaff ? (
                 <button
                   onClick={() => {

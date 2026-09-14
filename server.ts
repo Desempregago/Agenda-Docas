@@ -1492,6 +1492,57 @@ async function startServer() {
     res.json({ success: true });
   });
 
+  // Change own password/PIN — available to any authenticated system user
+  // (operator or admin). Requires the current secret to re-authenticate the
+  // user in-session; cannot be used to escalate: identity and role come from
+  // the session, never from the body.
+  app.post('/api/auth/change-password', requireAuth(), async (req, res) => {
+    const session = getSession(req);
+    if (!session || session.type !== 'system') {
+      return res.status(403).json({ error: 'Apenas usuários do sistema (operadores/administradores) podem alterar credenciais por aqui.' });
+    }
+
+    const userIndex = users.findIndex(u => (u.id === session.userId || u.username.toLowerCase() === session.username.toLowerCase()) && u.active !== false);
+    if (userIndex === -1) {
+      return res.status(401).json({ error: 'Usuário não encontrado ou inativo.' });
+    }
+
+    const { currentSecret, newSecret } = req.body || {};
+    const cleanCurrent = String(currentSecret || '').trim();
+    const cleanNew = String(newSecret || '').trim();
+
+    if (!cleanCurrent || !cleanNew) {
+      return res.status(400).json({ error: 'Informe a credencial atual e a nova.' });
+    }
+
+    const user = users[userIndex];
+
+    // Re-authentication: the current secret must match what the user already has.
+    const matchesPassword = verifySecret(user.password, cleanCurrent);
+    const matchesPin = verifySecret(user.pin, cleanCurrent);
+    if (!matchesPassword && !matchesPin) {
+      return res.status(401).json({ error: 'A credencial atual está incorreta.' });
+    }
+
+    // Same validation rules as user creation (admin form): password ≥ 6 chars,
+    // or numeric PIN of 4–8 digits. The new secret replaces whichever slot the
+    // current secret matched (password or PIN), keeping the other intact.
+    const isPinFormat = /^\d{4,8}$/.test(cleanNew);
+    if (!isPinFormat && cleanNew.length < 6) {
+      return res.status(400).json({ error: 'A nova senha deve ter no mínimo 6 caracteres (ou um PIN de 4–8 dígitos).' });
+    }
+    if (matchesPin && isPinFormat) {
+      user.pin = hashSecret(cleanNew);
+    } else {
+      user.password = hashSecret(cleanNew);
+    }
+
+    await StorageService.saveUsers(users);
+
+    const { password: _, pin: __, ...sanitized } = user;
+    res.json({ message: 'Credencial atualizada com sucesso.', user: sanitized });
+  });
+
   // List all users (for Admin dashboard)
   app.get('/api/users', requireSystemRole('ADMIN'), (_req, res) => {
     const sanitized = users.map(({ password: _, pin: __, ...u }) => u);
